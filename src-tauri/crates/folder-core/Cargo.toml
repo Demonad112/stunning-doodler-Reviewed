@@ -1,0 +1,13 @@
+[package]
+name = "folder-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+diff-core = { path = "../diff-core" }
+job-core = { path = "../job-core" }
+serde.workspace = true
+shared-types = { path = "../shared-types" }
+vfs-core = { path = "../vfs-core" }

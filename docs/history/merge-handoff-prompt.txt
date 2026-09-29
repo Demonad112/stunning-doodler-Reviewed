@@ -1,0 +1,91 @@
+> Context below is from a prior conversation on this project, assembled by
+> an assistant, not verified fact. Read it as background, then use your own
+> reasoning — including on anything described as decided, correct, working,
+> or the cause of something. Push back, propose better approaches, or ask
+> questions freely; nothing here is meant to constrain the direction this
+> takes next. A companion reference file, opendiff-merge-reference.md, has
+> the deeper technical detail — check it before assuming something isn't
+> covered.
+
+# Continuing: Merging OpenDiff, altWinDirStat and a Claude-built app into one repo
+
+## Context
+The user plans to combine three projects into one new repository, https://github.com/Demonad112/stunning-doodler-Reviewed, which is currently empty:
+1. **OpenDiff**: their fork of an open-source Beyond Compare alternative (Tauri 2 + Vue 3 + Rust workspace), https://github.com/Demonad112/open-diff
+2. **altWinDirStat**: https://github.com/Demonad112/altWinDirStat
+3. **A "Claude-built app"** the user has. It wasn't identified in the previous chat.
+
+The intended workflow: GitHub holds most of the files and does most of the building (GitHub Actions), and the local Windows 11 PC runs the final working app. The previous chat only worked on OpenDiff. It never looked at altWinDirStat or the Claude-built app, and never discussed how to merge them.
+
+## Current State
+- **OpenDiff fork:**
+  - Builds a Windows NSIS `setup.exe`, an MSI and a portable zip on GitHub Actions (`.github/workflows/windows-installer.yml`), with an Explorer right-click menu and a desktop shortcut.
+  - It's installed on the user's PC and the GUI runs.
+- **Local dev tooling:**
+  - Rust is now installed on the dev PC (rustup, MSVC).
+  - `cargo test --workspace` passes, and `corepack pnpm tauri:dev` runs.
+  - Checkout: `%USERPROFILE%\Projects\Work\ODiff`, on branch `stage0-smoke-fixes`.
+- **PR #4 (open, `stage0-smoke-fixes` → `master`):** fixes a `tauri dev` crash (Vite was watching Cargo's locked build output) and makes Enter in the Text Compare path fields load the files. At handoff its CI was pending, and the desktop app was watching it with Auto-fix on.
+- **Smoke tests:** Text, Hex, Table and Folder Compare work; the Folder Sync preview works. Many other modes are untested (listed in the reference file).
+- **Transfer Monitor:** a large new feature for OpenDiff, fully planned but not started:
+  - live monitoring of file copies
+  - a "Not copied" panel showing the reason for each failure
+  - a recovery folder
+  - a client audit report
+
+  The plan was written against OpenDiff's current structure. The reference file has the stages and the code survey.
+- **Local copy of altWinDirStat:** `%USERPROFILE%\Projects\Work\AltWin\altWinDirStat`. It hasn't been examined.
+
+## Key Decisions Made (in the previous chat; open to revisiting)
+- Build on GitHub Actions so client PCs never need Rust. The dev PC now has Rust for fast iteration.
+- Use an NSIS per-machine installer for clients, with the MSI kept only as a fallback.
+- For the Transfer Monitor (answers the user gave in the planning Q&A):
+  - it supports both *Copy* mode (OpenDiff copies) and *Watch* mode (another tool copies, reconciled against a source manifest)
+  - targets are local, USB and network drives
+  - verification is size + date, with an optional hash
+  - it copies only, never moves
+  - it produces an exportable report
+  - finish smoke-testing before building it
+- The bundle identifier and upstream URLs were deliberately left unchanged. Changing the identifier moves the app-data location. That may need a fresh look now that there's a new product repo.
+
+## Known Issues / Open Problems
+- **Branch cleanup on the OpenDiff fork is blocked.** The fork has 370 branches, and 368 are identical copies of upstream's. The user wants them deleted, but a repository ruleset on the fork rejects deletion (GH013), so nothing was deleted. The user is handling the ruleset.
+- **PR #3** (`windows-installer` → `master`) is still open and is probably redundant.
+- **Binaries are unsigned.** An application-control policy blocked the unsigned CLI on this PC; this is assumed, not confirmed, to be Smart App Control. SmartScreen warns on the installer.
+- **Leftover fork metadata:** the bundle ID, `upgradeCode` and repo URLs still point at upstream `kygo8/open-diff`.
+- **Unexamined files:** an untracked `installer2.zip` sits in the OpenDiff checkout (origin unknown), and the `handoff/` notes are untracked.
+- **Pre-commit hook quirks:**
+  - It runs Prettier over the whole folder, including untracked files.
+  - The first cold clippy run takes 15+ minutes.
+  - Orphaned cargo processes have held the build lock before.
+
+## Next Steps (as the user described them)
+1. Merge OpenDiff, altWinDirStat and the Claude-built app into `Demonad112/stunning-doodler-Reviewed`, with GitHub doing most of the hosting and building and the local PC running the final working app.
+2. Still pending from before:
+   - PR #4 CI and merge
+   - branch cleanup once the ruleset is relaxed
+   - finishing the smoke test
+   - the Transfer Monitor build (stages in the reference file)
+   - code signing and client rollout
+
+## Notes Claude Is Adding (not discussed in the original conversation)
+- **Unknowns come first.** Neither altWinDirStat nor the Claude-built app was inspected: language, framework, build system and size are all unknown. Whether they can share one app shell (OpenDiff's Tauri/Vue) or stay as separate apps in one repo decides almost everything else.
+- **"Merge" can mean different things:**
+  - a monorepo with several apps side by side (`apps/opendiff`, `apps/altwindirstat`, …) and one CI
+  - folding features into OpenDiff as new modes. It already has a mode system; adding a mode touches about 12 files.
+  - a new app that uses parts of each
+
+  These differ a lot in effort. Asking the user which they mean saves rework.
+- **Git history is a real choice.** OpenDiff carries hundreds of upstream commits and 370 branches. Importing it as a plain copy, as `git subtree` with history, or as a submodule affects repo size, clone time, and whether upstream OpenDiff fixes can still be pulled in later.
+- **License check.** OpenDiff is an open-source upstream project (license not checked in the previous chat). Combining it with other code, and shipping to clients, means checking that license and those of the other two projects.
+- **One installer or several.** The current NSIS hooks, the Explorer menu keys (`OpenDiff`, `OpenDiffSelectLeft`), the bundle ID and `upgradeCode` are all OpenDiff-specific. A combined product likely needs new identity values, so a new install doesn't collide with or orphan the already-installed OpenDiff (uninstall the old one first?).
+- **Rethink the Transfer Monitor's home.** It was planned for OpenDiff's crate layout. altWinDirStat, being a disk-usage tool by its name, may overlap with its scanning and manifest needs, and a shared scanner could serve both.
+- **Split between GitHub and local builds.** GitHub Actions minutes, artifact retention and storage (the upstream release workflow has storage-pruning logic) matter once three apps build there. Local final builds also produce unsigned binaries, which Smart App Control may block differently from CI builds. Deciding where signing happens is part of this.
+- **Unfinished items on the old fork.** PR #4 unmerged, PR #3 open, the branch cleanup and the unexamined `installer2.zip` are all still there. Settling them first, or deciding to leave the old fork frozen, avoids two sources of truth.
+- **Questions worth asking the user:**
+  - What is the Claude-built app, and where does it live?
+  - Should the result be one app or a suite?
+  - Keep history or not?
+  - What's the product name and identity?
+  - Should clients get one installer?
+  - Does the Transfer Monitor still go ahead, and in which part?

@@ -1,0 +1,1502 @@
+use folder_core::FolderAlignmentRow;
+use logging_core::{LogDomain, LogStatus, StructuredLogEvent};
+use serde::{Deserialize, Serialize};
+use vfs_core::{VfsPath, VfsProvider};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncPlan {
+    pub name: String,
+    pub items: Vec<SyncPlanItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncPlanItem {
+    pub relative_path: String,
+    pub action: SyncAction,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncTimeRuleOptions {
+    pub timestamp_tolerance_ms: u128,
+    pub ignore_daylight_saving_hour_offset: bool,
+    pub ignored_timezone_hour_offsets: Vec<i32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncAction {
+    Copy {
+        direction: SyncDirection,
+        source_path: String,
+        target_path: String,
+    },
+    Delete {
+        target_path: String,
+    },
+    Leave,
+    Conflict {
+        left_path: String,
+        right_path: String,
+        message: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncDirection {
+    LeftToRight,
+    RightToLeft,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncOverrideAction {
+    Leave,
+    CopyLeftToRight,
+    CopyRightToLeft,
+    /// Legacy alias: deletes the right-side path.
+    Delete,
+    DeleteLeft,
+    DeleteRight,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncActionOverride {
+    pub relative_path: String,
+    pub action: SyncOverrideAction,
+}
+
+pub fn apply_sync_overrides(
+    mut plan: SyncPlan,
+    left_root: impl AsRef<str>,
+    right_root: impl AsRef<str>,
+    overrides: &[SyncActionOverride],
+) -> SyncPlan {
+    let left_root = left_root.as_ref();
+    let right_root = right_root.as_ref();
+
+    for override_item in overrides {
+        if let Some(item) = plan
+            .items
+            .iter_mut()
+            .find(|item| item.relative_path == override_item.relative_path)
+        {
+            item.action = override_action(
+                left_root,
+                right_root,
+                &override_item.relative_path,
+                &override_item.action,
+            );
+            item.reason = format!("User override: {:?}", override_item.action);
+        }
+    }
+
+    plan
+}
+
+fn override_action(
+    left_root: &str,
+    right_root: &str,
+    relative_path: &str,
+    action: &SyncOverrideAction,
+) -> SyncAction {
+    match action {
+        SyncOverrideAction::Leave => SyncAction::Leave,
+        SyncOverrideAction::CopyLeftToRight => SyncAction::Copy {
+            direction: SyncDirection::LeftToRight,
+            source_path: join_sync_path(left_root, relative_path),
+            target_path: join_sync_path(right_root, relative_path),
+        },
+        SyncOverrideAction::CopyRightToLeft => SyncAction::Copy {
+            direction: SyncDirection::RightToLeft,
+            source_path: join_sync_path(right_root, relative_path),
+            target_path: join_sync_path(left_root, relative_path),
+        },
+        SyncOverrideAction::Delete | SyncOverrideAction::DeleteRight => SyncAction::Delete {
+            target_path: join_sync_path(right_root, relative_path),
+        },
+        SyncOverrideAction::DeleteLeft => SyncAction::Delete {
+            target_path: join_sync_path(left_root, relative_path),
+        },
+    }
+}
+
+fn join_sync_path(root: &str, relative_path: &str) -> String {
+    if relative_path.is_empty() {
+        return root.to_owned();
+    }
+
+    format!(
+        "{}/{}",
+        root.trim_end_matches(['/', '\\']),
+        relative_path.trim_start_matches(['/', '\\'])
+    )
+    .replace('\\', "/")
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncExecutionResult {
+    pub total: usize,
+    pub succeeded: usize,
+    pub failed: usize,
+    pub cancelled: usize,
+    pub items: Vec<SyncExecutionItemResult>,
+    pub logs: Vec<SyncExecutionLogEntry>,
+    pub structured_logs: Vec<StructuredLogEvent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncExecutionItemResult {
+    pub relative_path: String,
+    pub action: SyncAction,
+    pub status: SyncExecutionStatus,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncExecutionStatus {
+    Succeeded,
+    Failed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncExecutionLogEntry {
+    pub relative_path: String,
+    pub action: String,
+    pub source_path: Option<String>,
+    pub target_path: Option<String>,
+    pub status: SyncExecutionStatus,
+    pub error: Option<String>,
+}
+
+impl SyncPlan {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            items: Vec::new(),
+        }
+    }
+
+    pub fn add_item(&mut self, item: SyncPlanItem) {
+        self.items.push(item);
+    }
+}
+
+pub fn execute_sync_plan(vfs: &mut impl VfsProvider, plan: &SyncPlan) -> SyncExecutionResult {
+    execute_sync_plan_with_control(vfs, plan, |_, _| {}, || false)
+}
+
+pub fn execute_sync_plan_with_control(
+    vfs: &mut impl VfsProvider,
+    plan: &SyncPlan,
+    mut on_progress: impl FnMut(usize, usize),
+    mut is_cancelled: impl FnMut() -> bool,
+) -> SyncExecutionResult {
+    let mut items = Vec::with_capacity(plan.items.len());
+    let total = plan.items.len();
+
+    for (index, item) in plan.items.iter().enumerate() {
+        if is_cancelled() {
+            items.extend(plan.items[index..].iter().map(cancelled_sync_plan_item));
+            break;
+        }
+
+        items.push(execute_sync_plan_item(vfs, item));
+        on_progress(items.len(), total);
+    }
+
+    summarize_sync_execution(items)
+}
+
+fn summarize_sync_execution(items: Vec<SyncExecutionItemResult>) -> SyncExecutionResult {
+    let logs = items
+        .iter()
+        .map(sync_execution_log_entry)
+        .collect::<Vec<_>>();
+    let structured_logs = logs
+        .iter()
+        .map(sync_structured_log_event)
+        .collect::<Vec<_>>();
+    let succeeded = items
+        .iter()
+        .filter(|item| item.status == SyncExecutionStatus::Succeeded)
+        .count();
+    let failed = items
+        .iter()
+        .filter(|item| item.status == SyncExecutionStatus::Failed)
+        .count();
+    let cancelled = items
+        .iter()
+        .filter(|item| item.status == SyncExecutionStatus::Cancelled)
+        .count();
+
+    SyncExecutionResult {
+        total: items.len(),
+        succeeded,
+        failed,
+        cancelled,
+        items,
+        logs,
+        structured_logs,
+    }
+}
+
+fn execute_sync_plan_item(
+    vfs: &mut impl VfsProvider,
+    item: &SyncPlanItem,
+) -> SyncExecutionItemResult {
+    let execution = match &item.action {
+        SyncAction::Copy {
+            source_path,
+            target_path,
+            ..
+        } => vfs
+            .read(&VfsPath::new(source_path.clone()))
+            .and_then(|bytes| vfs.write(&VfsPath::new(target_path.clone()), &bytes)),
+        SyncAction::Delete { target_path } => vfs.delete(&VfsPath::new(target_path.clone())),
+        SyncAction::Leave => Ok(()),
+        SyncAction::Conflict { message, .. } => Err(vfs_core::VfsError::Io(message.clone())),
+    };
+
+    match execution {
+        Ok(()) => SyncExecutionItemResult {
+            relative_path: item.relative_path.clone(),
+            action: item.action.clone(),
+            status: SyncExecutionStatus::Succeeded,
+            error: None,
+        },
+        Err(error) => SyncExecutionItemResult {
+            relative_path: item.relative_path.clone(),
+            action: item.action.clone(),
+            status: SyncExecutionStatus::Failed,
+            error: Some(format!("{error:?}")),
+        },
+    }
+}
+
+fn cancelled_sync_plan_item(item: &SyncPlanItem) -> SyncExecutionItemResult {
+    SyncExecutionItemResult {
+        relative_path: item.relative_path.clone(),
+        action: item.action.clone(),
+        status: SyncExecutionStatus::Cancelled,
+        error: None,
+    }
+}
+
+fn sync_execution_log_entry(item: &SyncExecutionItemResult) -> SyncExecutionLogEntry {
+    let (action, source_path, target_path) = match &item.action {
+        SyncAction::Copy {
+            direction,
+            source_path,
+            target_path,
+        } => (
+            sync_copy_action_label(direction).to_owned(),
+            Some(source_path.clone()),
+            Some(target_path.clone()),
+        ),
+        SyncAction::Delete { target_path } => {
+            ("delete".to_owned(), None, Some(target_path.clone()))
+        }
+        SyncAction::Leave => ("leave".to_owned(), None, None),
+        SyncAction::Conflict {
+            left_path,
+            right_path,
+            ..
+        } => (
+            "conflict".to_owned(),
+            Some(left_path.clone()),
+            Some(right_path.clone()),
+        ),
+    };
+
+    SyncExecutionLogEntry {
+        relative_path: item.relative_path.clone(),
+        action,
+        source_path,
+        target_path,
+        status: item.status.clone(),
+        error: item.error.clone(),
+    }
+}
+
+fn sync_copy_action_label(direction: &SyncDirection) -> &'static str {
+    match direction {
+        SyncDirection::LeftToRight => "copyLeftToRight",
+        SyncDirection::RightToLeft => "copyRightToLeft",
+    }
+}
+
+fn sync_structured_log_event(entry: &SyncExecutionLogEntry) -> StructuredLogEvent {
+    StructuredLogEvent::new(
+        LogDomain::Sync,
+        entry.action.clone(),
+        sync_log_status(&entry.status),
+        sync_log_message(entry),
+    )
+    .with_detail("relativePath", &entry.relative_path)
+    .with_detail("sourcePath", &entry.source_path)
+    .with_detail("targetPath", &entry.target_path)
+    .with_detail("error", &entry.error)
+}
+
+fn sync_log_status(status: &SyncExecutionStatus) -> LogStatus {
+    match status {
+        SyncExecutionStatus::Succeeded => LogStatus::Succeeded,
+        SyncExecutionStatus::Failed => LogStatus::Failed,
+        SyncExecutionStatus::Cancelled => LogStatus::Cancelled,
+    }
+}
+
+fn sync_log_message(entry: &SyncExecutionLogEntry) -> String {
+    match entry.status {
+        SyncExecutionStatus::Succeeded => format!("Sync action succeeded: {}", entry.relative_path),
+        SyncExecutionStatus::Failed => format!("Sync action failed: {}", entry.relative_path),
+        SyncExecutionStatus::Cancelled => format!("Sync action cancelled: {}", entry.relative_path),
+    }
+}
+
+pub fn build_update_right_plan(
+    left_root: impl AsRef<str>,
+    right_root: impl AsRef<str>,
+    rows: &[FolderAlignmentRow],
+) -> SyncPlan {
+    build_update_right_plan_with_options(
+        left_root,
+        right_root,
+        rows,
+        &SyncTimeRuleOptions::default(),
+    )
+}
+
+pub fn build_update_right_plan_with_options(
+    left_root: impl AsRef<str>,
+    right_root: impl AsRef<str>,
+    rows: &[FolderAlignmentRow],
+    time_rules: &SyncTimeRuleOptions,
+) -> SyncPlan {
+    let mut plan = SyncPlan::new("Update Right");
+
+    for row in rows {
+        let action = if should_copy_left_to_right(row, time_rules) {
+            copy_left_to_right_action(left_root.as_ref(), right_root.as_ref(), &row.relative_path)
+        } else {
+            SyncAction::Leave
+        };
+
+        plan.add_item(SyncPlanItem {
+            relative_path: row.relative_path.clone(),
+            reason: update_right_reason(row, &action),
+            action,
+        });
+    }
+
+    plan
+}
+
+pub fn build_update_left_plan(
+    left_root: impl AsRef<str>,
+    right_root: impl AsRef<str>,
+    rows: &[FolderAlignmentRow],
+) -> SyncPlan {
+    build_update_left_plan_with_options(
+        left_root,
+        right_root,
+        rows,
+        &SyncTimeRuleOptions::default(),
+    )
+}
+
+pub fn build_update_left_plan_with_options(
+    left_root: impl AsRef<str>,
+    right_root: impl AsRef<str>,
+    rows: &[FolderAlignmentRow],
+    time_rules: &SyncTimeRuleOptions,
+) -> SyncPlan {
+    let mut plan = SyncPlan::new("Update Left");
+
+    for row in rows {
+        let action = if should_copy_right_to_left(row, time_rules) {
+            copy_right_to_left_action(left_root.as_ref(), right_root.as_ref(), &row.relative_path)
+        } else {
+            SyncAction::Leave
+        };
+
+        plan.add_item(SyncPlanItem {
+            relative_path: row.relative_path.clone(),
+            reason: update_left_reason(row, &action),
+            action,
+        });
+    }
+
+    plan
+}
+
+pub fn build_update_both_plan(
+    left_root: impl AsRef<str>,
+    right_root: impl AsRef<str>,
+    rows: &[FolderAlignmentRow],
+) -> SyncPlan {
+    build_update_both_plan_with_options(
+        left_root,
+        right_root,
+        rows,
+        &SyncTimeRuleOptions::default(),
+    )
+}
+
+pub fn build_update_both_plan_with_options(
+    left_root: impl AsRef<str>,
+    right_root: impl AsRef<str>,
+    rows: &[FolderAlignmentRow],
+    time_rules: &SyncTimeRuleOptions,
+) -> SyncPlan {
+    let mut plan = SyncPlan::new("Update Both");
+
+    for row in rows {
+        let action = if should_copy_left_to_right(row, time_rules) {
+            copy_left_to_right_action(left_root.as_ref(), right_root.as_ref(), &row.relative_path)
+        } else if should_copy_right_to_left(row, time_rules) {
+            copy_right_to_left_action(left_root.as_ref(), right_root.as_ref(), &row.relative_path)
+        } else {
+            SyncAction::Leave
+        };
+
+        plan.add_item(SyncPlanItem {
+            relative_path: row.relative_path.clone(),
+            reason: update_both_reason(row, &action),
+            action,
+        });
+    }
+
+    plan
+}
+
+pub fn build_mirror_to_right_plan(
+    left_root: impl AsRef<str>,
+    right_root: impl AsRef<str>,
+    rows: &[FolderAlignmentRow],
+) -> SyncPlan {
+    build_mirror_to_right_plan_with_options(
+        left_root,
+        right_root,
+        rows,
+        &SyncTimeRuleOptions::default(),
+    )
+}
+
+pub fn build_mirror_to_right_plan_with_options(
+    left_root: impl AsRef<str>,
+    right_root: impl AsRef<str>,
+    rows: &[FolderAlignmentRow],
+    time_rules: &SyncTimeRuleOptions,
+) -> SyncPlan {
+    let mut plan = SyncPlan::new("Mirror to Right");
+
+    for row in rows {
+        let action = if should_mirror_left_to_right(row, time_rules) {
+            copy_left_to_right_action(left_root.as_ref(), right_root.as_ref(), &row.relative_path)
+        } else if row.left.is_none() && row.right.is_some() {
+            delete_right_action(right_root.as_ref(), &row.relative_path)
+        } else {
+            SyncAction::Leave
+        };
+
+        plan.add_item(SyncPlanItem {
+            relative_path: row.relative_path.clone(),
+            reason: mirror_to_right_reason(row, &action),
+            action,
+        });
+    }
+
+    plan
+}
+
+pub fn build_mirror_to_left_plan(
+    left_root: impl AsRef<str>,
+    right_root: impl AsRef<str>,
+    rows: &[FolderAlignmentRow],
+) -> SyncPlan {
+    build_mirror_to_left_plan_with_options(
+        left_root,
+        right_root,
+        rows,
+        &SyncTimeRuleOptions::default(),
+    )
+}
+
+pub fn build_mirror_to_left_plan_with_options(
+    left_root: impl AsRef<str>,
+    right_root: impl AsRef<str>,
+    rows: &[FolderAlignmentRow],
+    time_rules: &SyncTimeRuleOptions,
+) -> SyncPlan {
+    let mut plan = SyncPlan::new("Mirror to Left");
+
+    for row in rows {
+        let action = if should_mirror_right_to_left(row, time_rules) {
+            copy_right_to_left_action(left_root.as_ref(), right_root.as_ref(), &row.relative_path)
+        } else if row.left.is_some() && row.right.is_none() {
+            delete_left_action(left_root.as_ref(), &row.relative_path)
+        } else {
+            SyncAction::Leave
+        };
+
+        plan.add_item(SyncPlanItem {
+            relative_path: row.relative_path.clone(),
+            reason: mirror_to_left_reason(row, &action),
+            action,
+        });
+    }
+
+    plan
+}
+
+fn should_copy_left_to_right(row: &FolderAlignmentRow, time_rules: &SyncTimeRuleOptions) -> bool {
+    row.left.is_some() && row.right.is_none() || left_is_newer(row, time_rules)
+}
+
+fn should_copy_right_to_left(row: &FolderAlignmentRow, time_rules: &SyncTimeRuleOptions) -> bool {
+    row.left.is_none() && row.right.is_some() || right_is_newer(row, time_rules)
+}
+
+fn should_mirror_left_to_right(row: &FolderAlignmentRow, time_rules: &SyncTimeRuleOptions) -> bool {
+    row.left.is_some() && !row_is_same(row, time_rules)
+}
+
+fn should_mirror_right_to_left(row: &FolderAlignmentRow, time_rules: &SyncTimeRuleOptions) -> bool {
+    row.right.is_some() && !row_is_same(row, time_rules)
+}
+
+fn copy_left_to_right_action(left_root: &str, right_root: &str, relative_path: &str) -> SyncAction {
+    SyncAction::Copy {
+        direction: SyncDirection::LeftToRight,
+        source_path: joined_path(left_root, relative_path),
+        target_path: joined_path(right_root, relative_path),
+    }
+}
+
+fn copy_right_to_left_action(left_root: &str, right_root: &str, relative_path: &str) -> SyncAction {
+    SyncAction::Copy {
+        direction: SyncDirection::RightToLeft,
+        source_path: joined_path(right_root, relative_path),
+        target_path: joined_path(left_root, relative_path),
+    }
+}
+
+fn delete_left_action(left_root: &str, relative_path: &str) -> SyncAction {
+    SyncAction::Delete {
+        target_path: joined_path(left_root, relative_path),
+    }
+}
+
+fn delete_right_action(right_root: &str, relative_path: &str) -> SyncAction {
+    SyncAction::Delete {
+        target_path: joined_path(right_root, relative_path),
+    }
+}
+
+fn left_is_newer(row: &FolderAlignmentRow, time_rules: &SyncTimeRuleOptions) -> bool {
+    let Some(left) = row.left.as_ref() else {
+        return false;
+    };
+    let Some(right) = row.right.as_ref() else {
+        return false;
+    };
+
+    !timestamps_match(
+        left.metadata.modified_at_ms,
+        right.metadata.modified_at_ms,
+        time_rules,
+    ) && left.metadata.modified_at_ms > right.metadata.modified_at_ms
+}
+
+fn right_is_newer(row: &FolderAlignmentRow, time_rules: &SyncTimeRuleOptions) -> bool {
+    let Some(left) = row.left.as_ref() else {
+        return false;
+    };
+    let Some(right) = row.right.as_ref() else {
+        return false;
+    };
+
+    !timestamps_match(
+        left.metadata.modified_at_ms,
+        right.metadata.modified_at_ms,
+        time_rules,
+    ) && right.metadata.modified_at_ms > left.metadata.modified_at_ms
+}
+
+fn row_is_same(row: &FolderAlignmentRow, time_rules: &SyncTimeRuleOptions) -> bool {
+    let Some(left) = row.left.as_ref() else {
+        return false;
+    };
+    let Some(right) = row.right.as_ref() else {
+        return false;
+    };
+
+    timestamps_match(
+        left.metadata.modified_at_ms,
+        right.metadata.modified_at_ms,
+        time_rules,
+    )
+}
+
+fn timestamps_match(
+    left: Option<u128>,
+    right: Option<u128>,
+    time_rules: &SyncTimeRuleOptions,
+) -> bool {
+    let (Some(left), Some(right)) = (left, right) else {
+        return left == right;
+    };
+    let difference = left.abs_diff(right);
+
+    difference <= time_rules.timestamp_tolerance_ms
+        || ignored_hour_offsets(time_rules)
+            .into_iter()
+            .any(|offset_ms| offset_matches_difference(difference, offset_ms, time_rules))
+}
+
+fn ignored_hour_offsets(time_rules: &SyncTimeRuleOptions) -> Vec<u128> {
+    let mut offsets = time_rules
+        .ignored_timezone_hour_offsets
+        .iter()
+        .map(|hours| u128::from(hours.unsigned_abs()) * 3_600_000)
+        .collect::<Vec<_>>();
+
+    if time_rules.ignore_daylight_saving_hour_offset {
+        offsets.push(3_600_000);
+    }
+
+    offsets
+}
+
+fn offset_matches_difference(
+    difference: u128,
+    offset_ms: u128,
+    time_rules: &SyncTimeRuleOptions,
+) -> bool {
+    if offset_ms == 0 {
+        return false;
+    }
+
+    difference.abs_diff(offset_ms) <= time_rules.timestamp_tolerance_ms
+}
+
+fn update_right_reason(row: &FolderAlignmentRow, action: &SyncAction) -> String {
+    match action {
+        SyncAction::Copy { .. } if row.right.is_none() => "Left item only exists".to_owned(),
+        SyncAction::Copy { .. } => "Left item is newer".to_owned(),
+        SyncAction::Leave => "No update needed".to_owned(),
+        SyncAction::Delete { .. } | SyncAction::Conflict { .. } => {
+            "Not used by Update Right".to_owned()
+        }
+    }
+}
+
+fn update_left_reason(row: &FolderAlignmentRow, action: &SyncAction) -> String {
+    match action {
+        SyncAction::Copy { .. } if row.left.is_none() => "Right item only exists".to_owned(),
+        SyncAction::Copy { .. } => "Right item is newer".to_owned(),
+        SyncAction::Leave => "No update needed".to_owned(),
+        SyncAction::Delete { .. } | SyncAction::Conflict { .. } => {
+            "Not used by Update Left".to_owned()
+        }
+    }
+}
+
+fn update_both_reason(row: &FolderAlignmentRow, action: &SyncAction) -> String {
+    match action {
+        SyncAction::Copy {
+            direction: SyncDirection::LeftToRight,
+            ..
+        } if row.right.is_none() => "Left item only exists".to_owned(),
+        SyncAction::Copy {
+            direction: SyncDirection::RightToLeft,
+            ..
+        } if row.left.is_none() => "Right item only exists".to_owned(),
+        SyncAction::Copy {
+            direction: SyncDirection::LeftToRight,
+            ..
+        } => "Left item is newer".to_owned(),
+        SyncAction::Copy {
+            direction: SyncDirection::RightToLeft,
+            ..
+        } => "Right item is newer".to_owned(),
+        SyncAction::Leave => "No update needed".to_owned(),
+        SyncAction::Delete { .. } | SyncAction::Conflict { .. } => {
+            "Not used by Update Both".to_owned()
+        }
+    }
+}
+
+fn mirror_to_right_reason(row: &FolderAlignmentRow, action: &SyncAction) -> String {
+    match action {
+        SyncAction::Copy { .. } if row.right.is_none() => "Left item only exists".to_owned(),
+        SyncAction::Copy { .. } => "Left item replaces right item".to_owned(),
+        SyncAction::Delete { .. } => "Right item does not exist on left".to_owned(),
+        SyncAction::Leave => "Already mirrored".to_owned(),
+        SyncAction::Conflict { .. } => "Not used by Mirror to Right".to_owned(),
+    }
+}
+
+fn mirror_to_left_reason(row: &FolderAlignmentRow, action: &SyncAction) -> String {
+    match action {
+        SyncAction::Copy { .. } if row.left.is_none() => "Right item only exists".to_owned(),
+        SyncAction::Copy { .. } => "Right item replaces left item".to_owned(),
+        SyncAction::Delete { .. } => "Left item does not exist on right".to_owned(),
+        SyncAction::Leave => "Already mirrored".to_owned(),
+        SyncAction::Conflict { .. } => "Not used by Mirror to Left".to_owned(),
+    }
+}
+
+fn joined_path(root: &str, relative_path: &str) -> String {
+    VfsPath::new(root).join(relative_path).as_str().to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use folder_core::{FolderAlignmentRow, FolderCompareStatus, FolderScanNode};
+    use std::cell::Cell;
+    use std::collections::BTreeMap;
+    use vfs_core::{VfsEntry, VfsEntryKind, VfsError, VfsMetadata, VfsProvider};
+
+    #[test]
+    fn sync_plan_supports_copy_delete_leave_and_conflict_actions() {
+        let mut plan = SyncPlan::new("Update right");
+
+        plan.add_item(SyncPlanItem {
+            relative_path: "changed.txt".to_owned(),
+            action: SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "left/changed.txt".to_owned(),
+                target_path: "right/changed.txt".to_owned(),
+            },
+            reason: "Left file is newer".to_owned(),
+        });
+        plan.add_item(SyncPlanItem {
+            relative_path: "removed.txt".to_owned(),
+            action: SyncAction::Delete {
+                target_path: "right/removed.txt".to_owned(),
+            },
+            reason: "Mirror target should remove orphan".to_owned(),
+        });
+        plan.add_item(SyncPlanItem {
+            relative_path: "same.txt".to_owned(),
+            action: SyncAction::Leave,
+            reason: "Already synchronized".to_owned(),
+        });
+        plan.add_item(SyncPlanItem {
+            relative_path: "conflict.txt".to_owned(),
+            action: SyncAction::Conflict {
+                left_path: "left/conflict.txt".to_owned(),
+                right_path: "right/conflict.txt".to_owned(),
+                message: "Both sides changed".to_owned(),
+            },
+            reason: "Manual resolution required".to_owned(),
+        });
+
+        assert_eq!(plan.items.len(), 4);
+        assert!(matches!(
+            plan.items[0].action,
+            SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                ..
+            }
+        ));
+        assert!(matches!(plan.items[1].action, SyncAction::Delete { .. }));
+        assert_eq!(plan.items[2].action, SyncAction::Leave);
+        assert!(matches!(plan.items[3].action, SyncAction::Conflict { .. }));
+    }
+
+    #[test]
+    fn update_right_copies_left_newer_and_left_orphans_to_right() {
+        let rows = vec![
+            file_row("left-newer.txt", Some(2_000), Some(1_000)),
+            left_only_file_row("left-only.txt", 1_500),
+            file_row("right-newer.txt", Some(1_000), Some(2_000)),
+            file_row("same.txt", Some(1_000), Some(1_000)),
+        ];
+
+        let plan = build_update_right_plan("D:/left", "D:/right", &rows);
+
+        assert_eq!(plan.name, "Update Right");
+        assert_eq!(plan.items.len(), 4);
+        assert_eq!(plan.items[0].relative_path, "left-newer.txt");
+        assert_eq!(
+            plan.items[0].action,
+            SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "D:/left/left-newer.txt".to_owned(),
+                target_path: "D:/right/left-newer.txt".to_owned(),
+            }
+        );
+        assert_eq!(plan.items[1].relative_path, "left-only.txt");
+        assert_eq!(
+            plan.items[1].action,
+            SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "D:/left/left-only.txt".to_owned(),
+                target_path: "D:/right/left-only.txt".to_owned(),
+            }
+        );
+        assert_eq!(plan.items[2].action, SyncAction::Leave);
+        assert_eq!(plan.items[3].action, SyncAction::Leave);
+    }
+
+    #[test]
+    fn update_left_copies_right_newer_and_right_orphans_to_left() {
+        let rows = vec![
+            file_row("right-newer.txt", Some(1_000), Some(2_000)),
+            right_only_file_row("right-only.txt", 1_500),
+            file_row("left-newer.txt", Some(2_000), Some(1_000)),
+            file_row("same.txt", Some(1_000), Some(1_000)),
+        ];
+
+        let plan = build_update_left_plan("D:/left", "D:/right", &rows);
+
+        assert_eq!(plan.name, "Update Left");
+        assert_eq!(plan.items.len(), 4);
+        assert_eq!(plan.items[0].relative_path, "right-newer.txt");
+        assert_eq!(
+            plan.items[0].action,
+            SyncAction::Copy {
+                direction: SyncDirection::RightToLeft,
+                source_path: "D:/right/right-newer.txt".to_owned(),
+                target_path: "D:/left/right-newer.txt".to_owned(),
+            }
+        );
+        assert_eq!(plan.items[1].relative_path, "right-only.txt");
+        assert_eq!(
+            plan.items[1].action,
+            SyncAction::Copy {
+                direction: SyncDirection::RightToLeft,
+                source_path: "D:/right/right-only.txt".to_owned(),
+                target_path: "D:/left/right-only.txt".to_owned(),
+            }
+        );
+        assert_eq!(plan.items[2].action, SyncAction::Leave);
+        assert_eq!(plan.items[3].action, SyncAction::Leave);
+    }
+
+    #[test]
+    fn update_both_copies_newer_items_and_orphans_in_both_directions() {
+        let rows = vec![
+            file_row("left-newer.txt", Some(2_000), Some(1_000)),
+            file_row("right-newer.txt", Some(1_000), Some(2_000)),
+            left_only_file_row("left-only.txt", 1_500),
+            right_only_file_row("right-only.txt", 1_500),
+            file_row("same.txt", Some(1_000), Some(1_000)),
+        ];
+
+        let plan = build_update_both_plan("D:/left", "D:/right", &rows);
+
+        assert_eq!(plan.name, "Update Both");
+        assert_eq!(plan.items.len(), 5);
+        assert_eq!(
+            plan.items[0].action,
+            SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "D:/left/left-newer.txt".to_owned(),
+                target_path: "D:/right/left-newer.txt".to_owned(),
+            }
+        );
+        assert_eq!(
+            plan.items[1].action,
+            SyncAction::Copy {
+                direction: SyncDirection::RightToLeft,
+                source_path: "D:/right/right-newer.txt".to_owned(),
+                target_path: "D:/left/right-newer.txt".to_owned(),
+            }
+        );
+        assert_eq!(
+            plan.items[2].action,
+            SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "D:/left/left-only.txt".to_owned(),
+                target_path: "D:/right/left-only.txt".to_owned(),
+            }
+        );
+        assert_eq!(
+            plan.items[3].action,
+            SyncAction::Copy {
+                direction: SyncDirection::RightToLeft,
+                source_path: "D:/right/right-only.txt".to_owned(),
+                target_path: "D:/left/right-only.txt".to_owned(),
+            }
+        );
+        assert_eq!(plan.items[4].action, SyncAction::Leave);
+    }
+
+    #[test]
+    fn update_both_honors_timestamp_tolerance_and_timezone_rules() {
+        let rows = vec![
+            file_row("within-tolerance.txt", Some(10_000), Some(10_800)),
+            file_row("dst-offset.txt", Some(3_600_000), Some(0)),
+            file_row("timezone-offset.txt", Some(7_200_000), Some(0)),
+            file_row("real-change.txt", Some(12_000), Some(10_000)),
+        ];
+
+        let plan = build_update_both_plan_with_options(
+            "D:/left",
+            "D:/right",
+            &rows,
+            &SyncTimeRuleOptions {
+                timestamp_tolerance_ms: 1_000,
+                ignore_daylight_saving_hour_offset: true,
+                ignored_timezone_hour_offsets: vec![2],
+            },
+        );
+
+        assert_eq!(plan.items[0].action, SyncAction::Leave);
+        assert_eq!(plan.items[1].action, SyncAction::Leave);
+        assert_eq!(plan.items[2].action, SyncAction::Leave);
+        assert_eq!(
+            plan.items[3].action,
+            SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "D:/left/real-change.txt".to_owned(),
+                target_path: "D:/right/real-change.txt".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn mirror_plan_leaves_files_matching_configured_time_rules() {
+        let rows = vec![
+            file_row("dst-offset.txt", Some(3_600_000), Some(0)),
+            file_row("different.txt", Some(5_000), Some(0)),
+        ];
+
+        let plan = build_mirror_to_right_plan_with_options(
+            "D:/left",
+            "D:/right",
+            &rows,
+            &SyncTimeRuleOptions {
+                timestamp_tolerance_ms: 500,
+                ignore_daylight_saving_hour_offset: true,
+                ignored_timezone_hour_offsets: Vec::new(),
+            },
+        );
+
+        assert_eq!(plan.items[0].action, SyncAction::Leave);
+        assert_eq!(
+            plan.items[1].action,
+            SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "D:/left/different.txt".to_owned(),
+                target_path: "D:/right/different.txt".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn mirror_to_right_copies_left_items_and_deletes_right_orphans() {
+        let rows = vec![
+            file_row("left-newer.txt", Some(2_000), Some(1_000)),
+            file_row("right-newer.txt", Some(1_000), Some(2_000)),
+            left_only_file_row("left-only.txt", 1_500),
+            right_only_file_row("right-only.txt", 1_500),
+            file_row("same.txt", Some(1_000), Some(1_000)),
+        ];
+
+        let plan = build_mirror_to_right_plan("D:/left", "D:/right", &rows);
+
+        assert_eq!(plan.name, "Mirror to Right");
+        assert_eq!(plan.items.len(), 5);
+        assert_eq!(
+            plan.items[0].action,
+            SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "D:/left/left-newer.txt".to_owned(),
+                target_path: "D:/right/left-newer.txt".to_owned(),
+            }
+        );
+        assert_eq!(
+            plan.items[1].action,
+            SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "D:/left/right-newer.txt".to_owned(),
+                target_path: "D:/right/right-newer.txt".to_owned(),
+            }
+        );
+        assert_eq!(
+            plan.items[2].action,
+            SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "D:/left/left-only.txt".to_owned(),
+                target_path: "D:/right/left-only.txt".to_owned(),
+            }
+        );
+        assert_eq!(
+            plan.items[3].action,
+            SyncAction::Delete {
+                target_path: "D:/right/right-only.txt".to_owned(),
+            }
+        );
+        assert_eq!(plan.items[4].action, SyncAction::Leave);
+    }
+
+    #[test]
+    fn mirror_to_left_copies_right_items_and_deletes_left_orphans() {
+        let rows = vec![
+            file_row("left-newer.txt", Some(2_000), Some(1_000)),
+            file_row("right-newer.txt", Some(1_000), Some(2_000)),
+            left_only_file_row("left-only.txt", 1_500),
+            right_only_file_row("right-only.txt", 1_500),
+            file_row("same.txt", Some(1_000), Some(1_000)),
+        ];
+
+        let plan = build_mirror_to_left_plan("D:/left", "D:/right", &rows);
+
+        assert_eq!(plan.name, "Mirror to Left");
+        assert_eq!(plan.items.len(), 5);
+        assert_eq!(
+            plan.items[0].action,
+            SyncAction::Copy {
+                direction: SyncDirection::RightToLeft,
+                source_path: "D:/right/left-newer.txt".to_owned(),
+                target_path: "D:/left/left-newer.txt".to_owned(),
+            }
+        );
+        assert_eq!(
+            plan.items[1].action,
+            SyncAction::Copy {
+                direction: SyncDirection::RightToLeft,
+                source_path: "D:/right/right-newer.txt".to_owned(),
+                target_path: "D:/left/right-newer.txt".to_owned(),
+            }
+        );
+        assert_eq!(
+            plan.items[2].action,
+            SyncAction::Delete {
+                target_path: "D:/left/left-only.txt".to_owned(),
+            }
+        );
+        assert_eq!(
+            plan.items[3].action,
+            SyncAction::Copy {
+                direction: SyncDirection::RightToLeft,
+                source_path: "D:/right/right-only.txt".to_owned(),
+                target_path: "D:/left/right-only.txt".to_owned(),
+            }
+        );
+        assert_eq!(plan.items[4].action, SyncAction::Leave);
+    }
+
+    #[test]
+    fn executes_sync_plan_copy_overwrite_delete_and_leave_actions() {
+        let mut vfs = MemoryVfs::default()
+            .with_file("/left/new.txt", b"new")
+            .with_file("/left/overwrite.txt", b"left version")
+            .with_file("/right/overwrite.txt", b"right version")
+            .with_file("/right/delete.txt", b"delete me")
+            .with_file("/right/keep.txt", b"keep me");
+        let mut plan = SyncPlan::new("Execute plan");
+
+        plan.add_item(SyncPlanItem {
+            relative_path: "new.txt".to_owned(),
+            action: SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "/left/new.txt".to_owned(),
+                target_path: "/right/new.txt".to_owned(),
+            },
+            reason: "copy".to_owned(),
+        });
+        plan.add_item(SyncPlanItem {
+            relative_path: "overwrite.txt".to_owned(),
+            action: SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "/left/overwrite.txt".to_owned(),
+                target_path: "/right/overwrite.txt".to_owned(),
+            },
+            reason: "overwrite".to_owned(),
+        });
+        plan.add_item(SyncPlanItem {
+            relative_path: "delete.txt".to_owned(),
+            action: SyncAction::Delete {
+                target_path: "/right/delete.txt".to_owned(),
+            },
+            reason: "delete".to_owned(),
+        });
+        plan.add_item(SyncPlanItem {
+            relative_path: "keep.txt".to_owned(),
+            action: SyncAction::Leave,
+            reason: "leave".to_owned(),
+        });
+
+        let result = execute_sync_plan(&mut vfs, &plan);
+
+        assert_eq!(result.total, 4);
+        assert_eq!(result.succeeded, 4);
+        assert_eq!(result.failed, 0);
+        assert_eq!(vfs.read_bytes("/right/new.txt"), Some(b"new".to_vec()));
+        assert_eq!(
+            vfs.read_bytes("/right/overwrite.txt"),
+            Some(b"left version".to_vec())
+        );
+        assert_eq!(vfs.read_bytes("/right/delete.txt"), None);
+        assert_eq!(vfs.read_bytes("/right/keep.txt"), Some(b"keep me".to_vec()));
+        assert!(result.items.iter().all(|item| item.error.is_none()));
+    }
+
+    #[test]
+    fn sync_execution_reports_progress_and_stops_when_cancelled() {
+        let mut vfs = MemoryVfs::default()
+            .with_file("/left/one.txt", b"one")
+            .with_file("/left/two.txt", b"two")
+            .with_file("/left/three.txt", b"three");
+        let mut plan = SyncPlan::new("Cancellable plan");
+
+        for name in ["one.txt", "two.txt", "three.txt"] {
+            plan.add_item(SyncPlanItem {
+                relative_path: name.to_owned(),
+                action: SyncAction::Copy {
+                    direction: SyncDirection::LeftToRight,
+                    source_path: format!("/left/{name}"),
+                    target_path: format!("/right/{name}"),
+                },
+                reason: "copy".to_owned(),
+            });
+        }
+
+        let mut progress = Vec::new();
+        let should_cancel = Cell::new(false);
+        let result = execute_sync_plan_with_control(
+            &mut vfs,
+            &plan,
+            |completed, total| {
+                progress.push((completed, total));
+                should_cancel.set(true);
+            },
+            || should_cancel.get(),
+        );
+
+        assert_eq!(result.total, 3);
+        assert_eq!(result.succeeded, 1);
+        assert_eq!(result.cancelled, 2);
+        assert_eq!(result.failed, 0);
+        assert_eq!(progress, vec![(1, 3)]);
+        assert_eq!(vfs.read_bytes("/right/one.txt"), Some(b"one".to_vec()));
+        assert_eq!(vfs.read_bytes("/right/two.txt"), None);
+        assert_eq!(vfs.read_bytes("/right/three.txt"), None);
+        assert_eq!(result.items[1].status, SyncExecutionStatus::Cancelled);
+    }
+
+    #[test]
+    fn sync_execution_logs_every_action_path_result_and_error() {
+        let mut vfs = MemoryVfs::default().with_file("/left/good.txt", b"good");
+        let mut plan = SyncPlan::new("Logged plan");
+
+        plan.add_item(SyncPlanItem {
+            relative_path: "good.txt".to_owned(),
+            action: SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "/left/good.txt".to_owned(),
+                target_path: "/right/good.txt".to_owned(),
+            },
+            reason: "copy".to_owned(),
+        });
+        plan.add_item(SyncPlanItem {
+            relative_path: "missing.txt".to_owned(),
+            action: SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "/left/missing.txt".to_owned(),
+                target_path: "/right/missing.txt".to_owned(),
+            },
+            reason: "copy missing".to_owned(),
+        });
+
+        let result = execute_sync_plan(&mut vfs, &plan);
+
+        assert_eq!(result.logs.len(), 2);
+        assert_eq!(result.logs[0].relative_path, "good.txt");
+        assert_eq!(result.logs[0].action, "copyLeftToRight");
+        assert_eq!(
+            result.logs[0].source_path.as_deref(),
+            Some("/left/good.txt")
+        );
+        assert_eq!(
+            result.logs[0].target_path.as_deref(),
+            Some("/right/good.txt")
+        );
+        assert_eq!(result.logs[0].status, SyncExecutionStatus::Succeeded);
+        assert_eq!(result.logs[0].error, None);
+        assert_eq!(result.logs[1].relative_path, "missing.txt");
+        assert_eq!(result.logs[1].status, SyncExecutionStatus::Failed);
+        assert!(result.logs[1]
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("NotFound")));
+    }
+
+    #[test]
+    fn sync_execution_emits_structured_log_events() {
+        let mut vfs = MemoryVfs::default().with_file("/left/good.txt", b"good");
+        let mut plan = SyncPlan::new("Structured sync log");
+
+        plan.add_item(SyncPlanItem {
+            relative_path: "good.txt".to_owned(),
+            action: SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "/left/good.txt".to_owned(),
+                target_path: "/right/good.txt".to_owned(),
+            },
+            reason: "copy".to_owned(),
+        });
+
+        let result = execute_sync_plan(&mut vfs, &plan);
+
+        assert_eq!(result.structured_logs.len(), 1);
+        assert_eq!(
+            result.structured_logs[0].domain,
+            logging_core::LogDomain::Sync
+        );
+        assert_eq!(result.structured_logs[0].action, "copyLeftToRight");
+        assert_eq!(
+            result.structured_logs[0].status,
+            logging_core::LogStatus::Succeeded
+        );
+        assert_eq!(
+            result.structured_logs[0].details["relativePath"],
+            "good.txt"
+        );
+        assert_eq!(
+            result.structured_logs[0].details["targetPath"],
+            "/right/good.txt"
+        );
+    }
+
+    #[test]
+    fn apply_sync_overrides_changes_a_single_row_action() {
+        let mut plan = SyncPlan::new("Update Right");
+        plan.add_item(SyncPlanItem {
+            relative_path: "app.exe".to_owned(),
+            action: SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "/left/app.exe".to_owned(),
+                target_path: "/right/app.exe".to_owned(),
+            },
+            reason: "copy".to_owned(),
+        });
+        plan.add_item(SyncPlanItem {
+            relative_path: "keep.txt".to_owned(),
+            action: SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "/left/keep.txt".to_owned(),
+                target_path: "/right/keep.txt".to_owned(),
+            },
+            reason: "copy".to_owned(),
+        });
+
+        let plan = apply_sync_overrides(
+            plan,
+            "/left",
+            "/right",
+            &[SyncActionOverride {
+                relative_path: "app.exe".to_owned(),
+                action: SyncOverrideAction::Leave,
+            }],
+        );
+
+        assert_eq!(plan.items[0].action, SyncAction::Leave);
+        assert!(matches!(
+            plan.items[1].action,
+            SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn apply_sync_overrides_supports_delete_left_and_delete_right() {
+        let mut plan = SyncPlan::new("Override deletes");
+        plan.add_item(SyncPlanItem {
+            relative_path: "left-only.txt".to_owned(),
+            action: SyncAction::Leave,
+            reason: "leave".to_owned(),
+        });
+        plan.add_item(SyncPlanItem {
+            relative_path: "right-only.txt".to_owned(),
+            action: SyncAction::Leave,
+            reason: "leave".to_owned(),
+        });
+
+        let plan = apply_sync_overrides(
+            plan,
+            "/left",
+            "/right",
+            &[
+                SyncActionOverride {
+                    relative_path: "left-only.txt".to_owned(),
+                    action: SyncOverrideAction::DeleteLeft,
+                },
+                SyncActionOverride {
+                    relative_path: "right-only.txt".to_owned(),
+                    action: SyncOverrideAction::DeleteRight,
+                },
+            ],
+        );
+
+        assert_eq!(
+            plan.items[0].action,
+            SyncAction::Delete {
+                target_path: "/left/left-only.txt".to_owned(),
+            }
+        );
+        assert_eq!(
+            plan.items[1].action,
+            SyncAction::Delete {
+                target_path: "/right/right-only.txt".to_owned(),
+            }
+        );
+    }
+
+    fn file_row(
+        relative_path: &str,
+        left_modified_at_ms: Option<u128>,
+        right_modified_at_ms: Option<u128>,
+    ) -> FolderAlignmentRow {
+        FolderAlignmentRow {
+            relative_path: relative_path.to_owned(),
+            depth: 0,
+            left: Some(file_node(
+                relative_path,
+                left_modified_at_ms,
+                FolderCompareStatus::Different,
+            )),
+            right: Some(file_node(
+                relative_path,
+                right_modified_at_ms,
+                FolderCompareStatus::Different,
+            )),
+        }
+    }
+
+    fn left_only_file_row(relative_path: &str, modified_at_ms: u128) -> FolderAlignmentRow {
+        FolderAlignmentRow {
+            relative_path: relative_path.to_owned(),
+            depth: 0,
+            left: Some(file_node(
+                relative_path,
+                Some(modified_at_ms),
+                FolderCompareStatus::LeftOnly,
+            )),
+            right: None,
+        }
+    }
+
+    fn right_only_file_row(relative_path: &str, modified_at_ms: u128) -> FolderAlignmentRow {
+        FolderAlignmentRow {
+            relative_path: relative_path.to_owned(),
+            depth: 0,
+            left: None,
+            right: Some(file_node(
+                relative_path,
+                Some(modified_at_ms),
+                FolderCompareStatus::RightOnly,
+            )),
+        }
+    }
+
+    fn file_node(
+        relative_path: &str,
+        modified_at_ms: Option<u128>,
+        status: FolderCompareStatus,
+    ) -> FolderScanNode {
+        let mut node = FolderScanNode::new_file(
+            relative_path,
+            relative_path,
+            VfsMetadata {
+                kind: VfsEntryKind::File,
+                name: relative_path.to_owned(),
+                extension: relative_path
+                    .rsplit_once('.')
+                    .map(|(_, extension)| extension.to_owned()),
+                size: 1,
+                readonly: false,
+                created_at_ms: None,
+                modified_at_ms,
+                accessed_at_ms: None,
+            },
+        );
+        node.status = status;
+        node
+    }
+
+    #[derive(Default)]
+    struct MemoryVfs {
+        files: BTreeMap<String, Vec<u8>>,
+    }
+
+    impl MemoryVfs {
+        fn with_file(mut self, path: &str, bytes: &[u8]) -> Self {
+            self.files.insert(path.to_owned(), bytes.to_vec());
+            self
+        }
+
+        fn read_bytes(&self, path: &str) -> Option<Vec<u8>> {
+            self.files.get(path).cloned()
+        }
+    }
+
+    impl VfsProvider for MemoryVfs {
+        fn list(&self, _path: &vfs_core::VfsPath) -> vfs_core::VfsResult<Vec<VfsEntry>> {
+            Ok(Vec::new())
+        }
+
+        fn read(&self, path: &vfs_core::VfsPath) -> vfs_core::VfsResult<Vec<u8>> {
+            self.files
+                .get(path.as_str())
+                .cloned()
+                .ok_or_else(|| VfsError::NotFound(path.clone()))
+        }
+
+        fn write(&mut self, path: &vfs_core::VfsPath, bytes: &[u8]) -> vfs_core::VfsResult<()> {
+            self.files.insert(path.as_str().to_owned(), bytes.to_vec());
+
+            Ok(())
+        }
+
+        fn metadata(&self, path: &vfs_core::VfsPath) -> vfs_core::VfsResult<VfsMetadata> {
+            let bytes = self
+                .files
+                .get(path.as_str())
+                .ok_or_else(|| VfsError::NotFound(path.clone()))?;
+
+            Ok(VfsMetadata {
+                kind: VfsEntryKind::File,
+                name: path
+                    .as_str()
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(path.as_str())
+                    .to_owned(),
+                extension: None,
+                size: bytes.len() as u64,
+                readonly: false,
+                created_at_ms: None,
+                modified_at_ms: None,
+                accessed_at_ms: None,
+            })
+        }
+
+        fn delete(&mut self, path: &vfs_core::VfsPath) -> vfs_core::VfsResult<()> {
+            self.files
+                .remove(path.as_str())
+                .map(|_| ())
+                .ok_or_else(|| VfsError::NotFound(path.clone()))
+        }
+    }
+}

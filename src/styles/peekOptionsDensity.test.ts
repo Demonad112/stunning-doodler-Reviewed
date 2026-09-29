@@ -1,0 +1,230 @@
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { describe, expect, it } from 'vitest'
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+const css = readFileSync(resolve(root, 'src/styles/main.css'), 'utf8')
+const folderView = readFileSync(resolve(root, 'src/views/FolderCompareView.vue'), 'utf8')
+const syncView = readFileSync(resolve(root, 'src/views/FolderSyncView.vue'), 'utf8')
+const mergeView = readFileSync(resolve(root, 'src/views/FolderMergeView.vue'), 'utf8')
+const settingsView = readFileSync(resolve(root, 'src/views/SettingsView.vue'), 'utf8')
+const rafHelper = readFileSync(resolve(root, 'tests/e2e/helpers/ensureAnimationFrames.ts'), 'utf8')
+const tauriMock = readFileSync(resolve(root, 'tests/e2e/helpers/tauriMock.ts'), 'utf8')
+
+describe('peek panel densify', () => {
+  it('keeps Folder/Sync/Merge peek panels at capture CSS scale with tab chrome', () => {
+    expect(css).toMatch(/\.folder-peek-panel/)
+    expect(css).toMatch(/\.folder-sync-peek-panel/)
+    expect(css).toMatch(/\.folder-merge-peek-panel/)
+    expect(css).toMatch(/\.peek-tabs\s*\{/)
+    expect(css).toMatch(/\.peek-tab\s*\{/)
+    expect(css).toMatch(/\.peek-tab-active\s*\{/)
+    expect(css).toMatch(/\.peek-tab\s*\{[\s\S]*?height:\s*20px/)
+    expect(css).toMatch(/\.peek-tab\s*\{[\s\S]*?font-size:\s*11px/)
+    expect(css).toMatch(/\.folder-peek-panel,[\s\S]*?padding:\s*0/)
+    expect(css).toMatch(/\.peek-dual-columns\s*\{/)
+    expect(css).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\) minmax\(0, 1fr\)/)
+    expect(css).toMatch(/\.peek-dual-columns\s*\{[\s\S]*?gap:\s*0/)
+    expect(css).toMatch(/\.folder-peek-panel dl > div,[\s\S]*?min-height:\s*20px/)
+    expect(css).toMatch(/\.folder-peek-panel header,[\s\S]*?min-height:\s*20px/)
+    expect(css).toMatch(/\.peek-tabs\s*\{[\s\S]*?min-height:\s*20px/)
+    expect(css).toMatch(/\.folder-peek-panel dt,[\s\S]*?font-size:\s*11px/)
+    expect(css).toMatch(/\.folder-filter-strip-btn\s*\{[\s\S]*?grid-template-rows:\s*20px auto/)
+
+    expect(folderView).toMatch(/data-testid="folder-peek-tabs"/)
+    expect(folderView).toMatch(/data-testid="folder-peek-dual"/)
+    expect(folderView).toMatch(/data-testid="folder-peek-left-col"/)
+    expect(folderView).toMatch(/data-testid="folder-peek-right-col"/)
+    expect(folderView).toMatch(/data-testid="folder-peek-importance"/)
+    expect(folderView).toMatch(/data-peek-density="capture-1to1"/)
+    expect(folderView).toMatch(/\.folder-peek-panel\s*\{[\s\S]*?padding:\s*0/)
+    expect(folderView).toMatch(/\.folder-peek-panel\s*\{[\s\S]*?font-size:\s*11px/)
+    expect(folderView).toMatch(/\.folder-peek-panel header\s*\{[\s\S]*?min-height:\s*20px/)
+    expect(folderView).toMatch(/\.peek-dual-columns\s*\{[\s\S]*?gap:\s*0/)
+    expect(folderView).toMatch(
+      /\.folder-filter-strip-btn\s*\{[\s\S]*?grid-template-rows:\s*20px auto/,
+    )
+
+    expect(syncView).toMatch(/data-testid="folder-sync-peek-tabs"/)
+    expect(syncView).toMatch(/data-testid="folder-sync-peek-dual"/)
+    expect(syncView).toMatch(/data-peek-density="capture-1to1"/)
+    expect(syncView).toMatch(/\.folder-sync-peek-panel\s*\{[\s\S]*?padding:\s*0/)
+    expect(syncView).toMatch(/\.folder-sync-peek-panel header\s*\{[\s\S]*?min-height:\s*20px/)
+
+    expect(mergeView).toMatch(/data-testid="folder-merge-peek-tabs"/)
+    expect(mergeView).toMatch(/data-testid="folder-merge-peek-dual"/)
+    expect(mergeView).toMatch(/data-peek-density="capture-1to1"/)
+    expect(mergeView).toMatch(/\.folder-merge-peek-panel\s*\{[\s\S]*?padding:\s*0/)
+    expect(mergeView).toMatch(/\.folder-merge-peek-panel header\s*\{[\s\S]*?min-height:\s*20px/)
+  })
+})
+
+describe('options dialog densify', () => {
+  it('keeps Options tree/content chrome at capture CSS scale and wired section ids', () => {
+    expect(css).toMatch(/\.settings-view\s*\{[\s\S]*?padding:\s*4px 6px/)
+    expect(css).toMatch(/\.settings-view \.options-section-nav[\s\S]*?border:\s*1px solid #a0a0a0/)
+    expect(css).toMatch(/\.settings-view \.options-section-button[\s\S]*?min-height:\s*18px/)
+    expect(css).toMatch(/\.settings-view \.options-tree-group-label[\s\S]*?font-size:\s*11px/)
+    expect(css).toMatch(/\.settings-view \.n-card-header[\s\S]*?min-height:\s*20px/)
+
+    expect(settingsView).toMatch(/data-options-density="capture-1to1"/)
+    expect(settingsView).toMatch(/data-options-content-density="capture-1to1"/)
+    expect(settingsView).toMatch(/\.options-content\s*\{[\s\S]*?gap:\s*4px/)
+    expect(settingsView).toMatch(/\.settings-view\s*\{[\s\S]*?grid-template-columns:\s*176px/)
+    expect(settingsView).toMatch(/\.settings-view\s*\{[\s\S]*?padding:\s*4px 6px/)
+    expect(settingsView).toMatch(/\.options-section-button\s*\{[\s\S]*?min-height:\s*18px/)
+    expect(settingsView).toMatch(/\.options-tree-group-label\s*\{[\s\S]*?font-size:\s*11px/)
+    expect(settingsView).toMatch(/\.options-hint\s*\{[\s\S]*?line-height:\s*16px/)
+    expect(settingsView).toMatch(
+      /\.stack-row input,\s*\.stack-row select\s*\{[\s\S]*?height:\s*20px/,
+    )
+    expect(settingsView).toMatch(
+      /\.stack-row input,\s*\.stack-row select\s*\{[\s\S]*?border:\s*1px solid #a0a0a0/,
+    )
+    expect(settingsView).toMatch(/:deep\(\.n-card-header\)\s*\{[\s\S]*?min-height:\s*20px/)
+    expect(settingsView).not.toMatch(/font-size:\s*9px/)
+    expect(settingsView).not.toMatch(/min-height:\s*9px/)
+    expect(settingsView).toMatch(/data-testid="options-content"/)
+    expect(settingsView).toMatch(/data-testid="options-section-nav"/)
+    expect(settingsView).toMatch(/options-section-\$\{section\.id\}/)
+    expect(settingsView).toMatch(/'folderCompare'/)
+    expect(settingsView).toMatch(/'folderMerge'/)
+    expect(settingsView).toMatch(/'folderSync'/)
+    expect(settingsView).toMatch(/'hexCompare'/)
+    expect(settingsView).toMatch(/'pictureCompare'/)
+    expect(settingsView).toMatch(/'mediaCompare'/)
+    expect(settingsView).toMatch(/'versionCompare'/)
+    expect(settingsView).toMatch(/'tableCompare'/)
+    expect(settingsView).toMatch(/'formats'/)
+    expect(settingsView).toMatch(/'profiles'/)
+    expect(settingsView).toMatch(/'reports'/)
+    expect(settingsView).toMatch(/data-testid="show-folder-legend"/)
+    expect(settingsView).toMatch(/data-testid="confirm-before-copy"/)
+    expect(settingsView).toMatch(/data-testid="confirm-before-move"/)
+    expect(settingsView).toMatch(/data-testid="confirm-before-sync-delete"/)
+    expect(settingsView).toMatch(/data-testid="create-backup-on-report-export"/)
+    expect(settingsView).toMatch(/data-testid="folder-compare-crc"/)
+    expect(settingsView).toMatch(/data-testid="folder-compare-attributes"/)
+    expect(settingsView).toMatch(/data-testid="profile-default-host"/)
+    expect(settingsView).toMatch(/data-testid="report-open-after-export"/)
+    expect(settingsView).toMatch(/data-testid="report-clear-history-on-exit"/)
+    expect(settingsView).toMatch(/data-testid="folder-compare-case-sensitive-names"/)
+    expect(settingsView).toMatch(/data-testid="text-compare-algorithm-default"/)
+    expect(settingsView).toMatch(/data-testid="preserve-timestamps-on-copy"/)
+    expect(settingsView).toMatch(/data-testid="overwrite-read-only-files"/)
+    expect(settingsView).toMatch(/data-testid="profile-default-username"/)
+    expect(settingsView).toMatch(/data-testid="report-include-identical"/)
+    expect(settingsView).toMatch(/data-testid="show-milliseconds-in-timestamps"/)
+    expect(settingsView).toMatch(/data-testid="skip-newer-targets-on-copy"/)
+    expect(settingsView).toMatch(/data-testid="prefer-hex-for-no-extension"/)
+    expect(settingsView).toMatch(/data-testid="profile-anonymous-login"/)
+    expect(settingsView).toMatch(/data-testid="report-include-unimportant"/)
+    expect(settingsView).toMatch(/data-testid="folder-compare-exclude-junctions"/)
+    expect(settingsView).toMatch(/data-testid="text-compare-ignore-regexes-default"/)
+    expect(settingsView).toMatch(/data-testid="picture-alpha-tolerance-default"/)
+    expect(settingsView).toMatch(/data-testid="picture-blend-enabled-default"/)
+    expect(settingsView).toMatch(/data-testid="picture-blend-opacity-default"/)
+    expect(settingsView).toMatch(/data-testid="picture-blend-mode-default"/)
+    expect(settingsView).toMatch(/data-testid="picture-ignore-color-from-default"/)
+    expect(settingsView).toMatch(/data-testid="picture-ignore-color-to-default"/)
+    expect(settingsView).toMatch(/data-testid="media-unimportant-fields-default"/)
+    expect(settingsView).toMatch(/data-testid="version-unimportant-fields-default"/)
+    expect(settingsView).toMatch(/data-testid="folder-compare-always-show-folders"/)
+    expect(settingsView).toMatch(/data-testid="folder-compare-files-only-default"/)
+    expect(settingsView).toMatch(/data-testid="folder-compare-show-suppressed-default"/)
+    expect(settingsView).toMatch(/folder-compare-status-\$\{option\.testId\}-default/)
+    expect(settingsView).toMatch(/toggleFolderDisplayStatuses/)
+    expect(settingsView).toMatch(/data-testid="folder-merge-view-preset-default"/)
+    expect(settingsView).toMatch(/data-testid="folder-merge-always-show-folders"/)
+    expect(settingsView).toMatch(/data-testid="folder-merge-show-center-pane"/)
+    expect(settingsView).toMatch(/data-testid="folder-merge-compare-to-output"/)
+    expect(settingsView).toMatch(/\.shortcut-config\s*\{[\s\S]*?gap:\s*4px/)
+    expect(settingsView).toMatch(/\.shortcut-row\s*\{[\s\S]*?padding:\s*2px 6px/)
+    expect(settingsView).toMatch(/\.shortcut-row\s*\{[\s\S]*?border-radius:\s*0/)
+    expect(settingsView).toMatch(/\.shared-session-list li\s*\{[\s\S]*?padding:\s*2px 6px/)
+    expect(settingsView).toMatch(/\.shared-session-list li\s*\{[\s\S]*?border-radius:\s*0/)
+  })
+})
+
+describe('e2e animation-frame harness', () => {
+  it('polyfills requestAnimationFrame in main and Playwright utility worlds', () => {
+    expect(rafHelper).toMatch(/requestAnimationFrame/)
+    expect(rafHelper).toMatch(/setTimeout/)
+    expect(rafHelper).toMatch(/playwright_utility/)
+    expect(rafHelper).toMatch(/newCDPSession/)
+    expect(tauriMock).toMatch(/ensureAnimationFrames/)
+  })
+})
+
+describe('options tree depth residual', () => {
+  it('keeps Options Appearance/Toolbars/Tweaks tree depth chrome on capture band', () => {
+    expect(settingsView).toMatch(/data-options-tree-depth="capture-1to1"/)
+    expect(settingsView).toMatch(/data-tree-depth="0"/)
+    expect(settingsView).toMatch(/data-tree-depth="1"/)
+    expect(settingsView).toMatch(/id: 'appearance'/)
+    expect(settingsView).toMatch(/id: 'toolbars'/)
+    expect(settingsView).toMatch(/id: 'tweaks'/)
+    expect(settingsView).toMatch(/options-section-\$\{section\.id\}/)
+    expect(settingsView).toMatch(
+      /\.options-section-button\[data-tree-depth='1'\]\s*\{[\s\S]*?padding-left:\s*14px/,
+    )
+    expect(css).toMatch(
+      /\.settings-view \.options-section-button\[data-tree-depth='1'\]\s*\{[\s\S]*?padding-left:\s*14px/,
+    )
+    expect(css).toMatch(
+      /\.settings-view \.options-tree-group\s*\{[\s\S]*?border-bottom:\s*1px solid #e0e0e0/,
+    )
+    expect(settingsView).not.toMatch(/min-height:\s*6px/)
+  })
+})
+
+describe('folder merge Same OK / Peek residual', () => {
+  it('scales Same OK and Peek action chrome toward capture toolbar plates', () => {
+    expect(mergeView).toMatch(/data-same-ok-chrome="capture-1to1-residual"/)
+    expect(mergeView).toMatch(/data-peek-residual="capture-1to1"/)
+    expect(mergeView).toMatch(/folder-merge-same-ok[\s\S]*?height:\s*37\.5px/)
+    expect(css).toMatch(/folder-merge-same-ok[\s\S]*?height:\s*37\.5px/)
+    expect(css).toMatch(/\.folder-merge-peek-panel[\s\S]*?border:\s*1px solid #a0a0a0/)
+  })
+})
+
+describe('folder peek residual', () => {
+  it('keeps Folder Peek panel residual chrome toward capture', () => {
+    expect(folderView).toMatch(/data-peek-residual="capture-1to1"/)
+    expect(folderView).toMatch(/\.folder-peek-panel\[data-peek-residual='capture-1to1'\]/)
+    expect(css).toMatch(/\.folder-peek-panel[\s\S]*?border:\s*1px solid #a0a0a0/)
+  })
+})
+
+describe('peek-tab fill', () => {
+  it('matches capture peek-tab fill #f0f0f0', () => {
+    expect(css).toMatch(/\.peek-tab\s*\{[\s\S]*?background:\s*#f0f0f0/)
+  })
+})
+
+describe('folder peek-column base fill', () => {
+  it('matches capture peek-column base fill #f0f0f0 in session views', () => {
+    expect(folderView).toMatch(/\.peek-column\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(syncView).toMatch(/\.peek-column\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(mergeView).toMatch(/\.peek-column\s*\{[\s\S]*?background:\s*#f0f0f0/)
+  })
+})
+
+describe('peek-column fill', () => {
+  it('matches capture peek-column fill #f0f0f0', () => {
+    expect(css).toMatch(/\.peek-column\s*\{[\s\S]*?background:\s*#f0f0f0/)
+  })
+})
+
+describe('peek button fill', () => {
+  it('matches capture peek button fill #f0f0f0', () => {
+    expect(css).toMatch(/\.folder-peek-panel header button,[\s\S]*?background:\s*#f0f0f0/)
+  })
+})
+
+describe('filter strip glyph', () => {
+  it('sizes Folder filter/Peek strip Lucide glyphs to capture 14px', () => {
+    expect(folderView).toMatch(/folder-filter-strip-icon[\s\S]*?:size="14"/)
+  })
+})

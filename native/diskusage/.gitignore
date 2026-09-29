@@ -1,0 +1,22 @@
+# Directories
+/.git/
+/.claude/
+/.vs/
+/publish/
+/contrib/
+/build/
+/dist/
+/scratch-test/
+/scratch-dumps/
+/enc_temp_folder/
+intermediate/
+
+# File Masks
+*.aps
+*.bin
+*.vcxproj.user
+*.lastcodeanalysissucceeded
+*_combined.txt
+
+# Specific Files
+/windirstat/res/LangStrings.h

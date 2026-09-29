@@ -1,0 +1,65 @@
+﻿// WinDirStat - Directory Statistics
+// Copyright © WinDirStat Team
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 2 of the License, or
+// at your option any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//
+
+#pragma once
+
+#ifndef GIT_COMMIT
+#define GIT_COMMIT "deadbeef"
+#endif
+
+#ifndef GIT_DATE
+#define GIT_DATE "0000-00-00"
+#endif
+
+#ifndef GIT_COUNT
+#define GIT_COUNT 0
+#endif
+
+#ifndef PRODUCTION
+#define PRODUCTION 0
+#endif
+
+#define PRD_MAJVER                  2 // major product version
+#define PRD_MINVER                  8 // minor product version
+#define PRD_PATCH                   8 // patch number for product
+#define PRD_BUILD                   GIT_COUNT // build number for product
+#define FILE_MAJVER                 PRD_MAJVER // major file version
+#define FILE_MINVER                 PRD_MINVER // minor file version
+#define FILE_PATCH                  PRD_PATCH // patch number for version
+#define FILE_BUILD                  PRD_BUILD // build number for version
+#define TEXT_WEBSITE                https:/##/windirstat.net // website
+#define TEXT_PRODUCTNAME            altWinDirStat // product's name
+#define TEXT_FILEDESC               altWinDirStat (unofficial fork of WinDirStat) // component description
+
+#define STRING_COMPANY              altWinDirStat contributors
+#define STRING_COPYRIGHT            "© WinDirStat Team, altWinDirStat contributors"
+#define STRING_EXENAME              altWinDirStat.exe
+#define SOURCE_REPOSITORY           https://github.com/Demonad112/altWinDirStat
+
+// altWinDirStat: the fork carries its own version number instead of upstream's
+// PRD_* above. CI overrides ALT_VER_* from the release tag (see project.early.props).
+#ifndef ALT_VER_MAJOR
+#define ALT_VER_MAJOR               2
+#define ALT_VER_MINOR               1
+#define ALT_VER_PATCH               1
+#endif
+#undef PRD_MAJVER
+#undef PRD_MINVER
+#undef PRD_PATCH
+#define PRD_MAJVER                  ALT_VER_MAJOR
+#define PRD_MINVER                  ALT_VER_MINOR
+#define PRD_PATCH                   ALT_VER_PATCH

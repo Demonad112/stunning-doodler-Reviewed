@@ -1,0 +1,52 @@
+export const fileOperationPreferencesStorageKey = 'open-diff-file-operation-preferences'
+
+export interface FileOperationPreferences {
+  copyEmptyFolders: boolean
+  keepFolderExpansionOnReload: boolean
+  /** Skip copy when the destination exists and is newer than the source. */
+  skipNewerTargetsOnCopy: boolean
+}
+
+export function defaultFileOperationPreferences(): FileOperationPreferences {
+  return {
+    copyEmptyFolders: true,
+    keepFolderExpansionOnReload: false,
+    skipNewerTargetsOnCopy: false,
+  }
+}
+
+export function loadFileOperationPreferences(
+  storage: Pick<Storage, 'getItem'> = localStorage,
+): FileOperationPreferences {
+  try {
+    const raw = storage.getItem(fileOperationPreferencesStorageKey)
+
+    if (!raw) {
+      return defaultFileOperationPreferences()
+    }
+
+    const parsed = JSON.parse(raw) as Partial<FileOperationPreferences>
+
+    return {
+      copyEmptyFolders: parsed.copyEmptyFolders !== false,
+      keepFolderExpansionOnReload: Boolean(parsed.keepFolderExpansionOnReload),
+      skipNewerTargetsOnCopy: Boolean(parsed.skipNewerTargetsOnCopy),
+    }
+  } catch {
+    return defaultFileOperationPreferences()
+  }
+}
+
+export function saveFileOperationPreferences(
+  prefs: FileOperationPreferences,
+  storage: Pick<Storage, 'setItem'> = localStorage,
+): void {
+  storage.setItem(
+    fileOperationPreferencesStorageKey,
+    JSON.stringify({
+      copyEmptyFolders: prefs.copyEmptyFolders,
+      keepFolderExpansionOnReload: prefs.keepFolderExpansionOnReload,
+      skipNewerTargetsOnCopy: prefs.skipNewerTargetsOnCopy,
+    }),
+  )
+}

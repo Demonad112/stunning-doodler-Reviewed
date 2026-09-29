@@ -1,0 +1,325 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Publish a release with this tag (e.g. v2.0.0; a -suffix makes it a prerelease). Leave empty for a plain build.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  # Upstream's publishing files ship under the official WinDirStat identity; an upstream sync can bring them back.
+  fork-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upstream publishing files stay deleted
+        run: |
+          found=$(ls -d .github/workflows/publish-*-to-winget-pkgs.yml .github/FUNDING.yml setup/chocolatey setup/store 2>/dev/null || true)
+          if [ -n "$found" ]; then
+            echo "::error::Upstream publishing files are back (delete them; see HANDOFF.md):"; echo "$found"; exit 1
+          fi
+          echo "None present."
+
+  build:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: x64
+            short: x64
+            test: true
+          - platform: Win32
+            short: x86
+            test: true
+          - platform: ARM64
+            short: arm64
+            test: false   # the x64 runner can't execute ARM64 binaries; build and package only
+    env:
+      DIST: dist\altWinDirStat-${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # upstream's build stamps GIT_COUNT/GIT_COMMIT from history
+
+      - uses: microsoft/setup-msbuild@v2
+
+      - name: Compute version
+        id: ver
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          # Release builds take their version from the pushed tag or the release_tag dispatch input.
+          $tag = if ("${{ github.ref }}" -like "refs/tags/v*") { "${{ github.ref_name }}" } else { "$env:RELEASE_TAG" }
+          if ($tag) {
+            if ($tag -notmatch '^v(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.]+)?$') { throw "Release tag '$tag' must look like v2.0.0 or v2.0.0-rc.1" }
+            $maj, $min, $pat = $Matches[1], $Matches[2], $Matches[3]
+            $pre = [bool]$Matches[4]
+            $v = $tag.Substring(1)
+            $release = 'true'
+          } else {
+            # Plain builds keep the default fork version from windirstat/Version.h (ALT_VER_*).
+            $h = Get-Content windirstat\Version.h -Raw
+            $maj, $min, $pat = 'MAJOR', 'MINOR', 'PATCH' | ForEach-Object { if ($h -match "#define ALT_VER_$_\s+(\d+)") { $Matches[1] } else { throw "ALT_VER_$_ not found in Version.h" } }
+            $pre = $true
+            $v = "$maj.$min.$pat-dev.${{ github.run_number }}"
+            $release = 'false'
+          }
+          "version=$v", "major=$maj", "minor=$min", "patch=$pat", "prerelease=$($pre.ToString().ToLower())", "release=$release" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Version $v (release=$release, prerelease=$pre)"
+
+      # Upstream targets the VS2026 toolset (v145); the VS2022 toolset (v143) on this runner builds it too.
+      - name: Build (Release|${{ matrix.platform }})
+        shell: pwsh
+        run: |
+          # Final releases are production builds (no "Beta" in the title), like upstream's build.cmd does.
+          $production = if ('${{ steps.ver.outputs.release }}' -eq 'true' -and '${{ steps.ver.outputs.prerelease }}' -eq 'false') { 1 } else { 0 }
+          $msbArgs = @('/p:Configuration=Release', '/p:Platform=${{ matrix.platform }}', '/p:PlatformToolset=v143', "/p:ExternalCompilerOptions=/DPRODUCTION=$production")
+          # Release builds stamp the tag's version into cl and rc via project.early.props.
+          if ('${{ steps.ver.outputs.release }}' -eq 'true') { $msbArgs += '/p:AltVerMajor=${{ steps.ver.outputs.major }}', '/p:AltVerMinor=${{ steps.ver.outputs.minor }}', '/p:AltVerPatch=${{ steps.ver.outputs.patch }}' }
+          msbuild windirstat.sln /m /nologo /v:minimal @msbArgs
+          if ($LASTEXITCODE -ne 0) { throw "msbuild failed" }
+
+      - name: Collect binary
+        shell: pwsh
+        run: |
+          $exe = "build\altWinDirStat_${{ matrix.short }}.exe"
+          if (-not (Test-Path $exe)) { Get-ChildItem build; throw "$exe not found after build" }
+          New-Item -ItemType Directory -Force $env:DIST | Out-Null
+          Copy-Item $exe "$env:DIST\altWinDirStat.exe"
+          Copy-Item windirstat\res\license.txt "$env:DIST\LICENSE.txt"
+          Copy-Item README.md "$env:DIST\README.md"
+          $info = (Get-Item "$env:DIST\altWinDirStat.exe").VersionInfo
+          Write-Host "Built $($info.ProductName) $($info.ProductVersion) ($([math]::Round((Get-Item "$env:DIST\altWinDirStat.exe").Length/1MB,2)) MB)"
+          if ($info.ProductName -ne 'altWinDirStat') { throw "Unexpected product name '$($info.ProductName)'" }
+          $want = '${{ steps.ver.outputs.major }}.${{ steps.ver.outputs.minor }}.${{ steps.ver.outputs.patch }}'
+          $got = "$($info.FileMajorPart).$($info.FileMinorPart).$($info.FileBuildPart)"
+          if ($got -ne $want) { throw "Exe FileVersion $($info.FileVersion) does not match expected $want" }
+
+      # Signing: runs only when a certificate is configured as repository secrets; otherwise builds stay unsigned.
+      # Azure Trusted Signing: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, SIGNING_ENDPOINT, SIGNING_ACCOUNT, SIGNING_PROFILE.
+      # Or a .pfx: SIGNING_PFX_BASE64 (base64 of the .pfx) and SIGNING_PFX_PASSWORD.
+      - name: Check signing configuration
+        id: sign
+        shell: pwsh
+        env:
+          HAS_AZURE: ${{ secrets.SIGNING_ACCOUNT != '' }}
+          HAS_PFX: ${{ secrets.SIGNING_PFX_BASE64 != '' }}
+        run: |
+          $mode = if ($env:HAS_AZURE -eq 'true') { 'azure' } elseif ($env:HAS_PFX -eq 'true') { 'pfx' } else { 'none' }
+          "mode=$mode" >> $env:GITHUB_OUTPUT
+          if ($mode -eq 'none') { Write-Host "::notice::No signing secrets configured - this build is UNSIGNED (Smart App Control will block it)." }
+
+      - name: Sign exe (Azure Trusted Signing)
+        if: steps.sign.outputs.mode == 'azure'
+        uses: azure/trusted-signing-action@v0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.SIGNING_PROFILE }}
+          files-folder: ${{ env.DIST }}
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Sign exe (.pfx)
+        if: steps.sign.outputs.mode == 'pfx'
+        shell: pwsh
+        env:
+          PFX_B64: ${{ secrets.SIGNING_PFX_BASE64 }}
+          PFX_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
+        run: |
+          $pfx = "$env:RUNNER_TEMP\sign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PFX_B64))
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe | Where-Object FullName -match '\\x64\\' | Sort-Object FullName -Descending | Select-Object -First 1
+          & $signtool.FullName sign /fd sha256 /tr http://timestamp.digicert.com /td sha256 /f $pfx /p $env:PFX_PASSWORD "$env:DIST\altWinDirStat.exe"
+          if ($LASTEXITCODE -ne 0) { throw "signtool failed" }
+          Remove-Item $pfx
+
+      - name: Portable zip
+        shell: pwsh
+        run: Compress-Archive -Path "$env:DIST\*" -DestinationPath "dist\altWinDirStat-${{ steps.ver.outputs.version }}-${{ matrix.platform }}-portable.zip"
+
+      - name: Smoke test + screenshot
+        if: matrix.test
+        shell: pwsh
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          New-Item -ItemType Directory -Force screenshots | Out-Null
+          function Shot($name) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("screenshots\$name.png", [System.Drawing.Imaging.ImageFormat]::Png)
+          }
+          # Scans run on worker threads with the UI staying responsive; check that throughout.
+          function ScanAndWait($target, $label, $timeoutSec) {
+            $p = Start-Process -FilePath "$env:DIST\altWinDirStat.exe" -ArgumentList "`"$target`"" -PassThru
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+            $unresponsive = 0
+            while ($sw.Elapsed.TotalSeconds -lt $timeoutSec) {
+              Start-Sleep -Seconds 1
+              if ($p.HasExited) { throw "altWinDirStat exited while scanning $target (code 0x$('{0:X8}' -f $p.ExitCode))" }
+              $p.Refresh()
+              if ($p.MainWindowHandle -ne 0 -and -not $p.Responding) { $unresponsive++ }
+              if ($sw.Elapsed.TotalSeconds -ge 15) { break }
+            }
+            $p.Refresh()
+            Write-Host ("[{0}] target='{1}' window='{2}' unresponsive-samples={3} elapsed={4:N1}s" -f $label, $target, $p.MainWindowTitle, $unresponsive, $sw.Elapsed.TotalSeconds)
+            Shot "altWinDirStat-${{ matrix.platform }}-$label"
+            if ($p.MainWindowTitle -notlike '*altWinDirStat*') { Stop-Process -Id $p.Id -Force; throw "Window title '$($p.MainWindowTitle)' is not branded altWinDirStat" }
+            if ($unresponsive -gt 3) { Stop-Process -Id $p.Id -Force; throw "UI stopped responding while scanning $target" }
+            Stop-Process -Id $p.Id -Force
+          }
+          ScanAndWait "$env:GITHUB_WORKSPACE" "repo" 60
+          ScanAndWait "C:\Program Files" "program-files" 60
+          if (-not (Test-Path 'HKCU:\Software\altWinDirStat')) { Write-Host "::notice::No settings saved yet under HKCU\Software\altWinDirStat (process was killed before exit)." }
+          if (Test-Path 'HKCU:\Software\WinDirStat') { throw "Settings were written under the official WinDirStat key" }
+
+      - name: Upstream test suites
+        timeout-minutes: 40
+        if: matrix.test
+        shell: pwsh
+        run: |
+          # Test-WinDirStat.ps1 requires PowerShell 7.6+, and its UI suite reads the app's list views, which needs
+          # PowerShell and the app to have the same bitness. Fetch the latest stable pwsh when the runner's is older
+          # or when testing the 32-bit build.
+          $pwsh = (Get-Command pwsh).Source
+          $arch = if ('${{ matrix.platform }}' -eq 'Win32') { 'x86' } else { 'x64' }
+          if ($PSVersionTable.PSVersion -lt [version]'7.6' -or $arch -ne 'x64') {
+            $dir = "$env:RUNNER_TEMP\pwsh-$arch"
+            gh release download --repo PowerShell/PowerShell --pattern "PowerShell-*-win-$arch.zip" --dir $env:RUNNER_TEMP --clobber
+            Expand-Archive (Get-ChildItem $env:RUNNER_TEMP -Filter "PowerShell-*-win-$arch.zip" | Select-Object -First 1).FullName $dir -Force
+            $pwsh = "$dir\pwsh.exe"
+          }
+          & $pwsh -NoProfile -Command '"PowerShell $($PSVersionTable.PSVersion) ($([IntPtr]::Size * 8)-bit)"'
+          & $pwsh -NoProfile -ExecutionPolicy Bypass -File tests\Test-WinDirStat.ps1 -ExePath "$env:DIST\altWinDirStat.exe" -Only Filtering,Cli,EdgeCases,Permissions,Enumeration,Unc,Ui
+          if ($LASTEXITCODE -ne 0) { throw "Upstream test suites failed (exit $LASTEXITCODE)" }
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.test
+        with:
+          name: screenshot-${{ matrix.platform }}
+          path: screenshots/*.png
+          if-no-files-found: ignore
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          & $iscc /Qp "/DAppVersion=${{ steps.ver.outputs.version }}" "/DArch=${{ matrix.platform }}" "/DSourceDir=$pwd\$env:DIST" "/O$pwd\dist" installer\altWinDirStat.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+
+      - name: Sign installer (Azure Trusted Signing)
+        if: steps.sign.outputs.mode == 'azure'
+        uses: azure/trusted-signing-action@v0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.SIGNING_PROFILE }}
+          files-folder: dist
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Installer test (silent install + uninstall)
+        if: matrix.test
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist -Filter "*-${{ matrix.platform }}-Setup.exe" | Select-Object -First 1
+          $dir = "$env:RUNNER_TEMP\awds-install"
+          Start-Process $setup.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CURRENTUSER","/DIR=`"$dir`"","/TASKS=contextmenu" -Wait
+          if (-not (Test-Path "$dir\altWinDirStat.exe")) { throw "Installer did not place altWinDirStat.exe" }
+          if (-not (Test-Path "HKCU:\Software\Classes\Directory\shell\altWinDirStat\command")) { throw "Context menu entry missing" }
+          Write-Host "Installed OK to $dir (context menu registered)"
+          Start-Process "$dir\unins000.exe" -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES" -Wait
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: altWinDirStat-${{ steps.ver.outputs.version }}-${{ matrix.platform }}
+          path: |
+            dist/*.zip
+            dist/*Setup.exe
+
+  # Large-scan stress test: ~700k-file synthetic tree plus all of C:\ (NTFS MFT scan), probing the UI
+  # for hangs throughout. See .github/scripts/Stress-LargeScan.ps1.
+  stress:
+    needs: build
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: altWinDirStat-*-x64
+          path: artifact
+          merge-multiple: true
+      - name: Large-scan stress test
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem artifact -Filter '*-x64-portable.zip' | Select-Object -First 1
+          Expand-Archive $zip.FullName "$env:RUNNER_TEMP\awds" -Force
+          & .github\scripts\Stress-LargeScan.ps1 -ExePath "$env:RUNNER_TEMP\awds\altWinDirStat.exe"
+
+  release:
+    needs: [fork-guard, build, stress]
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve tag
+        id: tag
+        env:
+          TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
+        run: |
+          # A dispatch creates the tag; refuse to attach assets to a release that already exists.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "::error::Tag $TAG already exists"; exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          case "$TAG" in *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT";; *) echo "prerelease=false" >> "$GITHUB_OUTPUT";; esac
+          if [ -f "docs/releases/$TAG.md" ]; then echo "body=docs/releases/$TAG.md" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          pattern: altWinDirStat-*
+          merge-multiple: true
+      - name: Checksums
+        working-directory: out
+        run: |
+          sha256sum *.zip *Setup.exe > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ steps.tag.outputs.prerelease == 'true' }}
+          make_latest: ${{ steps.tag.outputs.prerelease == 'true' && 'false' || 'true' }}
+          body_path: ${{ steps.tag.outputs.body }}
+          generate_release_notes: ${{ steps.tag.outputs.body == '' }}
+          # Only the installers, portable zips and checksums; CI screenshots stay run artifacts.
+          files: |
+            out/*.zip
+            out/*Setup.exe
+            out/SHA256SUMS.txt

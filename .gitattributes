@@ -1,0 +1,14 @@
+* text=auto eol=lf
+
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.exe binary
+*.dll binary
+*.pdb binary
+
+# Bundled native engine (C++): keep bytes exactly as upstream (CRLF, BOMs, UTF-16 .rc)
+native/** -text

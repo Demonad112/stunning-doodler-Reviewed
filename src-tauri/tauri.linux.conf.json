@@ -1,0 +1,38 @@
+{
+  "bundle": {
+    "targets": ["deb", "rpm"],
+    "category": "DeveloperTool",
+    "icon": ["icons/icon.png"],
+    "shortDescription": "Professional file and folder comparison tool",
+    "longDescription": "Open Diff compares text, folder, table, image, binary, archive, media, registry, and version resources with scriptable workflows and cross-platform packaging.",
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0",
+          "libayatana-appindicator3-1",
+          "librsvg2-2"
+        ],
+        "recommends": ["xdg-utils"],
+        "provides": ["open-diff"],
+        "section": "devel",
+        "priority": "optional",
+        "files": {
+          "/usr/share/doc/open-diff/README.md": "../README.md",
+          "/usr/share/doc/open-diff/LICENSE": "../LICENSE"
+        }
+      },
+      "rpm": {
+        "depends": ["webkit2gtk4.1", "gtk3", "librsvg2"],
+        "recommends": ["xdg-utils"],
+        "provides": ["open-diff"],
+        "release": "1",
+        "epoch": 0,
+        "files": {
+          "/usr/share/doc/open-diff/README.md": "../README.md",
+          "/usr/share/doc/open-diff/LICENSE": "../LICENSE"
+        }
+      }
+    }
+  }
+}
