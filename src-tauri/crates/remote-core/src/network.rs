@@ -652,6 +652,15 @@ fn map_ssh_error(path: &str, error: ssh2::Error) -> RemoteProviderError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A local port nothing listens on: bind an ephemeral port, then release it. Port 1 was
+    /// assumed closed, but on GitHub's Windows runners something answers HTTP there.
+    fn closed_local_port() -> u16 {
+        std::net::TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .map(|addr| addr.port())
+            .expect("bind an ephemeral port")
+    }
     use crate::{CredentialReference, RemoteEndpoint, RemoteProfile};
 
     #[test]
@@ -660,7 +669,7 @@ mod tests {
             "closed-sftp",
             "Closed SFTP",
             RemoteProtocol::Sftp,
-            RemoteEndpoint::new("127.0.0.1").with_port(1),
+            RemoteEndpoint::new("127.0.0.1").with_port(closed_local_port()),
             CredentialReference::profile_store("closed-sftp"),
         );
         let credential = RemoteCredential::username_password("deploy", "secret");
@@ -688,7 +697,7 @@ mod tests {
             "Closed Dropbox",
             RemoteProtocol::Dropbox,
             RemoteEndpoint::new("127.0.0.1")
-                .with_port(1)
+                .with_port(closed_local_port())
                 .with_root_path("/"),
             CredentialReference::profile_store("closed-dropbox"),
         );
@@ -702,7 +711,7 @@ mod tests {
             "Closed OneDrive",
             RemoteProtocol::OneDrive,
             RemoteEndpoint::new("127.0.0.1")
-                .with_port(1)
+                .with_port(closed_local_port())
                 .with_root_path("/"),
             CredentialReference::profile_store("closed-onedrive"),
         );
@@ -719,7 +728,7 @@ mod tests {
             "Closed S3",
             RemoteProtocol::S3,
             RemoteEndpoint::new("127.0.0.1")
-                .with_port(1)
+                .with_port(closed_local_port())
                 .with_root_path("demo"),
             CredentialReference::profile_store("closed-s3"),
         )
@@ -738,7 +747,7 @@ mod tests {
             "closed-ftps",
             "Closed FTPS",
             RemoteProtocol::Ftps,
-            RemoteEndpoint::new("127.0.0.1").with_port(1),
+            RemoteEndpoint::new("127.0.0.1").with_port(closed_local_port()),
             CredentialReference::profile_store("closed-ftps"),
         );
         let credential = RemoteCredential::username_password("deploy", "secret");
@@ -815,7 +824,7 @@ mod tests {
             "closed-sftp-key",
             "Closed SFTP key",
             RemoteProtocol::Sftp,
-            RemoteEndpoint::new("127.0.0.1").with_port(1),
+            RemoteEndpoint::new("127.0.0.1").with_port(closed_local_port()),
             CredentialReference::profile_store("closed-sftp-key"),
         );
         let credential = RemoteCredential::private_key(
