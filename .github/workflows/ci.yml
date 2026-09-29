@@ -56,3 +56,6 @@ jobs:
 
       - name: Run tests
         run: corepack pnpm test
+
+      - name: Run Rust tests
+        run: cargo test --workspace --manifest-path src-tauri/Cargo.toml
