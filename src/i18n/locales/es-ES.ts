@@ -4,7 +4,7 @@ export const esES: LanguagePack = {
   locale: 'es-ES',
   label: 'Español',
   messages: {
-    'app.brand': 'Open Diff',
+    'app.brand': 'DeepServer',
     'app.ready': 'Listo',
     'app.workspaceStatus': 'Espacio de trabajo de comparación local primero',
     'command.nextDifference': 'Siguiente diferencia',
@@ -179,13 +179,13 @@ export const esES: LanguagePack = {
     'ui.helpContents': 'Contenido',
     'ui.contextHelp': 'Ayuda contextual',
     'ui.contextHelpTopic': 'Ayuda: {topic}',
-    'ui.about': 'Acerca de Open Diff',
+    'ui.about': 'Acerca de DeepServer',
     'ui.checkForUpdates': 'Buscar actualizaciones',
     'ui.support': 'Soporte',
     'ui.maturity.ready': 'Listo',
     'ui.maturity.partial': 'Parcial',
     'ui.maturity.limited': 'Limitado',
-    'ui.aboutTitle': 'Acerca de Open Diff',
+    'ui.aboutTitle': 'Acerca de DeepServer',
     'ui.aboutVersion': 'Versión {version}',
     'ui.aboutLicense': 'Licencia Apache-2.0',
     'ui.aboutHomepage': 'Página del proyecto',
@@ -770,7 +770,7 @@ export const esES: LanguagePack = {
     'ui.difftool': 'difftool',
     'ui.mergetool': 'mergetool',
     'ui.confirmWriteGitConfig':
-      '¿Escribir Open Diff como {kind} de Git en su configuración de Git?',
+      '¿Escribir DeepServer como {kind} de Git en su configuración de Git?',
     'ui.confirmWriteSvnConfig':
       '¿Escribir el wrapper y el fragmento de diff externo de SVN en el disco?',
     'ui.copyLeftToRight': 'Copiar de izquierda a derecha',
@@ -785,7 +785,7 @@ export const esES: LanguagePack = {
     'ui.password': 'Contraseña',
     'ui.oauthClientId': 'Id. de cliente OAuth',
     'ui.oauthClientIdHint':
-      'Use el id. de cliente de su propia app de Dropbox o Microsoft. Open Diff no incluye secretos de aplicación.',
+      'Use el id. de cliente de su propia app de Dropbox o Microsoft. DeepServer no incluye secretos de aplicación.',
     'ui.oauthOpenBrowser': 'Abrir URL de autorización',
     'ui.oauthPasteRedirect': 'Pegar URL de redirección o token',
     'ui.oauthApplyPaste': 'Aplicar token pegado',
@@ -880,7 +880,7 @@ export const esES: LanguagePack = {
       'Windows only. Unregister script generated but not applied.',
     'ui.windowsOnly': 'Solo Windows',
     'ui.shellExtensionHint':
-      'Añade Open Diff al Explorador para archivos y carpetas seleccionados.',
+      'Añade DeepServer al Explorador para archivos y carpetas seleccionados.',
     'ui.policyRemoteDisabled':
       'Los perfiles remotos están deshabilitados por la directiva de administrador.',
     'ui.policyPasswordsDisabled':
@@ -1079,7 +1079,7 @@ export const esES: LanguagePack = {
     'ui.textEditingHint': 'Default wrap applies when opening new text compare and edit sessions.',
     'ui.openWithHint': 'Enabled applications appear in Folder Compare Open With actions.',
     'ui.applicationName': 'Application name',
-    'ui.shellOptionsHint': 'Register shell integration so the OS can open paths in OpenDiff.',
+    'ui.shellOptionsHint': 'Register shell integration so the OS can open paths in DeepServer.',
     'ui.backupRetentionCount': 'Conservar copias de seguridad numeradas',
     'ui.commandsVisibility': 'Comandos',
     'ui.commandsVisibilityHint':
@@ -1224,7 +1224,7 @@ export const esES: LanguagePack = {
     'ui.binaryCompareBufferSizeHint':
       'Longitud de ventana predeterminada de Hex Compare para nuevas comparaciones binarias.',
     'ui.fileChangedOnDiskReload': 'El archivo cambió en el disco. ¿Recargar?',
-    'ui.confirmQuitMessage': '¿Salir de Open Diff?',
+    'ui.confirmQuitMessage': '¿Salir de DeepServer?',
     'ui.toOutput': 'A la salida',
     'ui.folderMergeRulesHint':
       'Las copias automáticas van a la salida; los conflictos se abren en la fusión de texto.',

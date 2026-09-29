@@ -33,10 +33,10 @@ describe('windows shell extension scripts', () => {
     const script = readFileSync(resolve(scriptRoot, 'package-portable.ps1'), 'utf8')
 
     expect(script).toContain('corepack pnpm tauri:build')
-    expect(script).toContain('open-diff-app.exe')
-    expect(script).toContain('open-diff-cli.exe')
+    expect(script).toContain('DeepServer.exe')
+    expect(script).toContain('deepserver-cli.exe')
     expect(script).toContain('Compress-Archive')
-    expect(script).toContain('OpenDiff_')
+    expect(script).toContain('DeepServer_')
     expect(script).toContain('_x64_portable.zip')
   })
 })

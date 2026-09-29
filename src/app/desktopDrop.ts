@@ -103,7 +103,7 @@ export async function listenDesktopPathDrop(
     stoppers.push(unlisten)
     onPhase?.('listening', 'webview')
   } catch (error) {
-    console.warn('[OpenDiff] desktop path drop listener unavailable', error)
+    console.warn('[DeepServer] desktop path drop listener unavailable', error)
     onPhase?.('unavailable', 'webview-listen-failed')
   }
 
@@ -121,7 +121,7 @@ export async function listenDesktopPathDrop(
 
     stoppers.push(unlistenDrop, unlistenEnter, unlistenLeave)
   } catch (error) {
-    console.warn('[OpenDiff] Linux desktop drop bridge listener unavailable', error)
+    console.warn('[DeepServer] Linux desktop drop bridge listener unavailable', error)
   }
 
   return () => {

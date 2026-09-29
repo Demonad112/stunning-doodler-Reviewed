@@ -1,16 +1,16 @@
 {
-  "name": "open-diff",
-  "version": "1.2.0",
+  "name": "deepserver",
+  "version": "1.0.0",
   "private": true,
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kygo8/open-diff.git"
+    "url": "https://github.com/Demonad112/stunning-doodler-Reviewed.git"
   },
   "bugs": {
-    "url": "https://github.com/kygo8/open-diff/issues"
+    "url": "https://github.com/Demonad112/stunning-doodler-Reviewed/issues"
   },
-  "homepage": "https://github.com/kygo8/open-diff#readme",
+  "homepage": "https://github.com/Demonad112/stunning-doodler-Reviewed#readme",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "scripts": {

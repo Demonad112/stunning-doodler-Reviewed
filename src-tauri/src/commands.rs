@@ -2389,7 +2389,7 @@ pub fn register_windows_shell_extension(
     executable_path: Option<String>,
 ) -> Result<ShellRegistrationResult, AppErrorPayload> {
     let executable = resolve_shell_extension_executable(executable_path);
-    let config = shell_core::WindowsShellExtensionConfig::new("Open Diff", executable);
+    let config = shell_core::WindowsShellExtensionConfig::new("DeepServer", executable);
     let script = shell_core::WindowsShellExtensionScriptBuilder::new(config).registration_script();
 
     #[cfg(windows)]
@@ -2465,7 +2465,7 @@ pub fn unregister_windows_shell_extension(
     executable_path: Option<String>,
 ) -> Result<ShellRegistrationResult, AppErrorPayload> {
     let executable = resolve_shell_extension_executable(executable_path);
-    let config = shell_core::WindowsShellExtensionConfig::new("Open Diff", executable);
+    let config = shell_core::WindowsShellExtensionConfig::new("DeepServer", executable);
     let script = shell_core::WindowsShellExtensionScriptBuilder::new(config).uninstall_script();
 
     #[cfg(windows)]
@@ -2497,7 +2497,7 @@ pub fn register_unix_shell_integration(
     executable_path: Option<String>,
 ) -> Result<ShellRegistrationResult, AppErrorPayload> {
     let executable = resolve_shell_extension_executable(executable_path);
-    let config = shell_core::UnixShellIntegrationConfig::new("Open Diff", executable);
+    let config = shell_core::UnixShellIntegrationConfig::new("DeepServer", executable);
 
     #[cfg(target_os = "linux")]
     {
@@ -2540,7 +2540,7 @@ pub fn unregister_unix_shell_integration(
     executable_path: Option<String>,
 ) -> Result<ShellRegistrationResult, AppErrorPayload> {
     let executable = resolve_shell_extension_executable(executable_path);
-    let config = shell_core::UnixShellIntegrationConfig::new("Open Diff", executable);
+    let config = shell_core::UnixShellIntegrationConfig::new("DeepServer", executable);
 
     #[cfg(target_os = "linux")]
     {

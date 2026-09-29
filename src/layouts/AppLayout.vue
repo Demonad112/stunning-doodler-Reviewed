@@ -223,7 +223,7 @@ onMounted(() => {
           source: 'drop',
         })
       } else if (phase === 'unavailable') {
-        console.warn('[OpenDiff] desktop drop listener phase unavailable')
+        console.warn('[DeepServer] desktop drop listener phase unavailable')
       }
     },
   ).then((stop) => {
@@ -1224,7 +1224,7 @@ const statusBarGridStyle = computed(() => {
 
 const windowTitle = computed(() => {
   if (route.path === '/') {
-    return 'Home - OpenDiff'
+    return 'Home - DeepServer'
   }
 
   const entry = sessionCatalog.find((item) => item.route === route.path)
@@ -1238,10 +1238,10 @@ const windowTitle = computed(() => {
       : undefined
 
   if (pathAwareTitle) {
-    return `${pathAwareTitle} - ${sessionName} - OpenDiff`
+    return `${pathAwareTitle} - ${sessionName} - DeepServer`
   }
 
-  return `${sessionName} - OpenDiff`
+  return `${sessionName} - DeepServer`
 })
 
 watch(
