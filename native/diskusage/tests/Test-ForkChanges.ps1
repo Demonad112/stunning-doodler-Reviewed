@@ -64,6 +64,31 @@ Check ($code -eq 1) 'malformed ledger gives exit 1' "(exit $code)"
 $code = Invoke-App @('/compare', $base)
 Check ($code -eq 2) 'missing arguments give exit 2' "(exit $code)"
 
+# --- /compare: folders differing only by letter case stay separate (E7) -----------------
+function Read-Changes([string] $csv) {
+    [string[]] $rows = @(Import-Csv -LiteralPath $csv -Encoding UTF8 | ForEach-Object { "$($_.Folder)=$($_.Change)" })
+    [Array]::Sort($rows, [StringComparer]::Ordinal)
+    $rows
+}
+$caseBase = Join-Path $Fixtures 'case-base.ledger.csv'
+$caseCur = Join-Path $Fixtures 'case-cur.ledger.csv'
+$out = Join-Path $Work 'case-all.csv'
+$code = Invoke-App @('/compare', $caseBase, $caseCur, $out, '/all')
+$got = if (Test-Path $out) { (Read-Changes $out) -join '|' } else { '' }
+Check ($code -eq 0 -and $got -ceq '.=Grown|Data=Grown|Data\sub=Grown|data=Grown|logs=Added') 'case-only siblings are matched separately' "(exit $code, got '$got')"
+$out = Join-Path $Work 'case-sig.csv'
+$code = Invoke-App @('/compare', $caseBase, $caseCur, $out)
+$got = if (Test-Path $out) { (Read-Changes $out) -join '|' } else { '' }
+Check ($code -eq 0 -and $got -ceq 'Data\sub=Grown|data=Grown|logs=Added') 'case-only siblings are significant on their own' "(exit $code, got '$got')"
+
+# --- /compare: a ledger needs exactly one root row (E8) ---------------------------------
+foreach ($name in 'noroot', 'duproot') {
+    $out = Join-Path $Work "$name.csv"
+    $code = Invoke-App @('/compare', (Join-Path $Fixtures "$name.ledger.csv"), $cur, $out)
+    $err = if (Test-Path "$out.err") { (Get-Content -LiteralPath "$out.err" -Raw).Trim() } else { '' }
+    Check ($code -eq 1 -and $err -match 'root') "$name ledger is rejected" "(exit $code, err '$err')"
+}
+
 # --- GUI scan history (added in Task 2) -----------------------------------------------
 if (-not $SkipGui) {
     $history = Join-Path $Work 'history'

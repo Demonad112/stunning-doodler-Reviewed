@@ -91,14 +91,6 @@ namespace
         }
     }
 
-    bool SaveAtomically(const std::filesystem::path& file, const Ledger::Snapshot& snapshot)
-    {
-        std::filesystem::path temp = file;
-        temp += L".tmp";
-        if (!Ledger::Save(temp.wstring(), snapshot)) return false;
-        return MoveFileExW(temp.c_str(), file.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
-    }
-
     void Prune(const std::filesystem::path& dir)
     {
         const auto files = ListSnapshots(dir);
@@ -180,8 +172,8 @@ std::shared_ptr<const History::Result> History::OnScanComplete(const CItem* root
         if (!session.resolved) ResolveBaseline(dir, session);
         if (session.file.empty()) session.file = dir / NewSnapshotName();
 
-        // Save before comparing: Compare may narrow 'current' in place.
-        if (!SaveAtomically(session.file, result->current))
+        // Save before comparing: Compare may narrow 'current' in place. Save is atomic (.tmp + rename).
+        if (!Ledger::Save(session.file.wstring(), result->current))
             VTRACE(L"History: could not write {}", session.file.wstring());
         s_written.insert(Lower(session.file.wstring()));
         Prune(dir);
