@@ -36,6 +36,24 @@ Keep this diff small, because every upstream sync has to merge through it.
 
 `setup/msi` (upstream's WiX MSI) is left untouched and unused.
 
+## DeepServer changes (on top of altWinDirStat; keep this list current)
+
+This folder is the disk-usage engine bundled in DeepServer (`native/diskusage` in stunning-doodler-Reviewed). DeepServer ships it as `deepserver-diskusage.exe` next to `DeepServer.exe` and drives it through the headless CLI (`src-tauri/crates/diskusage-core`).
+
+| File | Change | Why |
+|---|---|---|
+| `windirstat/Constants.h` | `strWinDirStat` = `DeepServer Disk Usage` | Titles and the engine's own Explorer-menu key; the DeepServer installer writes the same key name so the two overlay |
+| `windirstat/Localization.cpp` | Fork name and About header say DeepServer Disk Usage, linking this repo | Branding |
+| `windirstat/Version.h` | Product name, description, exe name `deepserver-diskusage.exe`, company, repository; `ALT_VER_*` default 1.0.0 | Version resource matches DeepServer |
+| `windirstat/Property.cpp`, `windirstat/WinDirStat.cpp` (reset preferences) | Registry root `HKCU\Software\DeepServer\DiskUsage` | Settings live with DeepServer's, separate from altWinDirStat/WinDirStat |
+| `windirstat/windirstat.rc` | `IDS_URL_REPORT_BUG` → this repo's issues | Bug reports go to DeepServer |
+| `windirstat/WinDirStat.cpp` | `autoElevate` and the elevation prompt also require `!ForkCli::NoElevateRequested()` | `/noelevate`: a headless run DeepServer starts must do the work itself instead of relaunching elevated and exiting 0 |
+| `windirstat/ForkCli.cpp/.h` | `/noelevate` flag; `/compare` writes the failure reason to `<out>.err` (UTF-8) | The GUI exe has no console, so callers only saw exit code 1 |
+| `windirstat/Ledger.cpp` | Comparison CSV `Change` column uses fixed English codes (`Added`, `Removed`, `Grown`, `Shrunk`, `FilesChanged`, `Unchanged`) | Parsable whatever the UI language; dialogs still show localized names |
+| `windirstat/windirstat.vcxproj` | Default toolset v143 (VS2022); v145 only with VS2026+ | Builds on CI and dev PCs without `/p:PlatformToolset` |
+| `.github/scripts/Stress-LargeScan.ps1`, `ForkCommands.cpp`, `ForkResource.h`, `res/fork/lang_en.txt` | UTF-8 BOM / key order as the pre-build formatter writes them | Committed as formatted so every build leaves a clean tree |
+| Removed: `.github/workflows/sync-upstream.yml`, `maintenance.yml` | | Upstream sync and prerelease cleanup belonged to the standalone fork; `build.yml` here is inert (DeepServer CI builds the engine in `windows-installer.yml`) |
+
 ## Build
 
 * **Visual Studio 2026:** build `windirstat.sln` as is.

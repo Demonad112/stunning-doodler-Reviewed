@@ -54,8 +54,8 @@ namespace wds
     inline constexpr auto chrAttributeEncrypted    = L'E'; /*FILE_ATTRIBUTE_ENCRYPTED*/
     inline constexpr auto chrAttributeSparse       = L'Z'; /*FILE_ATTRIBUTE_SPARSE*/
 
-    // altWinDirStat: product name used for titles, the Explorer context-menu key, and the exe-name match.
-    inline constexpr auto strWinDirStat = L"altWinDirStat";
+    // DeepServer: product name used for titles, the Explorer context-menu key, and the exe-name match.
+    inline constexpr auto strWinDirStat = L"DeepServer Disk Usage";
     inline constexpr std::wstring_view strAlpha{ L"ABCDEFGHIJKLMNOPQRSTUVWXYZ" };
     inline constexpr int alphaSize = std::ssize(strAlpha);
 

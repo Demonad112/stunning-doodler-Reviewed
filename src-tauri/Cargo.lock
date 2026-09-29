@@ -988,6 +988,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "diskusage-core"
+version = "1.2.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "dispatch2"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2813,6 +2820,7 @@ dependencies = [
  "archive-core",
  "cli-core",
  "diff-core",
+ "diskusage-core",
  "file-core",
  "folder-core",
  "folder-merge-core",

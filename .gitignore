@@ -39,3 +39,4 @@ native/diskusage/build/
 native/diskusage/.vs/
 native/diskusage/**/x64/
 src-tauri/binaries/
+native/diskusage/intermediate/

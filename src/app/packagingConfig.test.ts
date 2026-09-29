@@ -160,6 +160,30 @@ describe('packagingConfig', () => {
     expect(hooks).toContain(String.raw`CurrentVersion\Uninstall\OpenDiff`)
   })
 
+  it('bundles the disk-usage engine as a sidecar with its own Explorer entries', () => {
+    const engineConfig = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'src-tauri/tauri.engine.conf.json'), 'utf8'),
+    ) as { bundle: { externalBin: string[] } }
+    const baseConfig = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8'),
+    ) as TauriConfig & { bundle: { externalBin?: string[] } }
+    const hooks = readFileSync(
+      resolve(process.cwd(), 'src-tauri/windows/installer-hooks.nsh'),
+      'utf8',
+    )
+
+    // Only release builds add the engine, so `tauri dev`, clippy and tests don't need it built.
+    expect(engineConfig.bundle.externalBin).toEqual(['binaries/deepserver-diskusage'])
+    expect(baseConfig.bundle.externalBin).toBeUndefined()
+
+    // Same key name the engine's own Options page writes, so the entries overlay, not duplicate.
+    for (const root of ['Directory', 'Drive']) {
+      expect(hooks).toContain(`Software\\Classes\\${root}\\shell\\DeepServer Disk Usage`)
+    }
+    expect(hooks).toContain(String.raw`"$INSTDIR\deepserver-diskusage.exe" "%1"`)
+    expect(hooks).toContain('DS_DELETE_DISKUSAGE_MENU HKLM')
+    expect(hooks).toContain('DS_DELETE_DISKUSAGE_MENU HKCU')
+  })
   it('enables native desktop drag-drop and grants core event capability', () => {
     const config = JSON.parse(
       readFileSync(resolve(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8'),

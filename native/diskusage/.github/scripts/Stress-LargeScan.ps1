@@ -1,4 +1,4 @@
-#Requires -Version 7.2
+﻿#Requires -Version 7.2
 <#
 .SYNOPSIS
     altWinDirStat large-scan stress test: the UI must never hang while scanning huge trees.

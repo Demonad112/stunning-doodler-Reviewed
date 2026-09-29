@@ -5,6 +5,7 @@ members = [
   "crates/clipboard-core",
   "crates/cli-core",
   "crates/diff-core",
+  "crates/diskusage-core",
   "crates/document-core",
   "crates/file-core",
   "crates/folder-merge-core",
@@ -81,6 +82,7 @@ serde.workspace = true
 tauri.workspace = true
 tokio.workspace = true
 diff-core = { path = "crates/diff-core" }
+diskusage-core = { path = "crates/diskusage-core" }
 file-core = { path = "crates/file-core" }
 folder-core = { path = "crates/folder-core" }
 folder-merge-core = { path = "crates/folder-merge-core" }

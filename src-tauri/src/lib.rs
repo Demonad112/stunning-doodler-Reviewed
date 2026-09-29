@@ -1,6 +1,7 @@
 pub use shell_startup::{prepare_shell_startup, ShellStartupDecision};
 
 mod commands;
+mod diskusage;
 #[cfg(target_os = "linux")]
 mod linux_dnd;
 mod shell_startup;
@@ -15,7 +16,7 @@ pub fn run() {
 
                 if let Some(main) = _app.get_webview_window("main") {
                     if let Err(error) = linux_dnd::install_linux_desktop_drop_bridge(&main) {
-                        eprintln!("[OpenDiff] Linux desktop drop bridge unavailable: {error}");
+                        eprintln!("[DeepServer] Linux desktop drop bridge unavailable: {error}");
                     }
                 }
             }
@@ -65,6 +66,11 @@ pub fn run() {
             commands::path_file_stamp,
             commands::path_volume_info,
             commands::pick_path,
+            diskusage::diskusage_compare,
+            diskusage::diskusage_list_drives,
+            diskusage::diskusage_list_snapshots,
+            diskusage::diskusage_open,
+            diskusage::diskusage_snapshot,
             commands::preview_folder_sync,
             commands::query_live_windows_registry,
             commands::read_text_file,

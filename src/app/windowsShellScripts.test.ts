@@ -35,6 +35,7 @@ describe('windows shell extension scripts', () => {
     expect(script).toContain('corepack pnpm tauri:build')
     expect(script).toContain('DeepServer.exe')
     expect(script).toContain('deepserver-cli.exe')
+    expect(script).toContain('deepserver-diskusage.exe')
     expect(script).toContain('Compress-Archive')
     expect(script).toContain('DeepServer_')
     expect(script).toContain('_x64_portable.zip')

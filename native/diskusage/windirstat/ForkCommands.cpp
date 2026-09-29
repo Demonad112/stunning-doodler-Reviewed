@@ -1,4 +1,4 @@
-// altWinDirStat - fork-only menu commands (fork-owned; not part of upstream WinDirStat)
+﻿// altWinDirStat - fork-only menu commands (fork-owned; not part of upstream WinDirStat)
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by

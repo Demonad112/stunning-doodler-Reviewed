@@ -9,7 +9,9 @@ on:
     paths:
       - src-tauri/tauri.conf.json
       - src-tauri/windows/**
+      - src-tauri/tauri.engine.conf.json
       - scripts/windows/package-portable.ps1
+      - native/**
       - .github/workflows/windows-installer.yml
 
 permissions:
@@ -21,6 +23,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the engine's pre-build stamps GIT_COUNT/GIT_COMMIT from history
+      - uses: microsoft/setup-msbuild@v2
       - uses: pnpm/action-setup@v6.0.10
         with:
           run_install: false
@@ -36,7 +41,21 @@ jobs:
           cache-workspaces: src-tauri
       - run: corepack pnpm install --frozen-lockfile
       - run: corepack pnpm test:unit
-      - run: corepack pnpm tauri build
+      - name: Build disk-usage engine
+        shell: pwsh
+        working-directory: native/diskusage
+        run: |
+          msbuild windirstat.sln /m /nologo /v:minimal /p:Configuration=Release /p:Platform=x64 "/p:ExternalCompilerOptions=/DPRODUCTION=1"
+          if ($LASTEXITCODE -ne 0) { throw 'msbuild failed' }
+      - name: Test disk-usage engine
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File native/diskusage/tests/Test-ForkChanges.ps1 -ExePath native/diskusage/build/altWinDirStat_x64.exe -SkipGui
+      - name: Stage engine as Tauri sidecar
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force src-tauri/binaries | Out-Null
+          Copy-Item native/diskusage/build/altWinDirStat_x64.exe src-tauri/binaries/deepserver-diskusage-x86_64-pc-windows-msvc.exe
+      - run: corepack pnpm tauri build --config src-tauri/tauri.engine.conf.json
       - name: Package portable zip
         shell: pwsh
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/windows/package-portable.ps1 -SkipBuild
@@ -59,12 +78,17 @@ jobs:
           $keys = 'HKLM:\Software\Classes\*\shell\DeepServer', 'HKLM:\Software\Classes\Directory\shell\DeepServerSelectLeft'
           foreach ($k in $keys) { if (-not (Test-Path -LiteralPath "$k\command")) { throw "missing $k" } }
           $cmd = (Get-ItemProperty -LiteralPath "$($keys[0])\command").'(default)'
+          $engine = Join-Path $env:ProgramFiles 'DeepServer\deepserver-diskusage.exe'
+          if (-not (Test-Path $engine)) { throw "missing $engine" }
+          $diskKey = 'HKLM:\Software\Classes\Drive\shell\DeepServer Disk Usage\command'
+          if ((Get-ItemProperty -LiteralPath $diskKey).'(default)' -notlike '*deepserver-diskusage.exe*') { throw "missing $diskKey" }
+          $keys += 'HKLM:\Software\Classes\Directory\shell\DeepServer Disk Usage'
           if ($cmd -notlike '*DeepServer.exe*--shell-compare*') { throw "unexpected menu command: $cmd" }
           $p = Start-Process (Join-Path $env:ProgramFiles 'DeepServer\uninstall.exe') -ArgumentList '/S' -PassThru
           $p.WaitForExit(300000) | Out-Null
           # The NSIS uninstaller re-launches itself from %TEMP%, so poll for the cleanup.
           $deadline = (Get-Date).AddMinutes(3)
-          while ((Test-Path $exe) -or (Test-Path -LiteralPath $keys[0])) {
+          while ((Test-Path $exe) -or (Test-Path $engine) -or @($keys | Where-Object { Test-Path -LiteralPath $_ }).Count) {
             if ((Get-Date) -gt $deadline) { throw 'uninstall left files or menu keys behind' }
             Start-Sleep -Seconds 2
           }
