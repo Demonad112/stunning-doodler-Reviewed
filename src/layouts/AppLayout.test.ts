@@ -196,8 +196,8 @@ describe('AppLayout command palette', () => {
     await wrapper.find('[data-testid="menu-command-help.about"]').trigger('click')
 
     expect(wrapper.find('[data-testid="about-dialog"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="about-dialog"]').text()).toContain('About Open Diff')
-    expect(wrapper.find('[data-testid="about-dialog"]').text()).toContain('1.2.0')
+    expect(wrapper.find('[data-testid="about-dialog"]').text()).toContain('About DeepServer')
+    expect(wrapper.find('[data-testid="about-dialog"]').text()).toContain('1.0.0')
   })
 
   it('shows Session Actions Edit Search View Tools Help on Folder Compare', () => {

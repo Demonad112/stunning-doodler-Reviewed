@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 interface TauriConfig {
   productName: string
+  mainBinaryName?: string
   identifier: string
   app?: {
     windows?: {
@@ -104,25 +105,27 @@ function readIcnsChunks(icon: Buffer): string[] {
 }
 
 describe('packagingConfig', () => {
-  it('defines complete Windows MSI metadata', () => {
+  it('defines DeepServer Windows installer metadata (NSIS only)', () => {
     const config = JSON.parse(
       readFileSync(resolve(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8'),
     ) as TauriConfig
 
-    expect(config.productName).toBe('OpenDiff')
-    expect(config.identifier).toBe('io.github.kygo8.open-diff')
-    expect(config.bundle.targets).toEqual(['nsis', 'msi'])
+    expect(config.productName).toBe('DeepServer')
+    expect(config.mainBinaryName).toBe('DeepServer')
+    expect(config.identifier).toBe('com.demonad112.deepserver')
+    expect(config.app?.windows?.[0]?.title).toBe('DeepServer')
+    // MSI can't run the NSIS hooks (no Explorer menu, no cleanup), so it isn't built.
+    expect(config.bundle.targets).toEqual(['nsis'])
+    expect(config.bundle.windows?.wix).toBeUndefined()
     expect(config.bundle.icon).toContain('icons/icon.ico')
-    expect(config.bundle.publisher).toBe('Open Diff Contributors')
-    expect(config.bundle.homepage).toBe('https://github.com/kygo8/open-diff')
+    expect(config.bundle.publisher).toBe('Demonad112')
+    expect(config.bundle.homepage).toBe('https://github.com/Demonad112/stunning-doodler-Reviewed')
     expect(config.bundle.license).toBe('Apache-2.0')
-    expect(config.bundle.copyright).toBe('Copyright (c) 2026 Open Diff Contributors')
+    expect(config.bundle.copyright).toContain('Open Diff Contributors')
     expect(config.bundle.windows?.webviewInstallMode).toEqual({
       type: 'downloadBootstrapper',
       silent: true,
     })
-    expect(config.bundle.windows?.wix?.upgradeCode).toBe('90ffd755-2be3-5b35-8809-0f6022d8f999')
-    expect(config.bundle.windows?.wix?.language).toBe('en-US')
   })
 
   it('defines an all-users NSIS setup.exe with Explorer context-menu hooks', () => {
@@ -140,12 +143,21 @@ describe('packagingConfig', () => {
       'utf8',
     )
 
-    for (const key of ['OpenDiff', 'OpenDiffSelectLeft']) {
+    for (const key of ['DeepServer', 'DeepServerSelectLeft']) {
       expect(hooks).toContain(`${String.raw`Software\Classes\*\shell`}\\${key}`)
       expect(hooks).toContain(`${String.raw`Software\Classes\Directory\shell`}\\${key}`)
     }
     expect(hooks).toContain('--shell-compare --select-left')
     expect(hooks).toContain('NSIS_HOOK_POSTUNINSTALL')
+    // The exe comes from mainBinaryName, never a hardcoded Cargo target name.
+    expect(hooks).toContain(String.raw`$INSTDIR\${MAINBINARYNAME}.exe`)
+    expect(hooks).not.toContain('open-diff-app.exe')
+    // Uninstall also removes the per-user keys the app's own shell integration writes.
+    expect(hooks).toMatch(/DeleteRegKey HKCU/)
+    // Tauri already makes the desktop shortcut; a second forced one ignores the user's choice.
+    expect(hooks).not.toContain('CreateShortcut')
+    // Installing over OpenDiff offers to remove it, so Explorer doesn't show both menus.
+    expect(hooks).toContain(String.raw`CurrentVersion\Uninstall\OpenDiff`)
   })
 
   it('enables native desktop drag-drop and grants core event capability', () => {
@@ -178,7 +190,7 @@ describe('packagingConfig', () => {
     expect(config.bundle.targets).toEqual(['app', 'dmg'])
     expect(config.bundle.category).toBe('DeveloperTool')
     expect(config.bundle.icon).toContain('icons/icon.icns')
-    expect(config.bundle.macOS?.bundleName).toBe('OpenDiff')
+    expect(config.bundle.macOS?.bundleName).toBe('DeepServer')
     expect(config.bundle.macOS?.bundleVersion).toBe(baseConfig.version)
     expect(config.bundle.macOS?.minimumSystemVersion).toBe('11.0')
     expect(config.bundle.macOS?.hardenedRuntime).toBe(true)

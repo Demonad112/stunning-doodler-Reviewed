@@ -167,7 +167,7 @@ cat > \"$app_dir/Contents/Info.plist\" <<'PLIST'\n\
   <key>CFBundleExecutable</key>\n\
   <string>open-diff-compare</string>\n\
   <key>CFBundleIdentifier</key>\n\
-  <string>io.github.kygo8.open-diff.compare</string>\n\
+  <string>com.demonad112.deepserver.compare</string>\n\
   <key>CFBundleName</key>\n\
   <string>Open Diff Compare</string>\n\
   <key>CFBundlePackageType</key>\n\

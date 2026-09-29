@@ -2,9 +2,9 @@ param(
   [Parameter(Mandatory = $true)]
   [string]$AppPath,
 
-  [string]$ProductName = 'Open Diff',
+  [string]$ProductName = 'DeepServer',
 
-  [string]$VerbKey = 'OpenDiff'
+  [string]$VerbKey = 'DeepServer'
 )
 
 $ErrorActionPreference = 'Stop'

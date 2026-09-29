@@ -4,6 +4,13 @@ on:
   workflow_dispatch:
   push:
     branches: [windows-installer]
+  # Build the setup.exe on PRs that change what goes into it.
+  pull_request:
+    paths:
+      - src-tauri/tauri.conf.json
+      - src-tauri/windows/**
+      - scripts/windows/package-portable.ps1
+      - .github/workflows/windows-installer.yml
 
 permissions:
   contents: read
@@ -38,11 +45,32 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force out | Out-Null
           Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe out/
-          Copy-Item src-tauri/target/release/bundle/msi/*.msi out/
           Copy-Item src-tauri/target/release/bundle/portable/*.zip out/
           Get-ChildItem out -File | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } | Set-Content out/SHA256SUMS.txt
+      - name: Silent install / uninstall smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = Get-ChildItem out -Filter '*-setup.exe' | Select-Object -First 1
+          $p = Start-Process $setup.FullName -ArgumentList '/S' -PassThru
+          if (-not $p.WaitForExit(300000)) { throw 'installer timed out' }
+          $exe = Join-Path $env:ProgramFiles 'DeepServer\DeepServer.exe'
+          if (-not (Test-Path $exe)) { throw "missing $exe" }
+          $keys = 'HKLM:\Software\Classes\*\shell\DeepServer', 'HKLM:\Software\Classes\Directory\shell\DeepServerSelectLeft'
+          foreach ($k in $keys) { if (-not (Test-Path -LiteralPath "$k\command")) { throw "missing $k" } }
+          $cmd = (Get-ItemProperty -LiteralPath "$($keys[0])\command").'(default)'
+          if ($cmd -notlike '*DeepServer.exe*--shell-compare*') { throw "unexpected menu command: $cmd" }
+          $p = Start-Process (Join-Path $env:ProgramFiles 'DeepServer\uninstall.exe') -ArgumentList '/S' -PassThru
+          $p.WaitForExit(300000) | Out-Null
+          # The NSIS uninstaller re-launches itself from %TEMP%, so poll for the cleanup.
+          $deadline = (Get-Date).AddMinutes(3)
+          while ((Test-Path $exe) -or (Test-Path -LiteralPath $keys[0])) {
+            if ((Get-Date) -gt $deadline) { throw 'uninstall left files or menu keys behind' }
+            Start-Sleep -Seconds 2
+          }
+          'install/uninstall OK'
       - uses: actions/upload-artifact@v4
         with:
-          name: OpenDiff-windows
+          name: DeepServer-windows
           path: out/
           if-no-files-found: error

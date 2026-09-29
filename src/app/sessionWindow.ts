@@ -52,7 +52,7 @@ export async function openSessionWindow(
     const path = new URL(href).pathname + new URL(href).search + new URL(href).hash
     const webview = new WebviewWindow(label, {
       url: path || '/',
-      title: 'OpenDiff',
+      title: 'DeepServer',
       width: 1280,
       height: 820,
       minWidth: 980,
