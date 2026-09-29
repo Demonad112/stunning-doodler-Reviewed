@@ -653,8 +653,7 @@ fn map_ssh_error(path: &str, error: ssh2::Error) -> RemoteProviderError {
 mod tests {
     use super::*;
 
-    /// A local port nothing listens on: bind an ephemeral port, then release it. Port 1 was
-    /// assumed closed, but on GitHub's Windows runners something answers HTTP there.
+    /// A local port nothing listens on right now: bind an ephemeral port, then release it.
     fn closed_local_port() -> u16 {
         std::net::TcpListener::bind("127.0.0.1:0")
             .and_then(|listener| listener.local_addr())
@@ -721,6 +720,20 @@ mod tests {
         assert!(matches!(onedrive_error, RemoteProviderError::Backend(_)));
     }
 
+    /// A local port this test owns for its whole run: every connection is accepted and dropped
+    /// before any response, so the client always sees a transport error. Unlike a released
+    /// ephemeral port, no other test's mock server can take it over mid-test.
+    fn dropping_local_port() -> u16 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind a local port");
+        let port = listener.local_addr().expect("local address").port();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                drop(stream);
+            }
+        });
+        port
+    }
+
     #[test]
     fn s3_test_connection_attempts_a_real_https_connect() {
         let profile = RemoteProfile::new(
@@ -728,7 +741,7 @@ mod tests {
             "Closed S3",
             RemoteProtocol::S3,
             RemoteEndpoint::new("127.0.0.1")
-                .with_port(closed_local_port())
+                .with_port(dropping_local_port())
                 .with_root_path("demo"),
             CredentialReference::profile_store("closed-s3"),
         )
@@ -738,7 +751,10 @@ mod tests {
         let credential = RemoteCredential::username_password("AKIAEXAMPLE", "secret");
         let error = test_network_connection(&profile, &credential).unwrap_err();
 
-        assert!(matches!(error, RemoteProviderError::Backend(_)));
+        assert!(
+            matches!(error, RemoteProviderError::Backend(_)),
+            "expected a transport error, got {error:?}"
+        );
     }
 
     #[test]
