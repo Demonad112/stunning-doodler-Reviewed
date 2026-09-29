@@ -41,7 +41,7 @@ jobs:
           Copy-Item src-tauri/target/release/bundle/msi/*.msi out/
           Copy-Item src-tauri/target/release/bundle/portable/*.zip out/
           Get-ChildItem out -File | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } | Set-Content out/SHA256SUMS.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: OpenDiff-windows
           path: out/
