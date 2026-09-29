@@ -395,6 +395,9 @@ POWERSHELL.EXE -NoLogo -ExecutionPolicy Unrestricted -NoProfile -File "$(Project
     <ClInclude Include="Controls\LedgerListCtrl.h" />
     <ClInclude Include="ForkCli.h" />
     <ClCompile Include="ForkCli.cpp" />
+    <ClInclude Include="ForkSettings.h" />
+    <ClInclude Include="History.h" />
+    <ClCompile Include="History.cpp" />
     <ClCompile Include="ForkCommands.cpp" />
     <ClCompile Include="Ledger.cpp" />
     <ClCompile Include="Dialogs\LedgerCompareDlg.cpp" />
