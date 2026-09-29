@@ -1,0 +1,18 @@
+[package]
+name = "cli-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+diff-core = { path = "../diff-core" }
+file-core = { path = "../file-core" }
+folder-core = { path = "../folder-core" }
+job-core = { path = "../job-core" }
+merge-core = { path = "../merge-core" }
+script-core = { path = "../script-core" }
+serde.workspace = true
+session-core = { path = "../session-core" }
+sync-core = { path = "../sync-core" }
+shared-types = { path = "../shared-types" }

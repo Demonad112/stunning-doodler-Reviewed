@@ -1,0 +1,113 @@
+[workspace]
+members = [
+  ".",
+  "crates/archive-core",
+  "crates/clipboard-core",
+  "crates/cli-core",
+  "crates/diff-core",
+  "crates/document-core",
+  "crates/file-core",
+  "crates/folder-merge-core",
+  "crates/format-core",
+  "crates/folder-core",
+  "crates/hex-core",
+  "crates/image-core",
+  "crates/job-core",
+  "crates/logging-core",
+  "crates/merge-core",
+  "crates/media-core",
+  "crates/policy-core",
+  "crates/performance-core",
+  "crates/registry-core",
+  "crates/report-core",
+  "crates/remote-core",
+  "crates/script-core",
+  "crates/session-core",
+  "crates/settings-core",
+  "crates/shell-core",
+  "crates/snapshot-core",
+  "crates/sync-core",
+  "crates/table-core",
+  "crates/update-core",
+  "crates/shared-types",
+  "crates/version-core",
+  "crates/vfs-core"
+]
+resolver = "2"
+
+[workspace.package]
+version = "1.2.0"
+edition = "2021"
+authors = ["Open Diff Contributors"]
+license = "Apache-2.0"
+
+[workspace.dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+tauri = { version = "2.11.3", features = ["wry"] }
+tauri-build = "2.6.3"
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros"] }
+encoding_rs = "0.8.35"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+regex = "1.12.2"
+
+[package]
+name = "open-diff-app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+default-run = "open-diff-app"
+
+[lib]
+name = "open_diff_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "open-diff-app"
+path = "src/main.rs"
+
+[[bin]]
+name = "open-diff-cli"
+path = "src/cli.rs"
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+archive-core = { path = "crates/archive-core" }
+cli-core = { path = "crates/cli-core" }
+serde.workspace = true
+tauri.workspace = true
+tokio.workspace = true
+diff-core = { path = "crates/diff-core" }
+file-core = { path = "crates/file-core" }
+folder-core = { path = "crates/folder-core" }
+folder-merge-core = { path = "crates/folder-merge-core" }
+hex-core = { path = "crates/hex-core" }
+image.workspace = true
+image-core = { path = "crates/image-core" }
+job-core = { path = "crates/job-core" }
+media-core = { path = "crates/media-core" }
+merge-core = { path = "crates/merge-core" }
+policy-core = { path = "crates/policy-core" }
+registry-core = { path = "crates/registry-core" }
+regf-rs = "0.1.1"
+remote-core = { path = "crates/remote-core" }
+report-core = { path = "crates/report-core" }
+script-core = { path = "crates/script-core" }
+shared-types = { path = "crates/shared-types" }
+shell-core = { path = "crates/shell-core" }
+snapshot-core = { path = "crates/snapshot-core" }
+sync-core = { path = "crates/sync-core" }
+table-core = { path = "crates/table-core" }
+version-core = { path = "crates/version-core" }
+vfs-core = { path = "crates/vfs-core" }
+rfd = "0.15"
+
+[dev-dependencies]
+rust_xlsxwriter = "0.96.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }

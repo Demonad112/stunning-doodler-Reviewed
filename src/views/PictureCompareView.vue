@@ -1,0 +1,2345 @@
+<script setup lang="ts">
+import { computed, onMounted, ref, watch, watchEffect } from 'vue'
+import { useRouter } from 'vue-router'
+import { comparePictureFiles, pathFileStamp, saveTextFile } from '@/api/diff'
+import { buildPictureReportText, defaultPictureReportOutputPath } from '@/app/pictureReport'
+import { localFileSrc } from '@/app/localFileSrc'
+import type { FileStamp, PictureCompareResponse, PictureMetadataRow } from '@/types/diff'
+import { pickNativePath } from '@/app/filePicker'
+import PathMetaFooter from '@/components/workbench/PathMetaFooter.vue'
+import SessionPathActions from '@/components/workbench/SessionPathActions.vue'
+import WorkbenchShell from '@/components/workbench/WorkbenchShell.vue'
+import WorkbenchInspector from '@/components/workbench/WorkbenchInspector.vue'
+import StatusSummaryGrid from '@/components/workbench/StatusSummaryGrid.vue'
+import { buildPictureCompareToolbar, pathPairTitle } from '@/app/sessionToolbars'
+import {
+  loadPictureCompareOptions,
+  pictureBlendModes,
+  pictureIgnoreColors,
+  savePictureCompareOptions,
+  type PictureBlendMode,
+  type PictureCompareOptionsState,
+} from '@/app/pictureCompareOptions'
+import { useSessionLaunchStore } from '@/stores/sessionLaunch'
+import { useTabsStore } from '@/stores/tabs'
+import { useStatusBarStore } from '@/stores/statusBar'
+import { elapsedSecondsSince } from '@/app/statusBarPhrases'
+import { useViewActionsStore } from '@/stores/viewActions'
+import { useSettingsStore } from '@/stores/settings'
+import { useI18n } from '@/i18n'
+import SessionSettingsDialog from '@/components/session/SessionSettingsDialog.vue'
+import { Blend, CircleGauge, Expand, Tag } from '@lucide/vue'
+
+const settings = useSettingsStore()
+const zoom = ref(100)
+const zoomMode = ref<'fit' | 'one-to-one' | 'custom'>('fit')
+
+function setPictureZoomOneToOne(): void {
+  zoomMode.value = 'one-to-one'
+  zoom.value = 100
+}
+
+function setPictureZoomFit(): void {
+  zoomMode.value = 'fit'
+  zoom.value = 100
+}
+
+const panX = ref(0)
+const panY = ref(0)
+const showOverlay = ref(true)
+const rotationDeg = ref(0)
+const flipHorizontal = ref(false)
+const flipVertical = ref(false)
+const alignmentOffsetX = ref(0)
+const alignmentOffsetY = ref(0)
+const pixelPreview = ref<{
+  side: 'Left' | 'Right'
+  x: number
+  y: number
+  color: string
+} | null>(null)
+const { t } = useI18n()
+const leftPath = ref('')
+const rightPath = ref('')
+const leftFileStamp = ref<FileStamp | null>(null)
+const rightFileStamp = ref<FileStamp | null>(null)
+const leftPictureDimensions = ref('')
+const rightPictureDimensions = ref('')
+const sessionLaunch = useSessionLaunchStore()
+const tabs = useTabsStore()
+const router = useRouter()
+const leftPictureName = ref('')
+const rightPictureName = ref('')
+const loading = ref(false)
+const error = ref('')
+const initialPictureOptions = loadPictureCompareOptions()
+const rgbTolerance = ref(initialPictureOptions.rgbTolerance)
+const compareAlpha = ref(initialPictureOptions.compareAlpha)
+const alphaTolerance = ref(initialPictureOptions.alphaTolerance)
+const ignoreColorFrom = ref<number[] | null>(initialPictureOptions.ignoreColorFrom)
+const ignoreColorTo = ref<number[] | null>(initialPictureOptions.ignoreColorTo)
+const showSessionSettings = ref(false)
+const viewActions = useViewActionsStore()
+const showTolPanel = ref(false)
+const showRangePanel = ref(false)
+const blendEnabled = ref(initialPictureOptions.blendEnabled)
+const blendOpacity = ref(initialPictureOptions.blendOpacity)
+const blendMode = ref<PictureBlendMode>(initialPictureOptions.blendMode)
+const showMetaPanel = ref(initialPictureOptions.showMeta)
+const showMinor = ref(initialPictureOptions.showMinor)
+const showBlendPanel = ref(false)
+const metadataRows = ref<PictureMetadataRow[]>([])
+const pictureStatistics = ref<PictureCompareResponse['statistics']>({
+  totalPixels: 0,
+  differentPixels: 0,
+  differenceRatio: 0,
+})
+const compared = ref(false)
+const reportStatus = ref('')
+const loadTimeSeconds = ref<number | null>(null)
+const statusBar = useStatusBarStore()
+const leftImageSrc = computed(() => (compared.value ? localFileSrc(leftPath.value) : ''))
+const rightImageSrc = computed(() => (compared.value ? localFileSrc(rightPath.value) : ''))
+const overlayStyle = computed(() => {
+  const rect = pictureStatistics.value.boundingRect
+
+  if (!rect) {
+    return {}
+  }
+
+  return {
+    left: `${String(rect.x)}px`,
+    top: `${String(rect.y)}px`,
+    width: `${String(rect.width)}px`,
+    height: `${String(rect.height)}px`,
+  }
+})
+
+function openPictureSessionSettings(): void {
+  showSessionSettings.value = true
+}
+
+function applyPictureSessionSettings(
+  payload:
+    | { kind: 'folder'; criteria: unknown }
+    | { kind: 'text'; options: unknown }
+    | { kind: 'table'; options: unknown }
+    | { kind: 'hex'; options: unknown }
+    | { kind: 'picture'; options: PictureCompareOptionsState }
+    | { kind: 'media'; options: unknown }
+    | { kind: 'version'; options: unknown }
+    | { kind: 'registry'; options: unknown }
+    | { kind: 'patch'; options: unknown },
+): void {
+  if (payload.kind !== 'picture') {
+    return
+  }
+
+  rgbTolerance.value = payload.options.rgbTolerance
+  compareAlpha.value = payload.options.compareAlpha
+  alphaTolerance.value = payload.options.alphaTolerance
+  ignoreColorFrom.value = payload.options.ignoreColorFrom
+  ignoreColorTo.value = payload.options.ignoreColorTo
+  blendEnabled.value = payload.options.blendEnabled
+  blendOpacity.value = payload.options.blendOpacity
+  blendMode.value = payload.options.blendMode
+  showMetaPanel.value = payload.options.showMeta
+  showMinor.value = payload.options.showMinor
+  savePictureCompareOptions({
+    rgbTolerance: payload.options.rgbTolerance,
+    compareAlpha: payload.options.compareAlpha,
+    alphaTolerance: payload.options.alphaTolerance,
+    ignoreColorFrom: payload.options.ignoreColorFrom,
+    ignoreColorTo: payload.options.ignoreColorTo,
+    blendEnabled: payload.options.blendEnabled,
+    blendOpacity: payload.options.blendOpacity,
+    blendMode: payload.options.blendMode,
+    showMeta: payload.options.showMeta,
+    showMinor: payload.options.showMinor,
+  })
+  showSessionSettings.value = false
+  if (leftPath.value && rightPath.value) {
+    void runPictureCompare()
+  }
+}
+
+watch(
+  () => [viewActions.sequence, viewActions.name] as const,
+  ([, actionName]) => {
+    if (!actionName) {
+      return
+    }
+
+    switch (actionName) {
+      case 'session-settings':
+      case 'rules':
+        openPictureSessionSettings()
+        break
+      case 'compare':
+      case 'reload':
+        void runPictureCompare()
+        break
+      case 'swap':
+        swapPicturePaths()
+        break
+      case 'export':
+      case 'save':
+      case 'save-as':
+      case 'save-report':
+        void exportPictureReport()
+        break
+      case 'toggle-minor':
+        showMinor.value = !showMinor.value
+        break
+      case 'about':
+      case 'check-for-updates':
+      case 'close-tab':
+      case 'clear-session':
+      case 'copy':
+      case 'copy-left':
+      case 'copy-right':
+      case 'cut':
+      case 'delete':
+      case 'export-settings':
+      case 'filters':
+      case 'help-contents':
+      case 'help-context':
+      case 'help-support':
+      case 'import-settings':
+      case 'next-difference':
+      case 'paste':
+      case 'previous-difference':
+      case 'redo':
+      case 'save-snapshot':
+      case 'restore-factory-defaults':
+      case 'show-all':
+      case 'show-differences':
+      case 'undo':
+      case 'workspace-load':
+      case 'collapse-all':
+      case 'expand-all':
+      case 'next-conflict':
+      case 'previous-conflict':
+      case 'sync-now':
+      case 'browse-folder':
+      case 'up-one-level':
+      case 'path-back':
+      case 'path-forward':
+      case 'toggle-session-locked':
+      case 'workspace-save':
+      case 'select-all':
+      case 'select-all-files':
+      case 'select-orphans':
+      case 'select-newer':
+      case 'invert-selection':
+      case 'open-selected':
+      case 'open-with':
+      case 'quick-compare':
+      case 'exclude-selected':
+      case 'refresh-selection':
+      case 'show-same':
+      case 'show-orphans':
+      case 'show-no-orphans':
+      case 'show-differences-no-orphans':
+      case 'show-left-orphans':
+      case 'show-right-orphans':
+      case 'show-left-newer':
+      case 'show-right-newer':
+      case 'show-left-newer-orphans':
+      case 'show-right-newer-orphans':
+      case 'compare-files-and-folder-structure':
+      case 'only-compare-files':
+      case 'ignore-folder-structure':
+      case 'always-show-folders':
+      case 'show-changes':
+      case 'show-conflicts':
+      case 'toggle-center-pane':
+      case 'compare-to-output':
+      case 'suppress-filters':
+      case 'compare-parent-folders':
+      case 'run-script':
+      case 'find-filename':
+      case 'find-next-filename':
+      case 'find-previous-filename':
+      case 'full-refresh':
+      case 'toggle-columns':
+      case 'toggle-log':
+      case 'toggle-legend':
+      case 'toggle-toolbar':
+      case 'change-attributes':
+      case 'new-folder':
+      case 'leave-alone':
+      case 'sync-copy-left-to-right':
+      case 'sync-copy-right-to-left':
+      case 'sync-delete-left':
+      case 'sync-delete-right':
+      case 'copy-to-side':
+      case 'move-to-side':
+      case 'copy-to-folder':
+      case 'move-to-folder':
+      case 'rename-selected':
+      case 'compare-contents':
+      case 'synchronize':
+      case 'explorer':
+      case 'ignored':
+      case 'align-with':
+      case 'break-alignment':
+      case 'file-compare-report':
+      case 'session-info':
+      case 'copy-filename':
+      case 'merge-execute':
+      case 'copy-to-output':
+      case 'touch-selected':
+        break
+    }
+  },
+)
+
+onMounted(() => {
+  const launch = sessionLaunch.consumeLaunch('/compare/picture')
+
+  if (!launch) {
+    return
+  }
+
+  leftPath.value = launch.locations.left?.uri ?? leftPath.value
+  rightPath.value = launch.locations.right?.uri ?? rightPath.value
+
+  if (launch.autoRun && launch.locations.left?.uri && launch.locations.right?.uri) {
+    void runPictureCompare()
+  }
+})
+
+const sharedTransformParts = computed(() => [
+  `translate(${String(panX.value)}px, ${String(panY.value)}px)`,
+  `rotate(${String(rotationDeg.value)}deg)`,
+  `scaleX(${flipHorizontal.value ? '-1' : '1'})`,
+  `scaleY(${flipVertical.value ? '-1' : '1'})`,
+  `scale(${String(zoom.value / 100)})`,
+])
+
+const imageTransform = computed(() => sharedTransformParts.value.join(' '))
+
+const rightImageTransform = computed(() =>
+  [
+    ...sharedTransformParts.value,
+    `translate(${String(alignmentOffsetX.value)}px, ${String(alignmentOffsetY.value)}px)`,
+  ].join(' '),
+)
+
+const imageStyle = computed<Record<string, string>>(() => ({
+  transform: imageTransform.value,
+}))
+
+const rightImageStyle = computed<Record<string, string>>(() => ({
+  transform: rightImageTransform.value,
+}))
+
+const pictureDifferenceRatioText = computed(() => {
+  if (!compared.value) {
+    return '--'
+  }
+
+  return `${(pictureStatistics.value.differenceRatio * 100).toFixed(2)}%`
+})
+
+const pictureTotalPixelsText = computed(() =>
+  compared.value ? String(pictureStatistics.value.totalPixels) : '--',
+)
+const pictureDifferentPixelsText = computed(() =>
+  compared.value ? String(pictureStatistics.value.differentPixels) : '--',
+)
+
+const pictureBoundingRectText = computed(() => {
+  if (!compared.value) {
+    return '--'
+  }
+
+  const rect = pictureStatistics.value.boundingRect
+
+  if (!rect) {
+    return '--'
+  }
+
+  return `${String(rect.x)}, ${String(rect.y)}, ${String(rect.width)} x ${String(rect.height)}`
+})
+
+function syncPictureTabTitle(): void {
+  if (!leftPath.value || !rightPath.value) {
+    return
+  }
+
+  tabs.setTabTitle('/compare/picture', pathPairTitle(leftPath.value, rightPath.value))
+}
+
+function goHomeFromPicture(): void {
+  tabs.openTab({ title: 'Home', titleKey: 'ui.home', route: '/', dirty: false })
+  void router.push('/')
+}
+
+function swapPicturePaths(): void {
+  const nextLeftPath = rightPath.value
+
+  rightPath.value = leftPath.value
+  leftPath.value = nextLeftPath
+  const nextLeftName = rightPictureName.value
+
+  rightPictureName.value = leftPictureName.value
+  leftPictureName.value = nextLeftName
+  syncPictureTabTitle()
+  if (leftPath.value && rightPath.value && compared.value) {
+    void runPictureCompare()
+  }
+}
+
+const pictureSessionToolbar = computed(() =>
+  buildPictureCompareToolbar({
+    home: true,
+    tol: true,
+    range: true,
+    blend: true,
+    minor: true,
+    rules: true,
+    format: true,
+    sessions: true,
+    swap: Boolean(leftPath.value || rightPath.value),
+    reload: Boolean(leftPath.value && rightPath.value),
+    meta: true,
+  }).map((item) => ({
+    ...item,
+    active:
+      (item.id === 'tol' && showTolPanel.value) ||
+      (item.id === 'range' && showRangePanel.value) ||
+      (item.id === 'blend' && blendEnabled.value) ||
+      (item.id === 'minor' && showMinor.value) ||
+      (item.id === 'format' && showSessionSettings.value) ||
+      (item.id === 'sessions' && showSessionSettings.value) ||
+      (item.id === 'meta' && showMetaPanel.value),
+  })),
+)
+
+function clampByte(value: number, fallback = 0): number {
+  if (!Number.isFinite(value)) {
+    return fallback
+  }
+
+  return Math.min(255, Math.max(0, Math.round(value)))
+}
+
+const pictureOptionsSnapshot = computed<PictureCompareOptionsState>(() => ({
+  rgbTolerance: clampByte(rgbTolerance.value),
+  compareAlpha: compareAlpha.value,
+  alphaTolerance: clampByte(alphaTolerance.value),
+  ignoreColorFrom: ignoreColorFrom.value,
+  ignoreColorTo: ignoreColorTo.value,
+  blendEnabled: blendEnabled.value,
+  blendOpacity: Math.min(100, Math.max(0, Math.round(blendOpacity.value))),
+  blendMode: blendMode.value,
+  showMeta: showMetaPanel.value,
+  showMinor: showMinor.value,
+}))
+
+const visibleMetadataRows = computed(() => {
+  if (!showMinor.value) {
+    return metadataRows.value
+  }
+
+  return metadataRows.value.filter((row) => row.status !== 'equal')
+})
+
+const blendOverlayStyle = computed(() => ({
+  opacity: String(blendOpacity.value / 100),
+  mixBlendMode: blendMode.value,
+}))
+
+const blendModeOptions = pictureBlendModes.map((mode) => ({
+  value: mode,
+  labelKey: `ui.blendMode${mode[0].toUpperCase()}${mode.slice(1)}`,
+}))
+
+function onBlendModeChange(event: Event): void {
+  const target = event.target
+
+  if (!(target instanceof HTMLSelectElement)) {
+    return
+  }
+  blendMode.value = (pictureBlendModes as readonly string[]).includes(target.value)
+    ? (target.value as PictureBlendMode)
+    : 'normal'
+  persistPictureOptions()
+}
+
+const ignoreFromChannels = computed(() => ignoreColorFrom.value ?? [0, 0, 0, 255])
+const ignoreToChannels = computed(() => ignoreColorTo.value ?? [0, 0, 0, 255])
+const hasIgnoreColorRule = computed(() => Boolean(ignoreColorFrom.value && ignoreColorTo.value))
+
+function persistPictureOptions(): void {
+  savePictureCompareOptions(pictureOptionsSnapshot.value)
+}
+
+function maybeRerunPictureCompare(): void {
+  if (compared.value && leftPath.value && rightPath.value) {
+    void runPictureCompare()
+  }
+}
+
+function updateIgnoreChannel(side: 'from' | 'to', index: number, event: Event): void {
+  const target = event.target
+
+  if (!(target instanceof HTMLInputElement)) {
+    return
+  }
+
+  const current = side === 'from' ? [...ignoreFromChannels.value] : [...ignoreToChannels.value]
+  const numeric = Number(target.value)
+
+  current[index] = clampByte(numeric)
+
+  if (side === 'from') {
+    ignoreColorFrom.value = current
+    ignoreColorTo.value ??= [...ignoreToChannels.value]
+  } else {
+    ignoreColorTo.value = current
+    ignoreColorFrom.value ??= [...ignoreFromChannels.value]
+  }
+}
+
+function clearIgnoreColors(): void {
+  ignoreColorFrom.value = null
+  ignoreColorTo.value = null
+}
+
+function runPictureToolbarCommand(commandId: string): void {
+  switch (commandId) {
+    case 'home':
+      goHomeFromPicture()
+      break
+    case 'tol':
+      showTolPanel.value = !showTolPanel.value
+      if (showTolPanel.value) {
+        showRangePanel.value = false
+        showBlendPanel.value = false
+      }
+      break
+    case 'range':
+      showRangePanel.value = !showRangePanel.value
+      if (showRangePanel.value) {
+        showTolPanel.value = false
+        showBlendPanel.value = false
+      }
+      break
+    case 'blend':
+      blendEnabled.value = !blendEnabled.value
+      showBlendPanel.value = blendEnabled.value
+      if (showBlendPanel.value) {
+        showTolPanel.value = false
+        showRangePanel.value = false
+      }
+      persistPictureOptions()
+      break
+    case 'minor':
+      showMinor.value = !showMinor.value
+      persistPictureOptions()
+      break
+    case 'rules':
+      openPictureSessionSettings()
+      break
+    case 'format':
+      openPictureSessionSettings()
+      break
+    case 'sessions':
+      openPictureSessionSettings()
+      break
+    case 'meta':
+      showMetaPanel.value = !showMetaPanel.value
+      persistPictureOptions()
+      break
+    case 'swap':
+      swapPicturePaths()
+      break
+    case 'reload':
+      void runPictureCompare()
+      break
+    default:
+      break
+  }
+}
+
+watch([leftPath, rightPath], () => {
+  syncPictureTabTitle()
+})
+
+watch(
+  pictureOptionsSnapshot,
+  () => {
+    persistPictureOptions()
+    maybeRerunPictureCompare()
+  },
+  { deep: true },
+)
+
+function rotatePicture(delta: number): void {
+  rotationDeg.value = (rotationDeg.value + delta + 360) % 360
+}
+
+function metadataLabel(row: PictureMetadataRow): string {
+  return row.label.startsWith('ui.') ? t(row.label) : row.label
+}
+
+function updatePixelPreview(side: 'Left' | 'Right', event: MouseEvent): void {
+  const x = Math.max(0, Math.round(event.offsetX || event.clientX))
+  const y = Math.max(0, Math.round(event.offsetY || event.clientY))
+
+  pixelPreview.value = {
+    side,
+    x,
+    y,
+    color: 'rgb(--, --, --)',
+  }
+}
+
+async function browsePicturePath(side: 'left' | 'right'): Promise<void> {
+  const selected = await pickNativePath({ directory: false })
+
+  if (!selected) {
+    return
+  }
+
+  if (side === 'left') {
+    leftPath.value = selected
+  } else {
+    rightPath.value = selected
+  }
+}
+
+async function refreshPicturePathStamps(): Promise<void> {
+  const [left, right] = await Promise.all([
+    leftPath.value ? pathFileStamp(leftPath.value).catch(() => null) : Promise.resolve(null),
+    rightPath.value ? pathFileStamp(rightPath.value).catch(() => null) : Promise.resolve(null),
+  ])
+
+  leftFileStamp.value = left
+  rightFileStamp.value = right
+}
+
+function applyPictureResult(result: PictureCompareResponse): void {
+  leftPictureName.value = result.left.name
+  rightPictureName.value = result.right.name
+  leftPictureDimensions.value = result.left.dimensions
+  rightPictureDimensions.value = result.right.dimensions
+  metadataRows.value = result.metadataRows
+  pictureStatistics.value = result.statistics
+  syncPictureTabTitle()
+}
+
+async function exportPictureReport(): Promise<void> {
+  if (!compared.value) {
+    return
+  }
+
+  const payload = buildPictureReportText({
+    leftPath: leftPath.value,
+    rightPath: rightPath.value,
+    statistics: pictureStatistics.value,
+    metadataRows: visibleMetadataRows.value,
+    boundingRectText: pictureBoundingRectText.value,
+  })
+  const outputPath = defaultPictureReportOutputPath(leftPath.value)
+
+  try {
+    await navigator.clipboard.writeText(payload)
+  } catch {
+    // Clipboard may be unavailable in headless tests; still try file export.
+  }
+
+  try {
+    await saveTextFile({
+      path: outputPath,
+      text: payload,
+      createBackup: settings.createBackupOnReportExport,
+      backupRetention: settings.backupRetentionCount,
+    })
+    reportStatus.value = outputPath
+  } catch (event) {
+    error.value = String(event)
+  }
+}
+
+watchEffect(() => {
+  let comparisonStatus = t('status.readyIdle')
+
+  if (loading.value) {
+    comparisonStatus = t('status.comparing')
+  } else if (compared.value) {
+    comparisonStatus = t('status.compared')
+  }
+
+  statusBar.reportStatus({
+    comparisonStatus,
+    differenceCount: compared.value ? pictureStatistics.value.differentPixels : null,
+    filterStatus: t('status.allRows'),
+    source: 'picture-compare',
+    loadTimeSeconds: compared.value ? loadTimeSeconds.value : null,
+    chromeKind: 'picture-session',
+  })
+})
+
+async function runPictureCompare(): Promise<void> {
+  const startedAt = performance.now()
+
+  loading.value = true
+  error.value = ''
+  try {
+    const result = await comparePictureFiles({
+      leftPath: leftPath.value,
+      rightPath: rightPath.value,
+      rgbTolerance: pictureOptionsSnapshot.value.rgbTolerance,
+      compareAlpha: pictureOptionsSnapshot.value.compareAlpha,
+      alphaTolerance: pictureOptionsSnapshot.value.alphaTolerance,
+      ...pictureIgnoreColors(pictureOptionsSnapshot.value),
+    })
+
+    applyPictureResult(result)
+    compared.value = true
+    loadTimeSeconds.value = elapsedSecondsSince(startedAt)
+    await refreshPicturePathStamps()
+  } catch (event) {
+    error.value = String(event)
+  } finally {
+    loading.value = false
+  }
+}
+</script>
+
+<template>
+  <WorkbenchShell
+    :title="$t('ui.pictureCompare')"
+    :eyebrow="$t('ui.picture')"
+    :subtitle="pictureDifferenceRatioText"
+    :inspector-label="$t('ui.pictureCompareInspector')"
+    :toolbar-commands="pictureSessionToolbar"
+    toolbar-test-id-prefix="picture-session-toolbar"
+    @toolbar-command="runPictureToolbarCommand"
+  >
+    <section class="picture-compare-view">
+      <header class="picture-header">
+        <div>
+          <p class="eyebrow">{{ $t('ui.pictureCompare') }}</p>
+          <h1>{{ $t('ui.pictureCompare') }}</h1>
+        </div>
+        <div class="picture-summary">
+          <strong data-testid="picture-zoom-value">{{ zoom }}%</strong>
+          <span>{{ $t('ui.sharedZoom') }}</span>
+        </div>
+      </header>
+
+      <section class="picture-path-panel">
+        <label>
+          <span>{{ $t('ui.left') }} {{ $t('ui.path') }}</span>
+          <div class="path-field-row">
+            <input
+              v-model="leftPath"
+              type="text"
+              class="path-input"
+              data-testid="picture-left-path"
+              :title="leftPath"
+            />
+            <SessionPathActions
+              browse-test-id="picture-browse-left"
+              save-test-id="picture-save-left"
+              :can-save="false"
+              @browse="browsePicturePath('left')"
+            />
+          </div>
+        </label>
+        <label>
+          <span>{{ $t('ui.right') }} {{ $t('ui.path') }}</span>
+          <div class="path-field-row">
+            <input
+              v-model="rightPath"
+              type="text"
+              class="path-input"
+              data-testid="picture-right-path"
+              :title="rightPath"
+            />
+            <SessionPathActions
+              browse-test-id="picture-browse-right"
+              save-test-id="picture-save-right"
+              :can-save="false"
+              @browse="browsePicturePath('right')"
+            />
+          </div>
+        </label>
+        <button
+          type="button"
+          data-testid="run-picture-compare"
+          :disabled="loading"
+          @click="runPictureCompare"
+        >
+          {{ $t('ui.runDiff') }}
+        </button>
+
+        <div
+          class="bc-path-footers"
+          data-testid="picture-path-footers"
+        >
+          <PathMetaFooter
+            :stamp="leftFileStamp"
+            :format-label="leftPictureDimensions || undefined"
+            :show-milliseconds="settings.showMillisecondsInTimestamps"
+            test-id="picture-left-path-footer"
+          />
+          <PathMetaFooter
+            :stamp="rightFileStamp"
+            :format-label="rightPictureDimensions || undefined"
+            :show-milliseconds="settings.showMillisecondsInTimestamps"
+            test-id="picture-right-path-footer"
+          />
+        </div>
+      </section>
+      <p
+        v-if="error"
+        class="picture-error"
+        data-testid="picture-compare-error"
+      >
+        {{ error }}
+      </p>
+      <p
+        v-else-if="!compared"
+        class="empty"
+        data-testid="picture-empty-hint"
+      >
+        {{ $t('ui.emptyCompareHint') }}
+      </p>
+
+      <section
+        v-if="showRangePanel"
+        class="picture-options-panel"
+        data-testid="picture-range-panel"
+      >
+        <header>
+          <h2>{{ $t('ui.range') }}</h2>
+          <span>{{ $t('ui.ignoreColorReplacement') }}</span>
+        </header>
+        <div class="picture-color-rule">
+          <span>{{ $t('ui.ignoreColorFrom') }}</span>
+          <input
+            :value="ignoreFromChannels[0]"
+            type="number"
+            min="0"
+            max="255"
+            data-testid="picture-ignore-from-r"
+            @input="updateIgnoreChannel('from', 0, $event)"
+          />
+          <input
+            :value="ignoreFromChannels[1]"
+            type="number"
+            min="0"
+            max="255"
+            data-testid="picture-ignore-from-g"
+            @input="updateIgnoreChannel('from', 1, $event)"
+          />
+          <input
+            :value="ignoreFromChannels[2]"
+            type="number"
+            min="0"
+            max="255"
+            data-testid="picture-ignore-from-b"
+            @input="updateIgnoreChannel('from', 2, $event)"
+          />
+          <input
+            :value="ignoreFromChannels[3]"
+            type="number"
+            min="0"
+            max="255"
+            data-testid="picture-ignore-from-a"
+            @input="updateIgnoreChannel('from', 3, $event)"
+          />
+        </div>
+        <div class="picture-color-rule">
+          <span>{{ $t('ui.ignoreColorTo') }}</span>
+          <input
+            :value="ignoreToChannels[0]"
+            type="number"
+            min="0"
+            max="255"
+            data-testid="picture-ignore-to-r"
+            @input="updateIgnoreChannel('to', 0, $event)"
+          />
+          <input
+            :value="ignoreToChannels[1]"
+            type="number"
+            min="0"
+            max="255"
+            data-testid="picture-ignore-to-g"
+            @input="updateIgnoreChannel('to', 1, $event)"
+          />
+          <input
+            :value="ignoreToChannels[2]"
+            type="number"
+            min="0"
+            max="255"
+            data-testid="picture-ignore-to-b"
+            @input="updateIgnoreChannel('to', 2, $event)"
+          />
+          <input
+            :value="ignoreToChannels[3]"
+            type="number"
+            min="0"
+            max="255"
+            data-testid="picture-ignore-to-a"
+            @input="updateIgnoreChannel('to', 3, $event)"
+          />
+        </div>
+        <button
+          type="button"
+          data-testid="picture-clear-ignore-colors"
+          @click="clearIgnoreColors"
+        >
+          {{ $t('ui.clear') }}
+        </button>
+        <p
+          class="picture-options-hint"
+          data-testid="picture-range-status"
+        >
+          {{
+            hasIgnoreColorRule
+              ? $t('ui.ignoreColorReplacementOn')
+              : $t('ui.ignoreColorReplacementOff')
+          }}
+        </p>
+      </section>
+
+      <section class="picture-stat-grid">
+        <article>
+          <span>{{ $t('ui.totalPixels') }}</span>
+          <strong data-testid="picture-total-pixels">{{ pictureTotalPixelsText }}</strong>
+        </article>
+        <article>
+          <span>{{ $t('ui.differentPixels') }}</span>
+          <strong data-testid="picture-different-pixels">
+            {{ pictureDifferentPixelsText }}
+          </strong>
+        </article>
+        <article>
+          <span>{{ $t('ui.differenceRatio') }}</span>
+          <strong data-testid="picture-difference-ratio">{{ pictureDifferenceRatioText }}</strong>
+        </article>
+        <article>
+          <span>{{ $t('ui.boundingRect') }}</span>
+          <strong data-testid="picture-bounding-rect">{{ pictureBoundingRectText }}</strong>
+        </article>
+      </section>
+
+      <section
+        v-if="showBlendPanel || blendEnabled"
+        class="picture-blend-panel"
+        data-picture-panel-density="capture-1to1"
+        data-testid="picture-blend-panel"
+      >
+        <header>
+          <strong class="picture-panel-title">
+            <Blend
+              class="picture-panel-icon"
+              :size="14"
+              :stroke-width="2"
+              aria-hidden="true"
+            />
+            {{ $t('ui.blend') }}
+          </strong>
+          <span
+            >{{ $t('ui.blendOpacity') }}: {{ blendOpacity }}% ·
+            {{ $t(`ui.blendMode${blendMode[0].toUpperCase()}${blendMode.slice(1)}`) }}</span
+          >
+        </header>
+        <label>
+          <span>{{ $t('ui.blendMode') }}</span>
+          <select
+            data-testid="picture-blend-mode"
+            :value="blendMode"
+            @change="onBlendModeChange"
+          >
+            <option
+              v-for="option in blendModeOptions"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ $t(option.labelKey) }}
+            </option>
+          </select>
+        </label>
+        <label>
+          <span>{{ $t('ui.blendOpacity') }}</span>
+          <input
+            v-model.number="blendOpacity"
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            data-testid="picture-blend-opacity"
+            @change="persistPictureOptions"
+          />
+        </label>
+      </section>
+
+      <section
+        class="picture-stage"
+        data-stage-residual="capture-1to1"
+        data-testid="picture-stage"
+        data-canvas-density="capture-1to1"
+      >
+        <section
+          class="picture-controls"
+          data-picture-controls="stage-overlay"
+          data-overlay-compact="capture-1to1"
+          data-testid="picture-controls-stage"
+        >
+          <div
+            class="picture-offset-overlay-caption"
+            data-testid="picture-offset-overlay-caption"
+          >
+            {{ $t('ui.offset') }}: ({{ alignmentOffsetX }},{{ alignmentOffsetY }})
+          </div>
+          <label class="picture-zoom-overlay-label">
+            <span data-testid="picture-zoom-overlay-caption">{{ $t('ui.zoom') }}: {{ zoom }}%</span>
+            <div class="picture-zoom-overlay-row">
+              <input
+                v-model.number="zoom"
+                type="range"
+                min="50"
+                max="200"
+                step="10"
+                data-testid="picture-zoom-control"
+                @input="zoomMode = 'custom'"
+              />
+              <div class="picture-zoom-mode-tools">
+                <button
+                  type="button"
+                  class="picture-zoom-mode-btn"
+                  :class="{ 'picture-zoom-mode-btn-active': zoomMode === 'one-to-one' }"
+                  data-testid="picture-zoom-one-to-one"
+                  :title="$t('ui.oneToOne')"
+                  @click="setPictureZoomOneToOne"
+                >
+                  {{ $t('ui.oneToOne') }}
+                </button>
+                <button
+                  type="button"
+                  class="picture-zoom-mode-btn"
+                  :class="{ 'picture-zoom-mode-btn-active': zoomMode === 'fit' }"
+                  data-testid="picture-zoom-fit"
+                  :title="$t('ui.fit')"
+                  @click="setPictureZoomFit"
+                >
+                  <Expand
+                    class="picture-fit-glyph"
+                    :size="12"
+                    :stroke-width="2"
+                    aria-hidden="true"
+                  />
+                </button>
+              </div>
+            </div>
+          </label>
+          <label class="picture-tol-overlay-label">
+            <span data-testid="picture-tolerance-overlay-caption"
+              >{{ $t('ui.tolerance') }}: {{ rgbTolerance }}</span
+            >
+            <div class="picture-zoom-overlay-row">
+              <input
+                v-model.number="rgbTolerance"
+                type="range"
+                min="0"
+                max="255"
+                step="1"
+                data-testid="picture-tolerance-overlay-control"
+                @change="persistPictureOptions"
+              />
+              <div class="picture-zoom-mode-tools">
+                <button
+                  type="button"
+                  class="picture-zoom-mode-btn picture-tol-glyph-btn"
+                  :class="{ 'picture-zoom-mode-btn-active': showTolPanel }"
+                  data-testid="picture-tolerance-overlay-glyph"
+                  :title="$t('ui.tol')"
+                  @click="showTolPanel = !showTolPanel"
+                >
+                  <span
+                    class="picture-tol-glyph"
+                    aria-hidden="true"
+                  ></span>
+                </button>
+              </div>
+            </div>
+          </label>
+          <label>
+            <span>{{ $t('ui.panX') }}</span>
+            <input
+              v-model.number="panX"
+              type="range"
+              min="-80"
+              max="80"
+              step="4"
+              data-testid="picture-pan-x"
+            />
+          </label>
+          <label>
+            <span>{{ $t('ui.panY') }}</span>
+            <input
+              v-model.number="panY"
+              type="range"
+              min="-80"
+              max="80"
+              step="4"
+              data-testid="picture-pan-y"
+            />
+          </label>
+          <label class="picture-toggle">
+            <input
+              v-model="showOverlay"
+              type="checkbox"
+              data-testid="picture-overlay-toggle"
+            />
+            <span>{{ $t('ui.overlay') }}</span>
+          </label>
+          <div class="picture-transform-tools">
+            <button
+              type="button"
+              data-testid="picture-rotate-counterclockwise"
+              @click="rotatePicture(-90)"
+            >
+              {{ $t('ui.rotateLeft') }}
+            </button>
+            <button
+              type="button"
+              data-testid="picture-rotate-clockwise"
+              @click="rotatePicture(90)"
+            >
+              {{ $t('ui.rotateRight') }}
+            </button>
+            <button
+              type="button"
+              data-testid="picture-flip-horizontal"
+              @click="flipHorizontal = !flipHorizontal"
+            >
+              {{ $t('ui.flipH') }}
+            </button>
+            <button
+              type="button"
+              data-testid="picture-flip-vertical"
+              @click="flipVertical = !flipVertical"
+            >
+              {{ $t('ui.flipV') }}
+            </button>
+          </div>
+          <div class="picture-alignment-controls">
+            <label>
+              <span>{{ $t('ui.offsetX') }}</span>
+              <input
+                v-model.number="alignmentOffsetX"
+                type="number"
+                min="-200"
+                max="200"
+                step="1"
+                data-testid="picture-align-x"
+              />
+            </label>
+            <label>
+              <span>{{ $t('ui.offsetY') }}</span>
+              <input
+                v-model.number="alignmentOffsetY"
+                type="number"
+                min="-200"
+                max="200"
+                step="1"
+                data-testid="picture-align-y"
+              />
+            </label>
+          </div>
+          <div
+            class="picture-pixel-preview"
+            data-testid="picture-pixel-preview"
+          >
+            <span>{{ pixelPreview?.side ?? $t('ui.noPixel') }}</span>
+            <strong data-testid="picture-pixel-coordinates">
+              {{ pixelPreview ? `${pixelPreview.x}, ${pixelPreview.y}` : '--, --' }}
+            </strong>
+            <span
+              class="picture-pixel-swatch"
+              :style="{ backgroundColor: pixelPreview?.color ?? 'transparent' }"
+            ></span>
+            <strong data-testid="picture-pixel-color">{{
+              pixelPreview?.color ?? 'rgb(--, --, --)'
+            }}</strong>
+          </div>
+        </section>
+        <section class="picture-pane-grid">
+          <section
+            class="picture-side"
+            data-testid="left-picture-pane"
+          >
+            <h2>{{ $t('ui.left') }}: {{ leftPictureName }}</h2>
+            <div
+              class="picture-canvas-frame"
+              data-testid="picture-canvas-frame"
+            >
+              <div
+                class="picture-image left-image"
+                :style="imageStyle"
+                data-testid="left-picture-image"
+                @mousemove="updatePixelPreview('Left', $event)"
+                @mouseleave="pixelPreview = null"
+              >
+                <img
+                  v-if="leftImageSrc"
+                  :src="leftImageSrc"
+                  :alt="leftPictureName"
+                  data-testid="left-picture-img"
+                />
+                <img
+                  v-if="blendEnabled && rightImageSrc"
+                  class="picture-blend-overlay"
+                  :src="rightImageSrc"
+                  :alt="rightPictureName"
+                  :style="blendOverlayStyle"
+                  data-testid="picture-blend-overlay"
+                />
+                <span
+                  v-if="showOverlay && pictureStatistics.boundingRect"
+                  class="picture-diff-overlay"
+                  data-testid="picture-diff-overlay"
+                  :class="{ 'picture-diff-overlay-minor': showMinor }"
+                >
+                  <span
+                    class="picture-diff-region"
+                    data-testid="picture-diff-region"
+                    :style="overlayStyle"
+                  ></span>
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section
+            class="picture-side"
+            data-testid="right-picture-pane"
+          >
+            <h2>{{ $t('ui.right') }}: {{ rightPictureName }}</h2>
+            <div
+              class="picture-canvas-frame"
+              data-testid="picture-canvas-frame"
+            >
+              <div
+                class="picture-image right-image"
+                :style="rightImageStyle"
+                data-testid="right-picture-image"
+                @mousemove="updatePixelPreview('Right', $event)"
+                @mouseleave="pixelPreview = null"
+              >
+                <img
+                  v-if="rightImageSrc"
+                  :src="rightImageSrc"
+                  :alt="rightPictureName"
+                  data-testid="right-picture-img"
+                />
+                <span
+                  v-if="showOverlay && pictureStatistics.boundingRect"
+                  class="picture-diff-overlay"
+                  data-testid="picture-diff-overlay"
+                >
+                  <span
+                    class="picture-diff-region"
+                    :style="overlayStyle"
+                    data-testid="picture-diff-region"
+                  ></span>
+                </span>
+              </div>
+            </div>
+          </section>
+        </section>
+        <section
+          class="picture-diff-stage"
+          data-testid="picture-diff-stage"
+        >
+          <section
+            v-if="showTolPanel"
+            class="picture-options-panel picture-tol-overlay"
+            data-picture-panel-density="capture-1to1"
+            data-tol-placement="stage-overlay"
+            data-tol-residual="capture-1to1"
+            data-testid="picture-tol-panel"
+          >
+            <header>
+              <h2 class="picture-panel-title">
+                <CircleGauge
+                  class="picture-panel-icon"
+                  :size="14"
+                  :stroke-width="2"
+                  aria-hidden="true"
+                />
+                {{ $t('ui.tol') }}
+              </h2>
+              <span data-testid="picture-tolerance-caption"
+                >{{ $t('ui.tolerance') }}: {{ rgbTolerance }}</span
+              >
+            </header>
+            <label>
+              <span>{{ $t('ui.rgbTolerance') }}</span>
+              <input
+                v-model.number="rgbTolerance"
+                type="number"
+                min="0"
+                max="255"
+                step="1"
+                data-testid="picture-rgb-tolerance"
+              />
+            </label>
+            <label class="picture-toggle picture-options-toggle">
+              <input
+                v-model="compareAlpha"
+                type="checkbox"
+                data-testid="picture-compare-alpha"
+              />
+              <span>{{ $t('ui.compareAlpha') }}</span>
+            </label>
+            <label v-if="compareAlpha">
+              <span>{{ $t('ui.alphaTolerance') }}</span>
+              <input
+                v-model.number="alphaTolerance"
+                type="number"
+                min="0"
+                max="255"
+                step="1"
+                data-testid="picture-alpha-tolerance"
+              />
+            </label>
+          </section>
+
+          <div
+            class="picture-canvas-frame picture-diff-frame"
+            data-testid="picture-diff-canvas-frame"
+          >
+            <div
+              class="picture-image picture-diff-image"
+              :style="imageStyle"
+              data-testid="picture-diff-image"
+            >
+              <img
+                v-if="leftImageSrc"
+                :src="leftImageSrc"
+                :alt="leftPictureName"
+                data-testid="picture-diff-img"
+              />
+              <img
+                v-if="rightImageSrc"
+                class="picture-blend-overlay"
+                :src="rightImageSrc"
+                :alt="rightPictureName"
+                :style="blendOverlayStyle"
+                data-testid="picture-diff-overlay-img"
+              />
+              <span
+                v-if="showOverlay && pictureStatistics.boundingRect"
+                class="picture-diff-overlay"
+                data-testid="picture-diff-overlay"
+                :class="{ 'picture-diff-overlay-minor': showMinor }"
+              >
+                <span
+                  class="picture-diff-region"
+                  data-testid="picture-diff-region"
+                  :style="overlayStyle"
+                ></span>
+              </span>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section
+        v-if="showMetaPanel"
+        class="picture-metadata-panel"
+        data-picture-panel-density="capture-1to1"
+        data-testid="picture-metadata-panel"
+      >
+        <header class="metadata-header">
+          <h2 class="picture-panel-title">
+            <Tag
+              class="picture-panel-icon"
+              :size="14"
+              :stroke-width="2"
+              aria-hidden="true"
+            />
+            {{ $t('ui.metadata') }}
+          </h2>
+          <span>{{ $t('ui.leftVsRight') }}</span>
+        </header>
+        <div class="metadata-grid">
+          <div class="metadata-grid-heading">{{ $t('ui.field') }}</div>
+          <div class="metadata-grid-heading">{{ $t('ui.left') }}</div>
+          <div class="metadata-grid-heading">{{ $t('ui.right') }}</div>
+          <div class="metadata-grid-heading">{{ $t('ui.state') }}</div>
+          <template
+            v-for="row in visibleMetadataRows"
+            :key="row.key"
+          >
+            <div
+              class="metadata-row"
+              :data-testid="`picture-metadata-${row.key}`"
+              :data-metadata-status="row.status"
+            >
+              <div class="metadata-cell metadata-label">{{ metadataLabel(row) }}</div>
+              <div class="metadata-cell">{{ row.left }}</div>
+              <div class="metadata-cell">{{ row.right }}</div>
+              <div class="metadata-cell metadata-status">
+                {{ row.status }}
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <section
+        v-if="showMinor && compared"
+        class="picture-minor-banner"
+        data-picture-panel-density="capture-1to1"
+        data-testid="picture-minor-banner"
+      >
+        <strong class="picture-panel-title">{{ $t('ui.minor') }}</strong>
+        <span>{{ $t('ui.unimportantDifferences') }}</span>
+      </section>
+
+      <section
+        v-if="compared"
+        class="picture-report-panel"
+        data-testid="picture-report-panel"
+      >
+        <header>
+          <strong>{{ $t('ui.pictureReport') }}</strong>
+          <span>{{ $t('status.fieldCount', { count: visibleMetadataRows.length }) }}</span>
+          <button
+            type="button"
+            data-testid="export-picture-report"
+            @click="exportPictureReport"
+          >
+            {{ $t('ui.export') }}
+          </button>
+          <span
+            v-if="reportStatus"
+            data-testid="picture-report-status"
+            >{{ reportStatus }}</span
+          >
+        </header>
+        <div
+          class="picture-report-table"
+          data-testid="picture-report-table"
+        >
+          <div class="picture-report-row picture-report-head">
+            <span>{{ $t('ui.totalPixels') }}</span>
+            <span>{{ $t('ui.differentPixels') }}</span>
+            <span>{{ $t('ui.differenceRatio') }}</span>
+            <span>{{ $t('ui.boundingRect') }}</span>
+          </div>
+          <div
+            class="picture-report-row"
+            data-testid="picture-report-stats"
+          >
+            <strong>{{ pictureTotalPixelsText }}</strong>
+            <code>{{ pictureDifferentPixelsText }}</code>
+            <code>{{ pictureDifferenceRatioText }}</code>
+            <em>{{ pictureBoundingRectText }}</em>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <template #inspector>
+      <WorkbenchInspector>
+        <section class="workbench-inspector-section">
+          <h2>{{ $t('ui.overlay') }}</h2>
+          <StatusSummaryGrid
+            :items="[
+              { label: $t('ui.zoom'), value: `${zoom}%` },
+              {
+                label: $t('ui.differentPixels'),
+                value: pictureDifferentPixelsText,
+                tone: 'modified',
+              },
+              {
+                label: $t('ui.differenceRatio'),
+                value: pictureDifferenceRatioText,
+                tone: 'modified',
+              },
+              { label: $t('ui.boundingRect'), value: pictureBoundingRectText },
+            ]"
+          />
+        </section>
+        <section class="workbench-inspector-section">
+          <h2>{{ $t('ui.metadata') }}</h2>
+          <dl>
+            <div>
+              <dt>{{ $t('ui.left') }}</dt>
+              <dd>{{ leftPath }}</dd>
+            </div>
+            <div>
+              <dt>{{ $t('ui.right') }}</dt>
+              <dd>{{ rightPath }}</dd>
+            </div>
+            <div>
+              <dt>{{ $t('ui.overlay') }}</dt>
+              <dd>{{ showOverlay ? $t('ui.on') : $t('ui.off') }}</dd>
+            </div>
+            <div>
+              <dt>{{ $t('ui.rgbTolerance') }}</dt>
+              <dd data-testid="picture-inspector-tolerance">{{ rgbTolerance }}</dd>
+            </div>
+            <div>
+              <dt>{{ $t('ui.compareAlpha') }}</dt>
+              <dd data-testid="picture-inspector-alpha">
+                {{ compareAlpha ? $t('ui.on') : $t('ui.off') }}
+              </dd>
+              <dt>{{ $t('ui.alphaTolerance') }}</dt>
+              <dd data-testid="picture-inspector-alpha-tolerance">{{ alphaTolerance }}</dd>
+            </div>
+            <div>
+              <dt>{{ $t('ui.range') }}</dt>
+              <dd data-testid="picture-inspector-range">
+                {{
+                  hasIgnoreColorRule
+                    ? $t('ui.ignoreColorReplacementOn')
+                    : $t('ui.ignoreColorReplacementOff')
+                }}
+              </dd>
+            </div>
+            <div>
+              <dt>{{ $t('ui.field') }}</dt>
+              <dd>
+                {{
+                  pixelPreview ? `${pixelPreview.side} ${pixelPreview.x}, ${pixelPreview.y}` : '--'
+                }}
+              </dd>
+            </div>
+          </dl>
+        </section>
+      </WorkbenchInspector>
+    </template>
+    <SessionSettingsDialog
+      :open="showSessionSettings"
+      kind="picture"
+      :picture-options="pictureOptionsSnapshot"
+      @close="showSessionSettings = false"
+      @apply="applyPictureSessionSettings"
+    />
+  </WorkbenchShell>
+</template>
+<style scoped>
+.picture-compare-view {
+  display: grid;
+  gap: 4px;
+  height: 100%;
+  padding: 2px 4px;
+  overflow: auto;
+}
+
+.picture-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.eyebrow {
+  margin: 0 0 2px;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+h1 {
+  font-size: 13px;
+  line-height: 16px;
+}
+
+h2 {
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.picture-summary {
+  display: grid;
+  min-width: 72px;
+  padding: 2px 4px;
+  border: 1px solid var(--app-border);
+  border-radius: 0;
+  background: var(--app-surface);
+  text-align: right;
+}
+
+.picture-summary strong {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.picture-summary span {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.picture-path-panel,
+.picture-stat-grid {
+  display: grid;
+  gap: 2px 4px;
+  padding: 2px 4px;
+  border: 1px solid var(--app-border);
+  border-radius: 0;
+  background: var(--app-surface);
+}
+
+.picture-path-panel {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  align-items: end;
+}
+
+.path-field-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.path-field-row input,
+.path-field-row .path-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.picture-path-panel label,
+.picture-stat-grid article {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.picture-path-panel span,
+.picture-stat-grid span {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.picture-path-panel input {
+  height: 16.5px;
+  min-height: 16.5px;
+  padding: 0 4px;
+  border: 1px solid var(--app-border);
+  border-radius: 0;
+  background: var(--app-bg);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.picture-path-panel button {
+  height: 20px;
+  min-height: 20px;
+  padding: 0 4px;
+  border: 1px solid var(--app-border);
+  border-radius: 0;
+  background: var(--app-bg);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.picture-path-panel button:hover {
+  border-color: var(--app-accent);
+}
+
+.picture-path-panel button:disabled {
+  opacity: 0.65;
+}
+
+.picture-error {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--app-danger);
+  border-radius: 6px;
+  background: var(--diff-deleted-bg);
+  color: var(--diff-deleted-fg);
+  font-size: 12px;
+}
+
+.picture-stat-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.picture-stat-grid strong {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picture-controls {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px 4px;
+  width: min(120px, calc(100% - 8px));
+  min-height: 20px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 0;
+  background: rgb(46 46 35 / 0.88);
+  color: #f0f0f0;
+}
+
+.picture-controls[data-overlay-compact='capture-1to1']
+  > label:not(.picture-zoom-overlay-label, .picture-tol-overlay-label),
+.picture-controls[data-overlay-compact='capture-1to1'] > .picture-transform-tools,
+.picture-controls[data-overlay-compact='capture-1to1'] > .picture-alignment-controls,
+.picture-controls[data-overlay-compact='capture-1to1'] > .picture-pixel-preview {
+  display: none;
+}
+
+.picture-tol-overlay-label {
+  display: grid;
+  gap: 2px;
+}
+
+.picture-tol-glyph {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #111111;
+  background: linear-gradient(135deg, #ffffff 0%, #111111 100%);
+}
+
+.picture-offset-overlay-caption {
+  color: #f0f0f0;
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.picture-controls label {
+  display: grid;
+  gap: 2px;
+}
+
+.picture-controls span {
+  color: #d8d8d8;
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.picture-controls input {
+  width: 100%;
+}
+
+.picture-toggle {
+  grid-template-columns: auto auto;
+  place-content: end;
+}
+
+.picture-toggle input {
+  width: 16px;
+  height: 16px;
+}
+
+.picture-options-panel {
+  display: grid;
+  gap: 4px 6px;
+  min-height: 20px;
+  padding: 4px 6px;
+  border: 1px solid #a0a0a0;
+  border-radius: 0;
+  background: var(--app-surface);
+}
+
+.picture-options-panel header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 20px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.picture-options-panel header span,
+.picture-options-hint {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.picture-options-panel label {
+  display: grid;
+  gap: 4px;
+}
+
+.picture-options-toggle {
+  place-content: start;
+}
+
+.picture-color-rule {
+  display: grid;
+  grid-template-columns: minmax(88px, auto) repeat(4, minmax(56px, 72px));
+  align-items: center;
+  gap: 2px 6px;
+}
+
+.picture-options-panel input[type='number'] {
+  width: 100%;
+  height: 18px;
+  min-height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--app-border);
+  border-radius: 2px;
+  background: var(--app-bg);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.picture-options-panel button {
+  width: fit-content;
+  height: 18px;
+  min-height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--app-border);
+  border-radius: 2px;
+  background: var(--app-bg);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.picture-transform-tools {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  align-content: end;
+}
+
+.picture-transform-tools button {
+  height: 18px;
+  min-height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--app-border);
+  border-radius: 2px;
+  background: var(--app-bg);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.picture-transform-tools button:hover {
+  border-color: var(--app-accent);
+}
+
+.picture-alignment-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.picture-alignment-controls input {
+  height: 18px;
+  min-height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--app-border);
+  border-radius: 2px;
+  background: var(--app-bg);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.picture-pixel-preview {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, auto) 18px minmax(0, 1fr);
+  align-items: center;
+  align-content: end;
+  gap: 4px;
+  min-width: 0;
+  min-height: 18px;
+  padding: 0 5px;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: var(--app-bg);
+}
+
+.picture-pixel-preview strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picture-pixel-swatch {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--app-border);
+  border-radius: 4px;
+}
+
+.picture-stage {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 1px;
+  min-height: 360px;
+  overflow: hidden;
+  border: 1px solid #a0a0a0;
+  border-radius: 0;
+  background: #2e2e23;
+}
+
+.picture-stage .picture-pane-grid {
+  gap: 1px;
+  min-height: 0;
+  background: #2e2e23;
+}
+
+.picture-stage .picture-side {
+  min-height: 0;
+  padding: 2px;
+  border: 0;
+  background: #2e2e23;
+  color: #d8d8d8;
+}
+
+.picture-stage .picture-side h2 {
+  display: none;
+}
+
+.picture-stage .picture-canvas-frame {
+  min-height: 0;
+  border: 0;
+  background: #2e2e23;
+}
+
+.picture-diff-stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: #2e2e23;
+}
+
+.picture-tol-overlay {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 5;
+  display: none;
+  gap: 4px;
+  width: min(240px, calc(100% - 8px));
+  padding: 4px 6px;
+  border: 1px solid #a0a0a0;
+  border-radius: 0;
+  background: rgb(46 46 35 / 0.92);
+  color: #f0f0f0;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.picture-tol-overlay header,
+.picture-tol-overlay span,
+.picture-tol-overlay label {
+  color: #f0f0f0;
+}
+
+.picture-diff-frame {
+  height: 100%;
+  min-height: 140px;
+}
+
+.picture-pane-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+}
+
+.picture-minor-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  padding: 4px 6px;
+  border: 1px solid #a0a0a0;
+  border-radius: 0;
+  background: var(--app-surface);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.picture-minor-banner span {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.picture-report-panel {
+  display: grid;
+  gap: 4px 6px;
+  min-height: 20px;
+  padding: 4px 6px;
+  border: 1px solid #a0a0a0;
+  border-radius: 0;
+  background: var(--app-surface);
+}
+
+.picture-report-panel header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.picture-report-panel header button {
+  margin-left: auto;
+  height: 18px;
+  min-height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--app-border);
+  border-radius: 2px;
+  background: var(--app-bg);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.picture-report-table {
+  display: grid;
+  gap: 2px;
+  border-radius: 0;
+}
+
+.picture-report-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: center;
+  gap: 4px;
+  min-height: 18px;
+  padding: 2px 6px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.picture-report-head {
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+.picture-metadata-panel {
+  display: grid;
+  gap: 4px 6px;
+  min-height: 20px;
+  padding: 4px 6px;
+  border: 1px solid #a0a0a0;
+  border-radius: 0;
+  background: var(--app-surface);
+}
+
+.metadata-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 20px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.metadata-header span {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.metadata-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) repeat(2, minmax(160px, 1fr)) minmax(90px, auto);
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 0;
+}
+
+.metadata-row {
+  display: contents;
+}
+
+.metadata-grid-heading,
+.metadata-cell {
+  min-width: 0;
+  min-height: 18px;
+  padding: 2px 6px;
+  border-bottom: 1px solid #a0a0a0;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.metadata-grid-heading {
+  background: var(--app-bg);
+  color: var(--app-text-muted);
+  font-weight: 700;
+}
+
+.metadata-label,
+.metadata-status {
+  font-weight: 700;
+}
+
+.metadata-row[data-metadata-status='different'] .metadata-status {
+  color: var(--app-danger);
+}
+
+.metadata-row[data-metadata-status='equal'] .metadata-status {
+  color: var(--app-success);
+}
+
+.picture-side {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 1px solid var(--app-border);
+  border-radius: 0;
+  background: var(--app-surface);
+}
+
+.picture-canvas-frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 0;
+  background: var(--app-bg);
+}
+
+.picture-image {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  overflow: hidden;
+  transform-origin: center;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--app-bg);
+}
+
+.picture-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.picture-diff-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.picture-diff-region {
+  position: absolute;
+  border: 1px solid rgb(217 70 70 / 0.9);
+  border-radius: 0;
+  background: rgb(217 70 70 / 0.28);
+  box-shadow: none;
+}
+
+@media (width <= 860px) {
+  .picture-controls,
+  .picture-pane-grid,
+  .picture-path-panel,
+  .picture-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .picture-canvas-frame {
+    min-height: 0;
+  }
+}
+
+.picture-blend-panel {
+  display: grid;
+  gap: 4px 6px;
+  min-height: 20px;
+  padding: 4px 6px;
+  border: 1px solid #a0a0a0;
+  border-radius: 0;
+  background: var(--app-surface);
+}
+
+.picture-blend-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 20px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.picture-blend-panel label {
+  display: grid;
+  gap: 2px;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.picture-blend-panel select {
+  height: 18px;
+  min-height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--app-border);
+  border-radius: 2px;
+  background: var(--app-bg);
+  color: var(--app-text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.picture-blend-panel input[type='range'] {
+  height: 20px;
+  min-height: 20px;
+}
+
+.picture-blend-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.picture-diff-overlay-minor {
+  opacity: 0.45;
+}
+
+.picture-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: #111111;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.picture-panel-icon {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+}
+
+.bc-path-footers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-column: 1 / -1;
+  gap: 1px;
+  width: 100%;
+  margin-top: 0;
+  padding: 0 2px;
+}
+
+.path-side-footer {
+  min-height: 18px;
+  margin-top: 0;
+  overflow: hidden;
+  color: var(--app-text-muted, #6b7280);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-side-footer-muted {
+  color: #9ca3af;
+}
+
+.picture-zoom-overlay-label {
+  display: grid;
+  gap: 2px;
+}
+
+.picture-zoom-overlay-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.picture-zoom-mode-tools {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.picture-zoom-mode-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border: 1px solid #a0a0a0;
+  border-radius: 0;
+  background: #fdfdfd;
+  color: #111111;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  cursor: default;
+}
+
+.picture-zoom-mode-btn + .picture-zoom-mode-btn {
+  border-left: 0;
+}
+
+.picture-zoom-mode-btn-active {
+  border-color: #005499;
+  background: #cce4f7;
+}
+
+.picture-fit-glyph {
+  display: block;
+  width: 12px;
+  height: 12px;
+  color: #111111;
+}
+</style>

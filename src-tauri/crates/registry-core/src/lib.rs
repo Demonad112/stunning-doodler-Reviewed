@@ -1,0 +1,1404 @@
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RegistryHive {
+    ClassesRoot,
+    CurrentUser,
+    LocalMachine,
+    Users,
+    CurrentConfig,
+}
+
+impl RegistryHive {
+    pub fn short_name(self) -> &'static str {
+        match self {
+            Self::ClassesRoot => "HKCR",
+            Self::CurrentUser => "HKCU",
+            Self::LocalMachine => "HKLM",
+            Self::Users => "HKU",
+            Self::CurrentConfig => "HKCC",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryKey {
+    pub hive: RegistryHive,
+    pub path: String,
+}
+
+impl RegistryKey {
+    pub fn new(hive: RegistryHive, path: impl AsRef<str>) -> Self {
+        Self {
+            hive,
+            path: normalize_registry_path(path.as_ref()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryValue {
+    pub hive: RegistryHive,
+    pub key_path: String,
+    pub name: String,
+    pub data: RegistryValueData,
+    pub modified_at_ms: Option<u128>,
+}
+
+impl RegistryValue {
+    pub fn new(
+        hive: RegistryHive,
+        key_path: impl AsRef<str>,
+        name: impl Into<String>,
+        data: RegistryValueData,
+    ) -> Self {
+        Self {
+            hive,
+            key_path: normalize_registry_path(key_path.as_ref()),
+            name: name.into(),
+            data,
+            modified_at_ms: None,
+        }
+    }
+
+    pub fn with_modified_at_ms(mut self, modified_at_ms: u128) -> Self {
+        self.modified_at_ms = Some(modified_at_ms);
+
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RegistryValueData {
+    String(String),
+    ExpandString(String),
+    Dword(u32),
+    Qword(u64),
+    Binary(Vec<u8>),
+    MultiString(Vec<String>),
+    None,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryDocument {
+    pub name: String,
+    keys: BTreeMap<String, RegistryKey>,
+    values: BTreeMap<String, RegistryValue>,
+}
+
+impl RegistryDocument {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            keys: BTreeMap::new(),
+            values: BTreeMap::new(),
+        }
+    }
+
+    pub fn with_key(mut self, key: RegistryKey) -> Self {
+        self.keys.insert(registry_key_id(key.hive, &key.path), key);
+
+        self
+    }
+
+    pub fn with_value(mut self, value: RegistryValue) -> Self {
+        self.values.insert(
+            registry_value_id(value.hive, &value.key_path, &value.name),
+            value,
+        );
+
+        self
+    }
+
+    pub fn key(&self, hive: RegistryHive, path: impl AsRef<str>) -> RegistryResult<&RegistryKey> {
+        let path = normalize_registry_path(path.as_ref());
+
+        self.keys
+            .get(&registry_key_id(hive, &path))
+            .ok_or_else(|| RegistryError::KeyNotFound(registry_key_id(hive, &path)))
+    }
+
+    pub fn value(
+        &self,
+        hive: RegistryHive,
+        key_path: impl AsRef<str>,
+        name: &str,
+    ) -> RegistryResult<&RegistryValue> {
+        let key_path = normalize_registry_path(key_path.as_ref());
+        let id = registry_value_id(hive, &key_path, name);
+
+        self.values.get(&id).ok_or(RegistryError::ValueNotFound(id))
+    }
+
+    pub fn child_keys(
+        &self,
+        hive: RegistryHive,
+        path: impl AsRef<str>,
+    ) -> RegistryResult<Vec<&RegistryKey>> {
+        let path = normalize_registry_path(path.as_ref());
+        self.key(hive, &path)?;
+
+        Ok(self
+            .keys
+            .values()
+            .filter(|key| key.hive == hive && is_direct_child(&path, &key.path))
+            .collect())
+    }
+
+    pub fn values(
+        &self,
+        hive: RegistryHive,
+        key_path: impl AsRef<str>,
+    ) -> RegistryResult<Vec<&RegistryValue>> {
+        let key_path = normalize_registry_path(key_path.as_ref());
+        self.key(hive, &key_path)?;
+
+        Ok(self
+            .values
+            .values()
+            .filter(|value| value.hive == hive && value.key_path == key_path)
+            .collect())
+    }
+
+    pub fn keys(&self) -> Vec<&RegistryKey> {
+        self.keys.values().collect()
+    }
+
+    pub fn all_values(&self) -> Vec<&RegistryValue> {
+        self.values.values().collect()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RegistryError {
+    Backend(String),
+    KeyNotFound(String),
+    Parse(String),
+    ValueNotFound(String),
+}
+
+pub type RegistryResult<T> = Result<T, RegistryError>;
+
+fn registry_key_id(hive: RegistryHive, path: &str) -> String {
+    if path.is_empty() {
+        return hive.short_name().to_owned();
+    }
+
+    format!("{}/{}", hive.short_name(), path)
+}
+
+fn registry_value_id(hive: RegistryHive, key_path: &str, name: &str) -> String {
+    format!("{}/{}", registry_key_id(hive, key_path), name)
+}
+
+fn normalize_registry_path(path: &str) -> String {
+    path.replace('\\', "/")
+        .split('/')
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty() && *segment != ".")
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn is_direct_child(parent: &str, path: &str) -> bool {
+    if parent == path {
+        return false;
+    }
+
+    let prefix = if parent.is_empty() {
+        String::new()
+    } else {
+        format!("{parent}/")
+    };
+
+    path.strip_prefix(&prefix)
+        .is_some_and(|relative| !relative.is_empty() && !relative.contains('/'))
+}
+
+pub struct RegFileParser;
+
+impl RegFileParser {
+    pub fn parse(name: impl Into<String>, input: &str) -> RegistryResult<RegistryDocument> {
+        let mut lines = input.lines();
+        let Some(header) = lines.next().map(str::trim) else {
+            return Err(RegistryError::Parse("missing REG file header".to_owned()));
+        };
+
+        if header != "Windows Registry Editor Version 5.00" && header != "REGEDIT4" {
+            return Err(RegistryError::Parse(
+                "unsupported REG file header".to_owned(),
+            ));
+        }
+
+        let mut document = RegistryDocument::new(name);
+        let mut current_key: Option<RegistryKey> = None;
+
+        for raw_line in lines {
+            let line = raw_line.trim();
+
+            if line.is_empty() || line.starts_with(';') {
+                continue;
+            }
+
+            if line.starts_with('[') && line.ends_with(']') {
+                let key = parse_reg_key(&line[1..line.len() - 1])?;
+                document = document.with_key(key.clone());
+                current_key = Some(key);
+                continue;
+            }
+
+            let Some(key) = &current_key else {
+                return Err(RegistryError::Parse(
+                    "value line appeared before a registry key".to_owned(),
+                ));
+            };
+
+            let Some(value) = parse_reg_value(line, key)? else {
+                continue;
+            };
+
+            document = document.with_value(value);
+        }
+
+        Ok(document)
+    }
+}
+
+pub fn parse_registry_key_path(input: &str) -> RegistryResult<RegistryKey> {
+    let normalized = input.trim().replace('/', "\\");
+    parse_reg_key(&normalized)
+}
+
+fn parse_reg_key(input: &str) -> RegistryResult<RegistryKey> {
+    let input = input.trim().trim_start_matches('\\');
+    if let Some((hive_name, path)) = input.split_once('\\') {
+        let hive = parse_hive(hive_name)?;
+        return Ok(RegistryKey::new(hive, path));
+    }
+
+    let hive = parse_hive(input)?;
+    Ok(RegistryKey::new(hive, ""))
+}
+
+fn parse_hive(input: &str) -> RegistryResult<RegistryHive> {
+    match input {
+        "HKEY_CLASSES_ROOT" | "HKCR" => Ok(RegistryHive::ClassesRoot),
+        "HKEY_CURRENT_USER" | "HKCU" => Ok(RegistryHive::CurrentUser),
+        "HKEY_LOCAL_MACHINE" | "HKLM" => Ok(RegistryHive::LocalMachine),
+        "HKEY_USERS" | "HKU" => Ok(RegistryHive::Users),
+        "HKEY_CURRENT_CONFIG" | "HKCC" => Ok(RegistryHive::CurrentConfig),
+        _ => Err(RegistryError::Parse(format!(
+            "unsupported registry hive: {input}"
+        ))),
+    }
+}
+
+fn parse_reg_value(line: &str, key: &RegistryKey) -> RegistryResult<Option<RegistryValue>> {
+    let (raw_name, raw_data) = line
+        .split_once('=')
+        .ok_or_else(|| RegistryError::Parse(format!("invalid registry value line: {line}")))?;
+
+    if raw_data == "-" {
+        return Ok(None);
+    }
+
+    let name = if raw_name == "@" {
+        "@".to_owned()
+    } else {
+        parse_quoted(raw_name)?
+    };
+    let data = parse_reg_value_data(raw_data)?;
+
+    Ok(Some(RegistryValue::new(key.hive, &key.path, name, data)))
+}
+
+fn parse_reg_value_data(input: &str) -> RegistryResult<RegistryValueData> {
+    if input.starts_with('"') {
+        return parse_quoted(input).map(RegistryValueData::String);
+    }
+
+    if let Some(hex) = input.strip_prefix("dword:") {
+        return u32::from_str_radix(hex, 16)
+            .map(RegistryValueData::Dword)
+            .map_err(|_| RegistryError::Parse(format!("invalid dword value: {input}")));
+    }
+
+    if let Some(hex) = input.strip_prefix("hex:") {
+        let mut bytes = Vec::new();
+
+        for part in hex
+            .split(',')
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+        {
+            bytes.push(
+                u8::from_str_radix(part, 16)
+                    .map_err(|_| RegistryError::Parse(format!("invalid hex byte: {part}")))?,
+            );
+        }
+
+        return Ok(RegistryValueData::Binary(bytes));
+    }
+
+    Err(RegistryError::Parse(format!(
+        "unsupported registry value data: {input}"
+    )))
+}
+
+fn parse_quoted(input: &str) -> RegistryResult<String> {
+    if !input.starts_with('"') || !input.ends_with('"') {
+        return Err(RegistryError::Parse(format!(
+            "expected quoted string: {input}"
+        )));
+    }
+
+    let mut output = String::new();
+    let mut escaped = false;
+
+    for character in input[1..input.len() - 1].chars() {
+        if escaped {
+            output.push(match character {
+                '\\' => '\\',
+                '"' => '"',
+                'n' => '\n',
+                'r' => '\r',
+                't' => '\t',
+                other => other,
+            });
+            escaped = false;
+            continue;
+        }
+
+        if character == '\\' {
+            escaped = true;
+        } else {
+            output.push(character);
+        }
+    }
+
+    Ok(output)
+}
+
+pub trait NativeRegistryReader {
+    fn key_exists(&self, hive: RegistryHive, path: &str) -> RegistryResult<bool>;
+
+    fn child_keys(&self, hive: RegistryHive, path: &str) -> RegistryResult<Vec<String>>;
+
+    fn values(&self, hive: RegistryHive, path: &str) -> RegistryResult<Vec<RegistryValue>>;
+}
+
+pub struct NativeRegistryLoader;
+
+impl NativeRegistryLoader {
+    pub fn load_subtree(
+        name: impl Into<String>,
+        reader: &impl NativeRegistryReader,
+        hive: RegistryHive,
+        root_path: impl AsRef<str>,
+    ) -> RegistryResult<RegistryDocument> {
+        let root_path = normalize_registry_path(root_path.as_ref());
+
+        if !reader.key_exists(hive, &root_path)? {
+            return Err(RegistryError::KeyNotFound(registry_key_id(
+                hive, &root_path,
+            )));
+        }
+
+        let mut document = RegistryDocument::new(name);
+        load_native_key(reader, hive, &root_path, &mut document)?;
+
+        Ok(document)
+    }
+}
+
+fn load_native_key(
+    reader: &impl NativeRegistryReader,
+    hive: RegistryHive,
+    path: &str,
+    document: &mut RegistryDocument,
+) -> RegistryResult<()> {
+    document
+        .keys
+        .insert(registry_key_id(hive, path), RegistryKey::new(hive, path));
+
+    for value in reader.values(hive, path)? {
+        document.values.insert(
+            registry_value_id(value.hive, &value.key_path, &value.name),
+            value,
+        );
+    }
+
+    for child in reader.child_keys(hive, path)? {
+        load_native_key(reader, hive, &child, document)?;
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct MemoryNativeRegistryReader {
+    keys: BTreeMap<String, RegistryKey>,
+    values: BTreeMap<String, RegistryValue>,
+}
+
+impl MemoryNativeRegistryReader {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_key(mut self, hive: RegistryHive, path: impl AsRef<str>) -> Self {
+        let key = RegistryKey::new(hive, path);
+
+        self.keys.insert(registry_key_id(key.hive, &key.path), key);
+
+        self
+    }
+
+    pub fn with_value(mut self, value: RegistryValue) -> Self {
+        self.values.insert(
+            registry_value_id(value.hive, &value.key_path, &value.name),
+            value,
+        );
+
+        self
+    }
+}
+
+impl NativeRegistryReader for MemoryNativeRegistryReader {
+    fn key_exists(&self, hive: RegistryHive, path: &str) -> RegistryResult<bool> {
+        Ok(self
+            .keys
+            .contains_key(&registry_key_id(hive, &normalize_registry_path(path))))
+    }
+
+    fn child_keys(&self, hive: RegistryHive, path: &str) -> RegistryResult<Vec<String>> {
+        let path = normalize_registry_path(path);
+
+        Ok(self
+            .keys
+            .values()
+            .filter(|key| key.hive == hive && is_direct_child(&path, &key.path))
+            .map(|key| key.path.clone())
+            .collect())
+    }
+
+    fn values(&self, hive: RegistryHive, path: &str) -> RegistryResult<Vec<RegistryValue>> {
+        let path = normalize_registry_path(path);
+
+        Ok(self
+            .values
+            .values()
+            .filter(|value| value.hive == hive && value.key_path == path)
+            .cloned()
+            .collect())
+    }
+}
+
+#[cfg(windows)]
+#[derive(Debug, Clone, Default)]
+pub struct WindowsNativeRegistryReader;
+
+#[cfg(windows)]
+impl NativeRegistryReader for WindowsNativeRegistryReader {
+    fn key_exists(&self, hive: RegistryHive, path: &str) -> RegistryResult<bool> {
+        let output = reg_query(hive, path, None)?;
+
+        Ok(output.status.success())
+    }
+
+    fn child_keys(&self, hive: RegistryHive, path: &str) -> RegistryResult<Vec<String>> {
+        let output = reg_query(hive, path, None)?;
+
+        if !output.status.success() {
+            return Ok(Vec::new());
+        }
+
+        let full_prefix = registry_key_id(hive, &normalize_registry_path(path)).replace('/', "\\");
+        let mut keys = Vec::new();
+
+        for line in String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+        {
+            if let Some(child) = line.strip_prefix(&format!("{full_prefix}\\")) {
+                if !child.contains('\\') {
+                    keys.push(format!("{}/{}", normalize_registry_path(path), child));
+                }
+            }
+        }
+
+        Ok(keys)
+    }
+
+    fn values(&self, hive: RegistryHive, path: &str) -> RegistryResult<Vec<RegistryValue>> {
+        let output = reg_query(hive, path, None)?;
+
+        if !output.status.success() {
+            return Ok(Vec::new());
+        }
+
+        parse_reg_query_values(
+            hive,
+            &normalize_registry_path(path),
+            &String::from_utf8_lossy(&output.stdout),
+        )
+    }
+}
+
+#[cfg(windows)]
+fn reg_query(
+    hive: RegistryHive,
+    path: &str,
+    value_name: Option<&str>,
+) -> RegistryResult<std::process::Output> {
+    let key_path = registry_key_id(hive, &normalize_registry_path(path)).replace('/', "\\");
+    let mut command = std::process::Command::new("reg");
+
+    command.args(["query", &key_path]);
+
+    if let Some(value_name) = value_name {
+        command.args(["/v", value_name]);
+    }
+
+    command
+        .output()
+        .map_err(|error| RegistryError::Backend(error.to_string()))
+}
+
+#[cfg(windows)]
+fn parse_reg_query_values(
+    hive: RegistryHive,
+    key_path: &str,
+    output: &str,
+) -> RegistryResult<Vec<RegistryValue>> {
+    let mut values = Vec::new();
+
+    for line in output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        if line.starts_with(hive.short_name()) || line.starts_with("HKEY_") {
+            continue;
+        }
+
+        let parts = line.split_whitespace().collect::<Vec<_>>();
+
+        if parts.len() < 3 {
+            continue;
+        }
+
+        let name = parts[0];
+        let kind = parts[1];
+        let raw_value = parts[2..].join(" ");
+        let data =
+            match kind {
+                "REG_SZ" => RegistryValueData::String(raw_value),
+                "REG_EXPAND_SZ" => RegistryValueData::ExpandString(raw_value),
+                "REG_DWORD" => {
+                    let hex = raw_value.trim_start_matches("0x");
+                    RegistryValueData::Dword(u32::from_str_radix(hex, 16).map_err(|_| {
+                        RegistryError::Parse(format!("invalid REG_DWORD: {raw_value}"))
+                    })?)
+                }
+                "REG_QWORD" => {
+                    let hex = raw_value.trim_start_matches("0x");
+                    RegistryValueData::Qword(u64::from_str_radix(hex, 16).map_err(|_| {
+                        RegistryError::Parse(format!("invalid REG_QWORD: {raw_value}"))
+                    })?)
+                }
+                _ => continue,
+            };
+
+        values.push(RegistryValue::new(hive, key_path, name, data));
+    }
+
+    Ok(values)
+}
+
+pub fn infer_hive_for_file_name(name: &str) -> RegistryHive {
+    let upper = name.to_ascii_uppercase();
+    if upper.contains("NTUSER") || upper.contains("USRCLASS") {
+        RegistryHive::CurrentUser
+    } else if upper.contains("USER") {
+        RegistryHive::Users
+    } else {
+        RegistryHive::LocalMachine
+    }
+}
+
+fn map_regf_value(value: regf_rs::RegValue) -> RegistryValueData {
+    match value {
+        regf_rs::RegValue::None => RegistryValueData::None,
+        regf_rs::RegValue::Sz(text) => RegistryValueData::String(text),
+        regf_rs::RegValue::ExpandSz(text) => RegistryValueData::ExpandString(text),
+        regf_rs::RegValue::Binary(bytes) => RegistryValueData::Binary(bytes),
+        regf_rs::RegValue::Dword(value) | regf_rs::RegValue::DwordBigEndian(value) => {
+            RegistryValueData::Dword(value)
+        }
+        regf_rs::RegValue::MultiSz(values) => RegistryValueData::MultiString(values),
+        regf_rs::RegValue::Qword(value) => RegistryValueData::Qword(value),
+        regf_rs::RegValue::Other { data, .. } => RegistryValueData::Binary(data),
+    }
+}
+
+/// Load an offline Windows REGF hive file (SYSTEM/SOFTWARE/NTUSER.DAT style) into a
+/// [`RegistryDocument`]. Paths inside the document use `/` separators relative to the
+/// hive root (or an optional subpath). This works on every platform — no live OS
+/// registry is required.
+pub struct HiveFileLoader;
+
+impl HiveFileLoader {
+    pub fn load_bytes(
+        name: impl Into<String>,
+        bytes: Vec<u8>,
+        hive: RegistryHive,
+        root_subpath: impl AsRef<str>,
+    ) -> RegistryResult<RegistryDocument> {
+        let name = name.into();
+        let hive_file = regf_rs::Hive::from_bytes(bytes).map_err(|error| {
+            RegistryError::Parse(format!("invalid registry hive file ({name}): {error}"))
+        })?;
+        let root_subpath = normalize_registry_path(root_subpath.as_ref()).replace('/', "\\");
+        let mut document = RegistryDocument::new(name);
+        load_hive_subtree(
+            &hive_file,
+            hive,
+            &root_subpath,
+            &root_subpath,
+            &mut document,
+        )?;
+        Ok(document)
+    }
+
+    pub fn load_path(
+        name: impl Into<String>,
+        path: impl AsRef<std::path::Path>,
+        hive: RegistryHive,
+        root_subpath: impl AsRef<str>,
+    ) -> RegistryResult<RegistryDocument> {
+        let path = path.as_ref();
+        let bytes = std::fs::read(path).map_err(|error| {
+            RegistryError::Backend(format!(
+                "failed to read hive file {}: {error}",
+                path.display()
+            ))
+        })?;
+        Self::load_bytes(name, bytes, hive, root_subpath)
+    }
+}
+
+fn load_hive_subtree(
+    hive_file: &regf_rs::Hive,
+    hive: RegistryHive,
+    absolute_path: &str,
+    document_path: &str,
+    document: &mut RegistryDocument,
+) -> RegistryResult<()> {
+    let lookup = if absolute_path.is_empty() {
+        String::new()
+    } else {
+        absolute_path.to_owned()
+    };
+
+    // Ensure the key exists (root path "" opens the hive root).
+    hive_file
+        .open(&lookup)
+        .map_err(|error| RegistryError::KeyNotFound(format!("{lookup} ({error})")))?;
+
+    let normalized_doc = normalize_registry_path(document_path);
+    document.keys.insert(
+        registry_key_id(hive, &normalized_doc),
+        RegistryKey::new(hive, &normalized_doc),
+    );
+
+    let values = hive_file.list_values(&lookup).map_err(|error| {
+        RegistryError::Backend(format!("failed to list hive values at {lookup}: {error}"))
+    })?;
+    for (name, value) in values {
+        let value_name = if name.is_empty() {
+            "@".to_owned()
+        } else {
+            name
+        };
+        let registry_value =
+            RegistryValue::new(hive, &normalized_doc, value_name, map_regf_value(value));
+        document.values.insert(
+            registry_value_id(
+                registry_value.hive,
+                &registry_value.key_path,
+                &registry_value.name,
+            ),
+            registry_value,
+        );
+    }
+
+    let children = hive_file.list_subkeys(&lookup).map_err(|error| {
+        RegistryError::Backend(format!("failed to list hive subkeys at {lookup}: {error}"))
+    })?;
+    for child in children {
+        let child_abs = if lookup.is_empty() {
+            child.clone()
+        } else {
+            format!("{lookup}\\{child}")
+        };
+        let child_doc = if normalized_doc.is_empty() {
+            normalize_registry_path(&child)
+        } else {
+            format!("{normalized_doc}/{}", normalize_registry_path(&child))
+        };
+        load_hive_subtree(hive_file, hive, &child_abs, &child_doc, document)?;
+    }
+
+    Ok(())
+}
+
+pub trait NativeRegistryWriter {
+    fn set_value(
+        &self,
+        hive: RegistryHive,
+        path: &str,
+        name: &str,
+        data: &RegistryValueData,
+    ) -> RegistryResult<()>;
+
+    fn delete_value(&self, hive: RegistryHive, path: &str, name: &str) -> RegistryResult<()>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RegistryWriteOp {
+    Set {
+        hive: RegistryHive,
+        key_path: String,
+        name: String,
+        data: RegistryValueData,
+    },
+    Delete {
+        hive: RegistryHive,
+        key_path: String,
+        name: String,
+    },
+}
+
+pub fn apply_registry_write(
+    writer: &impl NativeRegistryWriter,
+    op: &RegistryWriteOp,
+) -> RegistryResult<()> {
+    match op {
+        RegistryWriteOp::Set {
+            hive,
+            key_path,
+            name,
+            data,
+        } => writer.set_value(*hive, key_path, name, data),
+        RegistryWriteOp::Delete {
+            hive,
+            key_path,
+            name,
+        } => writer.delete_value(*hive, key_path, name),
+    }
+}
+
+/// Parse UI/command kind+data (as shown in Registry Compare) back into a typed value.
+pub fn registry_value_data_from_kind(kind: &str, data: &str) -> RegistryResult<RegistryValueData> {
+    match kind.trim().to_ascii_uppercase().as_str() {
+        "REG_SZ" | "SZ" | "STRING" => Ok(RegistryValueData::String(data.to_owned())),
+        "REG_EXPAND_SZ" | "EXPAND_SZ" => Ok(RegistryValueData::ExpandString(data.to_owned())),
+        "REG_DWORD" | "DWORD" => parse_dword(data).map(RegistryValueData::Dword),
+        "REG_QWORD" | "QWORD" => parse_qword(data).map(RegistryValueData::Qword),
+        "REG_BINARY" | "BINARY" | "HEX" => parse_binary(data).map(RegistryValueData::Binary),
+        "REG_MULTI_SZ" | "MULTI_SZ" => Ok(RegistryValueData::MultiString(
+            data.split([';', '\n'])
+                .map(str::trim)
+                .filter(|part| !part.is_empty())
+                .map(str::to_owned)
+                .collect(),
+        )),
+        "REG_NONE" | "NONE" => Ok(RegistryValueData::None),
+        _ => Err(RegistryError::Parse(format!(
+            "unsupported registry value kind: {kind}"
+        ))),
+    }
+}
+
+fn parse_dword(data: &str) -> RegistryResult<u32> {
+    let trimmed = data.trim();
+    if let Some(hex) = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+    {
+        return u32::from_str_radix(hex, 16)
+            .map_err(|_| RegistryError::Parse(format!("invalid dword value: {data}")));
+    }
+
+    trimmed
+        .parse()
+        .map_err(|_| RegistryError::Parse(format!("invalid dword value: {data}")))
+}
+
+fn parse_qword(data: &str) -> RegistryResult<u64> {
+    let trimmed = data.trim();
+    if let Some(hex) = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+    {
+        return u64::from_str_radix(hex, 16)
+            .map_err(|_| RegistryError::Parse(format!("invalid qword value: {data}")));
+    }
+
+    trimmed
+        .parse()
+        .map_err(|_| RegistryError::Parse(format!("invalid qword value: {data}")))
+}
+
+fn parse_binary(data: &str) -> RegistryResult<Vec<u8>> {
+    let mut bytes = Vec::new();
+    for part in data
+        .split([' ', ',', '-'])
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+    {
+        bytes.push(
+            u8::from_str_radix(part, 16)
+                .map_err(|_| RegistryError::Parse(format!("invalid hex byte: {part}")))?,
+        );
+    }
+
+    Ok(bytes)
+}
+
+#[cfg(windows)]
+fn live_value_name(name: &str) -> &str {
+    if name == "@" || name.eq_ignore_ascii_case("(Default)") {
+        ""
+    } else {
+        name
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct MemoryNativeRegistryWriter {
+    values: std::cell::RefCell<BTreeMap<String, RegistryValue>>,
+}
+
+impl MemoryNativeRegistryWriter {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn get_value(
+        &self,
+        hive: RegistryHive,
+        path: impl AsRef<str>,
+        name: &str,
+    ) -> Option<RegistryValue> {
+        let path = normalize_registry_path(path.as_ref());
+        self.values
+            .borrow()
+            .get(&registry_value_id(hive, &path, name))
+            .cloned()
+    }
+}
+
+impl NativeRegistryWriter for MemoryNativeRegistryWriter {
+    fn set_value(
+        &self,
+        hive: RegistryHive,
+        path: &str,
+        name: &str,
+        data: &RegistryValueData,
+    ) -> RegistryResult<()> {
+        let path = normalize_registry_path(path);
+        let value = RegistryValue::new(hive, &path, name, data.clone());
+        self.values.borrow_mut().insert(
+            registry_value_id(value.hive, &value.key_path, &value.name),
+            value,
+        );
+        Ok(())
+    }
+
+    fn delete_value(&self, hive: RegistryHive, path: &str, name: &str) -> RegistryResult<()> {
+        let path = normalize_registry_path(path);
+        self.values
+            .borrow_mut()
+            .remove(&registry_value_id(hive, &path, name));
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+#[derive(Debug, Clone, Default)]
+pub struct WindowsNativeRegistryWriter;
+
+#[cfg(windows)]
+fn predefined_key(hive: RegistryHive) -> winreg::RegKey {
+    let hkey = match hive {
+        RegistryHive::ClassesRoot => winreg::enums::HKEY_CLASSES_ROOT,
+        RegistryHive::CurrentUser => winreg::enums::HKEY_CURRENT_USER,
+        RegistryHive::LocalMachine => winreg::enums::HKEY_LOCAL_MACHINE,
+        RegistryHive::Users => winreg::enums::HKEY_USERS,
+        RegistryHive::CurrentConfig => winreg::enums::HKEY_CURRENT_CONFIG,
+    };
+    winreg::RegKey::predef(hkey)
+}
+
+#[cfg(windows)]
+fn windows_key_path(path: &str) -> String {
+    normalize_registry_path(path).replace('/', "\\")
+}
+
+#[cfg(windows)]
+fn utf16_null_bytes(text: &str) -> Vec<u8> {
+    text.encode_utf16()
+        .chain(std::iter::once(0))
+        .flat_map(u16::to_le_bytes)
+        .collect()
+}
+
+#[cfg(windows)]
+fn registry_data_to_reg_value(data: &RegistryValueData) -> winreg::RegValue {
+    match data {
+        RegistryValueData::String(text) => winreg::RegValue {
+            bytes: utf16_null_bytes(text),
+            vtype: winreg::enums::REG_SZ,
+        },
+        RegistryValueData::ExpandString(text) => winreg::RegValue {
+            bytes: utf16_null_bytes(text),
+            vtype: winreg::enums::REG_EXPAND_SZ,
+        },
+        RegistryValueData::Dword(value) => winreg::RegValue {
+            bytes: value.to_le_bytes().to_vec(),
+            vtype: winreg::enums::REG_DWORD,
+        },
+        RegistryValueData::Qword(value) => winreg::RegValue {
+            bytes: value.to_le_bytes().to_vec(),
+            vtype: winreg::enums::REG_QWORD,
+        },
+        RegistryValueData::Binary(bytes) => winreg::RegValue {
+            bytes: bytes.clone(),
+            vtype: winreg::enums::REG_BINARY,
+        },
+        RegistryValueData::MultiString(values) => {
+            let mut bytes = Vec::new();
+            for value in values {
+                bytes.extend(utf16_null_bytes(value));
+            }
+            bytes.extend(utf16_null_bytes(""));
+            winreg::RegValue {
+                bytes,
+                vtype: winreg::enums::REG_MULTI_SZ,
+            }
+        }
+        RegistryValueData::None => winreg::RegValue {
+            bytes: Vec::new(),
+            vtype: winreg::enums::REG_NONE,
+        },
+    }
+}
+
+#[cfg(windows)]
+impl NativeRegistryWriter for WindowsNativeRegistryWriter {
+    fn set_value(
+        &self,
+        hive: RegistryHive,
+        path: &str,
+        name: &str,
+        data: &RegistryValueData,
+    ) -> RegistryResult<()> {
+        let root = predefined_key(hive);
+        let win_path = windows_key_path(path);
+        let key = if win_path.is_empty() {
+            root
+        } else {
+            root.create_subkey_with_flags(&win_path, winreg::enums::KEY_WRITE)
+                .map(|(key, _)| key)
+                .map_err(|error| RegistryError::Backend(error.to_string()))?
+        };
+        key.set_raw_value(live_value_name(name), &registry_data_to_reg_value(data))
+            .map_err(|error| RegistryError::Backend(error.to_string()))
+    }
+
+    fn delete_value(&self, hive: RegistryHive, path: &str, name: &str) -> RegistryResult<()> {
+        let root = predefined_key(hive);
+        let win_path = windows_key_path(path);
+        let key = if win_path.is_empty() {
+            root
+        } else {
+            match root.open_subkey_with_flags(&win_path, winreg::enums::KEY_SET_VALUE) {
+                Ok(key) => key,
+                Err(_) => return Ok(()),
+            }
+        };
+        match key.delete_value(live_value_name(name)) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(RegistryError::Backend(error.to_string())),
+        }
+    }
+}
+
+/// Apply a set or delete against the live Windows registry. Non-Windows hosts
+/// return a clear unsupported error so CI stays honest.
+pub fn apply_live_registry_write(op: &RegistryWriteOp) -> RegistryResult<()> {
+    #[cfg(windows)]
+    {
+        apply_registry_write(&WindowsNativeRegistryWriter, op)
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = op;
+        Err(RegistryError::Backend(
+            "Live registry write is available on Windows only".to_owned(),
+        ))
+    }
+}
+
+pub fn live_registry_write_supported() -> bool {
+    cfg!(windows)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registry_document_stores_keys_and_values_by_normalized_path() {
+        let document = RegistryDocument::new("machine")
+            .with_key(RegistryKey::new(
+                RegistryHive::LocalMachine,
+                "Software\\OpenDiff",
+            ))
+            .with_value(
+                RegistryValue::new(
+                    RegistryHive::LocalMachine,
+                    "Software/OpenDiff",
+                    "InstallPath",
+                    RegistryValueData::String("C:/Program Files/OpenDiff".to_owned()),
+                )
+                .with_modified_at_ms(1_700_000_000_000),
+            );
+
+        let key = document
+            .key(RegistryHive::LocalMachine, "Software/OpenDiff")
+            .unwrap();
+        let value = document
+            .value(
+                RegistryHive::LocalMachine,
+                "Software/OpenDiff",
+                "InstallPath",
+            )
+            .unwrap();
+
+        assert_eq!(key.path, "Software/OpenDiff");
+        assert_eq!(value.name, "InstallPath");
+        assert_eq!(
+            value.data,
+            RegistryValueData::String("C:/Program Files/OpenDiff".to_owned())
+        );
+        assert_eq!(value.modified_at_ms, Some(1_700_000_000_000));
+    }
+
+    #[test]
+    fn registry_document_lists_direct_child_keys_and_values() {
+        let document = RegistryDocument::new("machine")
+            .with_key(RegistryKey::new(RegistryHive::CurrentUser, "Software"))
+            .with_key(RegistryKey::new(
+                RegistryHive::CurrentUser,
+                "Software/OpenDiff",
+            ))
+            .with_key(RegistryKey::new(
+                RegistryHive::CurrentUser,
+                "Software/OpenDiff/Settings",
+            ))
+            .with_value(RegistryValue::new(
+                RegistryHive::CurrentUser,
+                "Software/OpenDiff",
+                "Theme",
+                RegistryValueData::String("dark".to_owned()),
+            ));
+
+        let children = document
+            .child_keys(RegistryHive::CurrentUser, "Software")
+            .unwrap();
+        let values = document
+            .values(RegistryHive::CurrentUser, "Software/OpenDiff")
+            .unwrap();
+
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].path, "Software/OpenDiff");
+        assert_eq!(values.len(), 1);
+        assert_eq!(values[0].name, "Theme");
+    }
+
+    #[test]
+    fn registry_document_reports_missing_keys() {
+        let document = RegistryDocument::new("machine");
+
+        let error = document
+            .key(RegistryHive::LocalMachine, "Software/Missing")
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            RegistryError::KeyNotFound(path) if path == "HKLM/Software/Missing"
+        ));
+    }
+
+    #[test]
+    fn parses_reg_files_into_registry_documents() {
+        let document = RegFileParser::parse(
+            "fixture.reg",
+            r#"Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\Software\OpenDiff]
+@="Default Label"
+"InstallPath"="C:\\Program Files\\OpenDiff"
+"Enabled"=dword:00000001
+"Payload"=hex:01,02,0a
+
+[HKEY_CURRENT_USER\Software\OpenDiff\Settings]
+"Theme"="dark"
+"Removed"=-
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            document
+                .value(
+                    RegistryHive::LocalMachine,
+                    "Software/OpenDiff",
+                    "InstallPath"
+                )
+                .unwrap()
+                .data,
+            RegistryValueData::String("C:\\Program Files\\OpenDiff".to_owned())
+        );
+        assert_eq!(
+            document
+                .value(RegistryHive::LocalMachine, "Software/OpenDiff", "Enabled")
+                .unwrap()
+                .data,
+            RegistryValueData::Dword(1)
+        );
+        assert_eq!(
+            document
+                .value(RegistryHive::LocalMachine, "Software/OpenDiff", "Payload")
+                .unwrap()
+                .data,
+            RegistryValueData::Binary(vec![0x01, 0x02, 0x0a])
+        );
+        assert_eq!(
+            document
+                .value(
+                    RegistryHive::CurrentUser,
+                    "Software/OpenDiff/Settings",
+                    "Theme"
+                )
+                .unwrap()
+                .data,
+            RegistryValueData::String("dark".to_owned())
+        );
+        assert!(matches!(
+            document.value(
+                RegistryHive::CurrentUser,
+                "Software/OpenDiff/Settings",
+                "Removed"
+            ),
+            Err(RegistryError::ValueNotFound(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_reg_files_without_supported_header() {
+        let error =
+            RegFileParser::parse("broken.reg", "[HKEY_CURRENT_USER\\Software]").unwrap_err();
+
+        assert!(matches!(error, RegistryError::Parse(_)));
+    }
+
+    #[test]
+    fn native_registry_loader_builds_document_from_reader() {
+        let reader = MemoryNativeRegistryReader::new()
+            .with_key(RegistryHive::CurrentUser, "Software")
+            .with_key(RegistryHive::CurrentUser, "Software/OpenDiff")
+            .with_value(RegistryValue::new(
+                RegistryHive::CurrentUser,
+                "Software/OpenDiff",
+                "Theme",
+                RegistryValueData::String("dark".to_owned()),
+            ));
+
+        let document = NativeRegistryLoader::load_subtree(
+            "current-user",
+            &reader,
+            RegistryHive::CurrentUser,
+            "Software",
+        )
+        .unwrap();
+
+        assert_eq!(
+            document
+                .value(RegistryHive::CurrentUser, "Software/OpenDiff", "Theme")
+                .unwrap()
+                .data,
+            RegistryValueData::String("dark".to_owned())
+        );
+    }
+
+    #[test]
+    fn native_registry_loader_reports_missing_root_keys() {
+        let reader = MemoryNativeRegistryReader::new();
+
+        let error = NativeRegistryLoader::load_subtree(
+            "current-user",
+            &reader,
+            RegistryHive::CurrentUser,
+            "Software/Missing",
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            RegistryError::KeyNotFound(path) if path == "HKCU/Software/Missing"
+        ));
+    }
+
+    #[test]
+    fn parse_registry_key_path_accepts_short_and_long_hive_names() {
+        let key = parse_registry_key_path(r"HKCU\Software\OpenDiff").unwrap();
+        assert_eq!(key.hive, RegistryHive::CurrentUser);
+        assert_eq!(key.path, "Software/OpenDiff");
+
+        let root = parse_registry_key_path("HKLM").unwrap();
+        assert_eq!(root.hive, RegistryHive::LocalMachine);
+        assert_eq!(root.path, "");
+    }
+
+    #[test]
+    fn hive_file_loader_reads_synthetic_regf_bytes() {
+        let mut hive = regf_rs::Hive::new_empty("ROOT");
+        hive.create_key(r"Software\OpenDiff").unwrap();
+        hive.set_value(
+            r"Software\OpenDiff",
+            "Theme",
+            regf_rs::RegValue::Sz("dark".to_owned()),
+        )
+        .unwrap();
+        let bytes = hive.to_bytes();
+
+        let document =
+            HiveFileLoader::load_bytes("SOFTWARE", bytes, RegistryHive::LocalMachine, "Software")
+                .unwrap();
+
+        assert_eq!(
+            document
+                .value(RegistryHive::LocalMachine, "Software/OpenDiff", "Theme")
+                .unwrap()
+                .data,
+            RegistryValueData::String("dark".to_owned())
+        );
+        assert!(document.key(RegistryHive::LocalMachine, "Software").is_ok());
+        assert_eq!(
+            infer_hive_for_file_name("NTUSER.DAT"),
+            RegistryHive::CurrentUser
+        );
+        assert_eq!(
+            infer_hive_for_file_name("SOFTWARE"),
+            RegistryHive::LocalMachine
+        );
+    }
+
+    #[test]
+    fn hive_file_loader_rejects_non_regf_bytes() {
+        let error = HiveFileLoader::load_bytes(
+            "broken.dat",
+            b"not-a-hive".to_vec(),
+            RegistryHive::LocalMachine,
+            "",
+        )
+        .unwrap_err();
+        assert!(matches!(error, RegistryError::Parse(_)));
+    }
+
+    #[test]
+    fn memory_registry_writer_sets_and_deletes_values() {
+        let writer = MemoryNativeRegistryWriter::new();
+        apply_registry_write(
+            &writer,
+            &RegistryWriteOp::Set {
+                hive: RegistryHive::CurrentUser,
+                key_path: "Software/OpenDiff".to_owned(),
+                name: "Theme".to_owned(),
+                data: RegistryValueData::String("dark".to_owned()),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            writer
+                .get_value(RegistryHive::CurrentUser, "Software/OpenDiff", "Theme")
+                .unwrap()
+                .data,
+            RegistryValueData::String("dark".to_owned())
+        );
+
+        apply_registry_write(
+            &writer,
+            &RegistryWriteOp::Delete {
+                hive: RegistryHive::CurrentUser,
+                key_path: "Software/OpenDiff".to_owned(),
+                name: "Theme".to_owned(),
+            },
+        )
+        .unwrap();
+        assert!(writer
+            .get_value(RegistryHive::CurrentUser, "Software/OpenDiff", "Theme")
+            .is_none());
+    }
+
+    #[test]
+    fn registry_value_data_from_kind_parses_common_types() {
+        assert_eq!(
+            registry_value_data_from_kind("REG_SZ", "dark").unwrap(),
+            RegistryValueData::String("dark".to_owned())
+        );
+        assert_eq!(
+            registry_value_data_from_kind("REG_DWORD", "0x0000000a").unwrap(),
+            RegistryValueData::Dword(10)
+        );
+        assert_eq!(
+            registry_value_data_from_kind("REG_BINARY", "01,0a,ff").unwrap(),
+            RegistryValueData::Binary(vec![0x01, 0x0a, 0xff])
+        );
+        assert_eq!(
+            registry_value_data_from_kind("REG_MULTI_SZ", "one; two").unwrap(),
+            RegistryValueData::MultiString(vec!["one".to_owned(), "two".to_owned()])
+        );
+    }
+
+    #[test]
+    fn apply_live_registry_write_reports_non_windows_honestly() {
+        #[cfg(not(windows))]
+        {
+            let error = apply_live_registry_write(&RegistryWriteOp::Set {
+                hive: RegistryHive::CurrentUser,
+                key_path: "Software/OpenDiff".to_owned(),
+                name: "Theme".to_owned(),
+                data: RegistryValueData::String("dark".to_owned()),
+            })
+            .unwrap_err();
+            assert!(
+                matches!(error, RegistryError::Backend(message) if message.contains("Windows"))
+            );
+            assert!(!live_registry_write_supported());
+        }
+    }
+}

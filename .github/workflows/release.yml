@@ -1,0 +1,530 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tenant_snapshot_retention_days:
+        description: 租户构建快照保留期（天）
+        required: false
+        default: '1'
+        type: string
+      installer_artifact_retention_days:
+        description: 三端安装包 Artifact 保留期（天）
+        required: false
+        default: '1'
+        type: string
+      initial_evidence_retention_days:
+        description: 初始发布证据保留期（天）
+        required: false
+        default: '1'
+        type: string
+      keep_final_evidence:
+        description: 保持最终证据（GitHub Release 安装包，勿删）
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TENANT_SNAPSHOT_RETENTION_DAYS: ${{ inputs.tenant_snapshot_retention_days || '1' }}
+  INSTALLER_ARTIFACT_RETENTION_DAYS: ${{ inputs.installer_artifact_retention_days || '1' }}
+  INITIAL_EVIDENCE_RETENTION_DAYS: ${{ inputs.initial_evidence_retention_days || '1' }}
+  KEEP_FINAL_EVIDENCE: ${{ inputs.keep_final_evidence != false }}
+
+jobs:
+  prune-storage:
+    name: Reclaim Actions storage
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+      - name: Prune stale caches and leftover workflow artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          node <<'NODE'
+          const { execFileSync } = require('child_process')
+
+          const repo = process.env.GH_REPO
+          const keepFinalEvidence = process.env.KEEP_FINAL_EVIDENCE !== 'false'
+          const snapshotDays = parseDays(process.env.TENANT_SNAPSHOT_RETENTION_DAYS, 1)
+          const installerDays = parseDays(process.env.INSTALLER_ARTIFACT_RETENTION_DAYS, 1)
+          const evidenceDays = parseDays(process.env.INITIAL_EVIDENCE_RETENTION_DAYS, 1)
+          const now = Date.now()
+
+          console.log('Prune policy:')
+          console.log(`  tenant_snapshot_retention_days=${snapshotDays}`)
+          console.log(`  installer_artifact_retention_days=${installerDays}`)
+          console.log(`  initial_evidence_retention_days=${evidenceDays}`)
+          console.log(`  keep_final_evidence=${keepFinalEvidence}`)
+          console.log('  GitHub Release assets are never deleted or expired by this job.')
+
+          const caches = listAll(`repos/${repo}/actions/caches`, 'actions_caches')
+          const artifacts = listAll(`repos/${repo}/actions/artifacts`, 'artifacts')
+
+          console.log(`Found ${caches.length} Actions cache(s) and ${artifacts.length} workflow artifact(s).`)
+
+          if (caches.length === 0) {
+            console.log('No Actions caches to evaluate.')
+          }
+          if (artifacts.length === 0) {
+            console.log('No workflow artifacts to evaluate.')
+          }
+
+          const cacheDeletes = []
+          const rustKeep = new Map()
+
+          for (const cache of caches) {
+            const reasons = []
+            const ref = cache.ref || ''
+            const key = cache.key || ''
+
+            if (ref.startsWith('refs/pull/')) {
+              reasons.push('pull-request')
+            }
+            if (isOlderThan(cacheAgeMs(cache), snapshotDays)) {
+              reasons.push(`older-than-${snapshotDays}d`)
+            }
+
+            if (isRustCache(key) && isDefaultBranch(ref) && !reasons.length) {
+              const family = rustFamily(key)
+              const current = rustKeep.get(family)
+              const stamp = cacheStamp(cache)
+              if (!current || stamp > current.stamp) {
+                if (current) {
+                  current.cache._extraRust = family
+                }
+                rustKeep.set(family, { cache, stamp })
+              } else {
+                cache._extraRust = family
+              }
+            }
+
+            if (reasons.length) {
+              cacheDeletes.push({ cache, reasons })
+            }
+          }
+
+          for (const cache of caches) {
+            if (!cache._extraRust) continue
+            if (cacheDeletes.some((item) => item.cache.id === cache.id)) continue
+            cacheDeletes.push({
+              cache,
+              reasons: [`extra-rust:${cache._extraRust}`],
+            })
+          }
+
+          const artifactDeletes = []
+          for (const artifact of artifacts) {
+            const name = artifact.name || ''
+            const reasons = []
+            if (artifact.expired) {
+              reasons.push('expired')
+            }
+            if (isInstallerArtifact(name) && isOlderThan(Date.parse(artifact.created_at || ''), installerDays)) {
+              reasons.push(`leftover-installer-older-than-${installerDays}d`)
+            } else if (isEvidenceArtifact(name) && isOlderThan(Date.parse(artifact.created_at || ''), evidenceDays)) {
+              reasons.push(`leftover-evidence-older-than-${evidenceDays}d`)
+            } else if (
+              !isInstallerArtifact(name) &&
+              !isEvidenceArtifact(name) &&
+              isOlderThan(Date.parse(artifact.created_at || ''), Math.min(installerDays, evidenceDays))
+            ) {
+              reasons.push('leftover-workflow-artifact')
+            }
+            if (reasons.length) {
+              artifactDeletes.push({ artifact, reasons })
+            }
+          }
+
+          let deletedCaches = 0
+          let deletedCacheBytes = 0
+          let failedCaches = 0
+          for (const { cache, reasons } of cacheDeletes) {
+            const ok = tryDelete('cache', cache.id)
+            const size = Number(cache.size_in_bytes) || 0
+            if (ok) {
+              deletedCaches += 1
+              deletedCacheBytes += size
+              console.log(`Deleted cache id=${cache.id} key=${cache.key} ref=${cache.ref} size=${formatBytes(size)} reason=${reasons.join(',')}`)
+            } else {
+              failedCaches += 1
+            }
+          }
+
+          let deletedArtifacts = 0
+          let deletedArtifactBytes = 0
+          let failedArtifacts = 0
+          for (const { artifact, reasons } of artifactDeletes) {
+            const ok = tryDelete('artifact', artifact.id)
+            const size = Number(artifact.size_in_bytes) || 0
+            if (ok) {
+              deletedArtifacts += 1
+              deletedArtifactBytes += size
+              console.log(`Deleted workflow artifact id=${artifact.id} name=${artifact.name} size=${formatBytes(size)} reason=${reasons.join(',')}`)
+            } else {
+              failedArtifacts += 1
+            }
+          }
+
+          if (deletedCaches === 0 && cacheDeletes.length === 0) {
+            console.log('No stale Actions caches deleted.')
+          }
+          if (deletedArtifacts === 0 && artifactDeletes.length === 0) {
+            console.log('No leftover workflow artifacts deleted.')
+          }
+
+          const usage = ghJson(['api', `repos/${repo}/actions/cache/usage`]) || {}
+          const remainingArtifacts = listAll(`repos/${repo}/actions/artifacts`, 'artifacts')
+          const remainingArtifactBytes = remainingArtifacts.reduce((sum, item) => sum + (Number(item.size_in_bytes) || 0), 0)
+
+          console.log('---')
+          console.log(`Deleted caches: ${deletedCaches} (${formatBytes(deletedCacheBytes)}); failed: ${failedCaches}`)
+          console.log(`Deleted workflow artifacts: ${deletedArtifacts} (${formatBytes(deletedArtifactBytes)}); failed: ${failedArtifacts}`)
+          console.log(`Remaining caches: ${usage.active_caches_count ?? remainingCacheCount()} (${formatBytes(usage.active_caches_size_in_bytes ?? 0)})`)
+          console.log(`Remaining workflow artifacts: ${remainingArtifacts.length} (${formatBytes(remainingArtifactBytes)})`)
+          console.log(
+            keepFinalEvidence
+              ? 'keep_final_evidence=true: GitHub Release assets were not listed, expired, drafted, or deleted.'
+              : 'keep_final_evidence=false: still refusing to delete GitHub Release assets; only workflow artifacts are pruned.',
+          )
+
+          function remainingCacheCount() {
+            try {
+              return listAll(`repos/${repo}/actions/caches`, 'actions_caches').length
+            } catch {
+              return '?'
+            }
+          }
+
+          function parseDays(value, fallback) {
+            const parsed = Number.parseInt(String(value ?? ''), 10)
+            return Number.isFinite(parsed) && parsed >= 1 ? parsed : fallback
+          }
+
+          function isOlderThan(timestamp, days) {
+            if (!Number.isFinite(timestamp) || timestamp <= 0) return false
+            return now - timestamp > days * 24 * 60 * 60 * 1000
+          }
+
+          function cacheAgeMs(cache) {
+            const accessed = Date.parse(cache.last_accessed_at || '')
+            if (Number.isFinite(accessed)) return accessed
+            return Date.parse(cache.created_at || '')
+          }
+
+          function cacheStamp(cache) {
+            const created = Date.parse(cache.created_at || '')
+            const accessed = Date.parse(cache.last_accessed_at || '')
+            const stamps = [created, accessed, Number(cache.id) || 0].filter(Number.isFinite)
+            return stamps.length ? Math.max(...stamps) : 0
+          }
+
+          function isDefaultBranch(ref) {
+            return ref === 'refs/heads/master' || ref === 'refs/heads/main'
+          }
+
+          function isRustCache(key) {
+            return /rust|cargo|\brs[-_]|-rs-/i.test(key)
+          }
+
+          function rustFamily(key) {
+            const os = (key.match(/Linux|Windows|macOS|macos|win32|darwin|ubuntu/i) || ['unknown-os'])[0].toLowerCase()
+            const job = key.match(/publish-tauri|quality|create-release|prune-storage/i)
+            if (job) return `${os}|${job[0].toLowerCase()}`
+            const stripped = key.replace(/-[a-f0-9]{8,}$/ig, '')
+            return `${os}|${stripped || 'rust'}`
+          }
+
+          function isInstallerArtifact(name) {
+            return /\.(dmg|deb|rpm|msi|appimage|exe|zip)$/i.test(name) ||
+              /installer|tauri-bundle|opendiff|nsis|setup-bundle|appbundle|portable/i.test(name)
+          }
+
+          function isEvidenceArtifact(name) {
+            return /evidence|checksum|sha256|run-metadata|platforms|release-evidence/i.test(name)
+          }
+
+          function formatBytes(bytes) {
+            const value = Number(bytes) || 0
+            if (value < 1024) return `${value} B`
+            const units = ['KiB', 'MiB', 'GiB', 'TiB']
+            let next = value
+            let unit = 'B'
+            for (const candidate of units) {
+              if (next < 1024) break
+              next /= 1024
+              unit = candidate
+            }
+            return `${next.toFixed(next >= 10 || unit === 'B' ? 1 : 2)} ${unit}`
+          }
+
+          function ghJson(args) {
+            const output = execFileSync('gh', args, {
+              encoding: 'utf8',
+              maxBuffer: 64 * 1024 * 1024,
+            })
+            return output.trim() ? JSON.parse(output) : null
+          }
+
+          function listAll(path, arrayKey) {
+            const items = []
+            for (let page = 1; page <= 50; page += 1) {
+              const separator = path.includes('?') ? '&' : '?'
+              const data = ghJson(['api', `${path}${separator}per_page=100&page=${page}`])
+              const batch = (data && data[arrayKey]) || []
+              items.push(...batch)
+              if (batch.length < 100) break
+            }
+            return items
+          }
+
+          function tryDelete(kind, id) {
+            try {
+              if (kind === 'cache') {
+                execFileSync('gh', ['cache', 'delete', String(id)], {
+                  encoding: 'utf8',
+                  stdio: ['ignore', 'pipe', 'pipe'],
+                })
+              } else {
+                execFileSync('gh', ['api', '-X', 'DELETE', `repos/${repo}/actions/artifacts/${id}`], {
+                  encoding: 'utf8',
+                  stdio: ['ignore', 'pipe', 'pipe'],
+                })
+              }
+              return true
+            } catch (error) {
+              const detail = error.stderr ? String(error.stderr).trim() : error.message
+              console.warn(`Failed to delete ${kind} ${id}: ${detail}`)
+              return false
+            }
+          }
+          NODE
+
+  create-release:
+    name: Create release
+    needs: prune-storage
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+
+    steps:
+      - name: Create or find release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          api="https://api.github.com/repos/${GH_REPO}/releases"
+          auth_header="Authorization: Bearer ${GH_TOKEN}"
+          accept_header="Accept: application/vnd.github+json"
+          version_header="X-GitHub-Api-Version: 2022-11-28"
+
+          node <<'NODE' > release-payload.json
+          const tag = process.env.TAG_NAME
+          const prerelease = /-(alpha|beta|rc)/.test(tag)
+
+          process.stdout.write(JSON.stringify({
+            tag_name: tag,
+            name: `OpenDiff ${tag}`,
+            body: 'See the assets below to download and install OpenDiff for your platform.',
+            draft: false,
+            prerelease,
+            generate_release_notes: true,
+          }))
+          NODE
+
+          status="$(
+            curl --silent --show-error \
+              --output release.json \
+              --write-out "%{http_code}" \
+              --request POST \
+              --header "${auth_header}" \
+              --header "${accept_header}" \
+              --header "${version_header}" \
+              --header "Content-Type: application/json" \
+              --data @release-payload.json \
+              "${api}"
+          )"
+
+          if [[ "${status}" == "422" ]]; then
+            curl --silent --show-error \
+              --output releases.json \
+              --header "${auth_header}" \
+              --header "${accept_header}" \
+              --header "${version_header}" \
+              "${api}?per_page=100"
+
+            node <<'NODE' > release.json
+          const fs = require('fs')
+          const tag = process.env.TAG_NAME
+          const releases = JSON.parse(fs.readFileSync('releases.json', 'utf8'))
+          const release = releases.find((item) => item.tag_name === tag && !item.draft)
+            ?? releases.find((item) => item.tag_name === tag)
+
+          if (!release) {
+            console.error(`No existing release found for ${tag}`)
+            process.exit(1)
+          }
+
+          process.stdout.write(JSON.stringify(release))
+          NODE
+          elif [[ "${status}" != "201" ]]; then
+            cat release.json
+            exit 1
+          fi
+
+          release_id="$(node -e "const fs = require('fs'); const release = JSON.parse(fs.readFileSync('release.json', 'utf8')); console.log(release.id || '')")"
+          if [[ -z "${release_id}" ]]; then
+            cat release.json
+            exit 1
+          fi
+
+          echo "release_id=${release_id}" >> "${GITHUB_OUTPUT}"
+
+      - name: Write initial release evidence
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.release_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p initial-evidence
+          node <<'NODE'
+          const fs = require('fs')
+          const platforms = [
+            'macos-aarch64-apple-darwin',
+            'macos-15-intel',
+            'linux-ubuntu-22.04',
+            'windows-latest',
+          ]
+          const evidence = {
+            run_url: process.env.RUN_URL,
+            run_id: process.env.GITHUB_RUN_ID,
+            repository: process.env.GITHUB_REPOSITORY,
+            tag: process.env.TAG_NAME,
+            release_id: process.env.RELEASE_ID,
+            platforms,
+            keep_final_evidence: process.env.KEEP_FINAL_EVIDENCE !== 'false',
+            note: 'Installer binaries stay on the GitHub Release. This workflow artifact is short-lived evidence only.',
+          }
+          fs.writeFileSync('initial-evidence/run-metadata.json', `${JSON.stringify(evidence, null, 2)}\n`)
+          fs.writeFileSync('initial-evidence/run-url.txt', `${process.env.RUN_URL}\n`)
+          fs.writeFileSync('initial-evidence/platforms.txt', `${platforms.join('\n')}\n`)
+          NODE
+          (cd initial-evidence && sha256sum run-metadata.json run-url.txt platforms.txt > SHA256SUMS)
+
+      - name: Upload initial release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: initial-release-evidence
+          path: initial-evidence/
+          retention-days: ${{ fromJSON(env.INITIAL_EVIDENCE_RETENTION_DAYS) }}
+          if-no-files-found: error
+
+  publish-tauri:
+    name: Build and publish (${{ matrix.platform }})
+    needs:
+      - prune-storage
+      - create-release
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin
+            rust-target: aarch64-apple-darwin
+          - platform: macos-15-intel
+            args: ''
+            rust-target: ''
+          - platform: ubuntu-22.04
+            args: ''
+            rust-target: ''
+          - platform: windows-latest
+            args: ''
+            rust-target: ''
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.0.10
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.rust-target }}
+          cache-workspaces: src-tauri
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm
+
+      - name: Install frontend dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Build and upload Tauri bundles
+        uses: tauri-apps/tauri-action@action-v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: ${{ github.ref_name }}
+          releaseName: OpenDiff ${{ github.ref_name }}
+          releaseBody: |
+            See the assets below to download and install OpenDiff for your platform.
+          generateReleaseNotes: true
+          releaseDraft: false
+          prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+          tauriScript: corepack pnpm tauri
+          args: ${{ matrix.args }}
+          releaseAssetNamePattern: '[name]_[version]_[platform]_[arch][setup][ext]'
+          retryAttempts: 2
+          # Installers go only to the GitHub Release. Do not set uploadWorkflowArtifacts
+          # unless those Actions artifacts also get installer_artifact_retention_days.
+
+      - name: Build and upload Windows portable zip
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $zip = & pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/windows/package-portable.ps1 -SkipBuild
+          if (-not (Test-Path -LiteralPath $zip)) { throw "Portable zip missing: $zip" }
+          gh release upload $env:GITHUB_REF_NAME $zip --clobber --repo $env:GITHUB_REPOSITORY
+          Write-Host "Uploaded $zip"

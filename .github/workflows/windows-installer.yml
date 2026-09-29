@@ -1,0 +1,48 @@
+name: Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [windows-installer]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v6.0.10
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: corepack enable
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          cache-workspaces: src-tauri
+      - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm test:unit
+      - run: corepack pnpm tauri build
+      - name: Package portable zip
+        shell: pwsh
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/windows/package-portable.ps1 -SkipBuild
+      - name: Collect outputs
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe out/
+          Copy-Item src-tauri/target/release/bundle/msi/*.msi out/
+          Copy-Item src-tauri/target/release/bundle/portable/*.zip out/
+          Get-ChildItem out -File | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } | Set-Content out/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenDiff-windows
+          path: out/
+          if-no-files-found: error

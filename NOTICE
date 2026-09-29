@@ -1,0 +1,18 @@
+DeepServer
+Copyright 2026 Demonad112
+
+This product combines two separately licensed programs, shipped together in one installer.
+
+1. The DeepServer application (everything outside native/)
+   Based on Open Diff, https://github.com/kygo8/open-diff
+   Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+2. The DeepServer disk-usage engine (native/diskusage/)
+   Based on WinDirStat 2.x, https://github.com/windirstat/windirstat,
+   through the altWinDirStat fork, https://github.com/Demonad112/altWinDirStat
+   Licensed under the GNU General Public License, version 2 or later
+   (see native/diskusage/LICENSE.md).
+   Its complete corresponding source code is in the native/diskusage/
+   folder of https://github.com/Demonad112/stunning-doodler-Reviewed.
+
+The engine runs as its own executable; it isn't linked into the application.

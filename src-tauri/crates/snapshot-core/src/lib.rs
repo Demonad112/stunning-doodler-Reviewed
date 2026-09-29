@@ -1,0 +1,686 @@
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::Path;
+use std::time::UNIX_EPOCH;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotMetadata {
+    pub name: String,
+    pub source_root: Option<String>,
+    pub created_at_ms: Option<u128>,
+}
+
+impl SnapshotMetadata {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            source_root: None,
+            created_at_ms: None,
+        }
+    }
+
+    pub fn with_source_root(mut self, source_root: impl Into<String>) -> Self {
+        self.source_root = Some(source_root.into());
+
+        self
+    }
+
+    pub fn with_created_at_ms(mut self, created_at_ms: u128) -> Self {
+        self.created_at_ms = Some(created_at_ms);
+
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotEntry {
+    pub path: String,
+    pub kind: SnapshotEntryKind,
+    pub size: u64,
+    pub modified_at_ms: Option<u128>,
+    pub content_hash: Option<String>,
+}
+
+impl SnapshotEntry {
+    pub fn file(path: impl AsRef<str>, size: u64) -> Self {
+        Self {
+            path: normalize_snapshot_path(path.as_ref()),
+            kind: SnapshotEntryKind::File,
+            size,
+            modified_at_ms: None,
+            content_hash: None,
+        }
+    }
+
+    pub fn directory(path: impl AsRef<str>) -> Self {
+        Self {
+            path: normalize_snapshot_path(path.as_ref()),
+            kind: SnapshotEntryKind::Directory,
+            size: 0,
+            modified_at_ms: None,
+            content_hash: None,
+        }
+    }
+
+    pub fn with_modified_at_ms(mut self, modified_at_ms: u128) -> Self {
+        self.modified_at_ms = Some(modified_at_ms);
+
+        self
+    }
+
+    pub fn with_content_hash(mut self, content_hash: impl Into<String>) -> Self {
+        self.content_hash = Some(content_hash.into());
+
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SnapshotEntryKind {
+    File,
+    Directory,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SnapshotError {
+    NotFound(String),
+    NotDirectory(String),
+    OutsideRoot(String),
+    Serialization(String),
+}
+
+pub type SnapshotResult<T> = Result<T, SnapshotError>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotDocument {
+    pub metadata: SnapshotMetadata,
+    entries: BTreeMap<String, SnapshotEntry>,
+}
+
+impl SnapshotDocument {
+    pub fn new(metadata: SnapshotMetadata) -> Self {
+        Self {
+            metadata,
+            entries: BTreeMap::new(),
+        }
+    }
+
+    pub fn with_entry(mut self, entry: SnapshotEntry) -> Self {
+        self.entries.insert(entry.path.clone(), entry);
+
+        self
+    }
+
+    pub fn entries(&self) -> Vec<&SnapshotEntry> {
+        self.entries.values().collect()
+    }
+
+    pub fn entry(&self, path: impl AsRef<str>) -> SnapshotResult<&SnapshotEntry> {
+        let path = normalize_snapshot_path(path.as_ref());
+
+        self.entries.get(&path).ok_or(SnapshotError::NotFound(path))
+    }
+
+    pub fn list(&self, path: impl AsRef<str>) -> SnapshotResult<Vec<&SnapshotEntry>> {
+        let directory = normalize_snapshot_path(path.as_ref());
+
+        if directory != "/" {
+            let entry = self.entry(&directory)?;
+
+            if entry.kind != SnapshotEntryKind::Directory {
+                return Err(SnapshotError::NotDirectory(directory));
+            }
+        }
+
+        let mut entries = self
+            .entries
+            .values()
+            .filter(|entry| is_direct_child(&directory, &entry.path))
+            .collect::<Vec<_>>();
+
+        entries.sort_by(|left, right| left.path.cmp(&right.path));
+
+        Ok(entries)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SnapshotScanEntry {
+    pub path: String,
+    pub kind: SnapshotEntryKind,
+    pub size: u64,
+    pub modified_at_ms: Option<u128>,
+    pub content_hash: Option<String>,
+}
+
+impl SnapshotScanEntry {
+    pub fn file(path: impl AsRef<str>, size: u64) -> Self {
+        Self {
+            path: normalize_snapshot_path(path.as_ref()),
+            kind: SnapshotEntryKind::File,
+            size,
+            modified_at_ms: None,
+            content_hash: None,
+        }
+    }
+
+    pub fn directory(path: impl AsRef<str>) -> Self {
+        Self {
+            path: normalize_snapshot_path(path.as_ref()),
+            kind: SnapshotEntryKind::Directory,
+            size: 0,
+            modified_at_ms: None,
+            content_hash: None,
+        }
+    }
+
+    pub fn with_modified_at_ms(mut self, modified_at_ms: u128) -> Self {
+        self.modified_at_ms = Some(modified_at_ms);
+
+        self
+    }
+
+    pub fn with_content_hash(mut self, content_hash: impl Into<String>) -> Self {
+        self.content_hash = Some(content_hash.into());
+
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SnapshotGenerator {
+    name: String,
+    source_root: String,
+    created_at_ms: Option<u128>,
+}
+
+impl SnapshotGenerator {
+    pub fn new(name: impl Into<String>, source_root: impl AsRef<str>) -> Self {
+        Self {
+            name: name.into(),
+            source_root: normalize_snapshot_path(source_root.as_ref()),
+            created_at_ms: None,
+        }
+    }
+
+    pub fn with_created_at_ms(mut self, created_at_ms: u128) -> Self {
+        self.created_at_ms = Some(created_at_ms);
+
+        self
+    }
+
+    pub fn generate(
+        &self,
+        scan_entries: Vec<SnapshotScanEntry>,
+    ) -> SnapshotResult<SnapshotDocument> {
+        let mut metadata = SnapshotMetadata::new(&self.name).with_source_root(&self.source_root);
+
+        if let Some(created_at_ms) = self.created_at_ms {
+            metadata = metadata.with_created_at_ms(created_at_ms);
+        }
+
+        let mut snapshot = SnapshotDocument::new(metadata);
+
+        for scan_entry in scan_entries {
+            let relative_path = self.relative_snapshot_path(&scan_entry.path)?;
+            let mut entry = match scan_entry.kind {
+                SnapshotEntryKind::File => SnapshotEntry::file(&relative_path, scan_entry.size),
+                SnapshotEntryKind::Directory => SnapshotEntry::directory(&relative_path),
+            };
+
+            entry.modified_at_ms = scan_entry.modified_at_ms;
+            entry.content_hash = scan_entry.content_hash;
+            snapshot = snapshot.with_entry(entry);
+        }
+
+        Ok(snapshot)
+    }
+
+    fn relative_snapshot_path(&self, path: &str) -> SnapshotResult<String> {
+        if path == self.source_root {
+            return Ok("/".to_owned());
+        }
+
+        let prefix = format!("{}/", self.source_root.trim_end_matches('/'));
+        let Some(relative) = path.strip_prefix(&prefix) else {
+            return Err(SnapshotError::OutsideRoot(path.to_owned()));
+        };
+
+        Ok(normalize_snapshot_path(relative))
+    }
+}
+
+pub fn scan_directory_snapshot(
+    name: impl Into<String>,
+    source_root: impl AsRef<Path>,
+) -> SnapshotResult<SnapshotDocument> {
+    let source_root = source_root.as_ref();
+    let created_at_ms = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_millis());
+    let mut generator = SnapshotGenerator::new(name, source_root.display().to_string());
+
+    if let Some(created_at_ms) = created_at_ms {
+        generator = generator.with_created_at_ms(created_at_ms);
+    }
+
+    generator.generate(scan_directory_entries(source_root)?)
+}
+
+fn scan_directory_entries(root: &Path) -> SnapshotResult<Vec<SnapshotScanEntry>> {
+    let mut entries = Vec::new();
+    scan_directory_entries_into(root, &mut entries)?;
+    Ok(entries)
+}
+
+fn scan_directory_entries_into(
+    current: &Path,
+    entries: &mut Vec<SnapshotScanEntry>,
+) -> SnapshotResult<()> {
+    let read_dir =
+        fs::read_dir(current).map_err(|error| SnapshotError::Serialization(error.to_string()))?;
+
+    for entry in read_dir {
+        let entry = entry.map_err(|error| SnapshotError::Serialization(error.to_string()))?;
+        let path = entry.path();
+        let metadata = entry
+            .metadata()
+            .map_err(|error| SnapshotError::Serialization(error.to_string()))?;
+        let modified_at_ms = metadata
+            .modified()
+            .ok()
+            .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+            .map(|duration| duration.as_millis());
+
+        if metadata.is_dir() {
+            let mut scan_entry = SnapshotScanEntry::directory(path.display().to_string());
+            scan_entry.modified_at_ms = modified_at_ms;
+            entries.push(scan_entry);
+            scan_directory_entries_into(&path, entries)?;
+        } else {
+            let mut scan_entry =
+                SnapshotScanEntry::file(path.display().to_string(), metadata.len());
+            scan_entry.modified_at_ms = modified_at_ms;
+            entries.push(scan_entry);
+        }
+    }
+
+    Ok(())
+}
+
+pub fn save_snapshot_file(
+    path: impl AsRef<Path>,
+    snapshot: &SnapshotDocument,
+) -> SnapshotResult<()> {
+    let bytes = SnapshotStore::save_to_bytes(snapshot)?;
+    if let Some(parent) = path.as_ref().parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| SnapshotError::Serialization(error.to_string()))?;
+    }
+    fs::write(path, bytes).map_err(|error| SnapshotError::Serialization(error.to_string()))
+}
+
+pub fn load_snapshot_file(path: impl AsRef<Path>) -> SnapshotResult<SnapshotDocument> {
+    let bytes = fs::read(path).map_err(|error| SnapshotError::Serialization(error.to_string()))?;
+    SnapshotStore::load_from_bytes(&bytes)
+}
+
+pub struct SnapshotStore;
+
+impl SnapshotStore {
+    pub fn save_to_bytes(snapshot: &SnapshotDocument) -> SnapshotResult<Vec<u8>> {
+        serde_json::to_vec_pretty(snapshot)
+            .map_err(|error| SnapshotError::Serialization(error.to_string()))
+    }
+
+    pub fn load_from_bytes(bytes: &[u8]) -> SnapshotResult<SnapshotDocument> {
+        serde_json::from_slice(bytes)
+            .map_err(|error| SnapshotError::Serialization(error.to_string()))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SnapshotDiffStatus {
+    Added,
+    Removed,
+    Modified,
+    Unchanged,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotDiffRow {
+    pub path: String,
+    pub status: SnapshotDiffStatus,
+    pub baseline: Option<SnapshotEntry>,
+    pub current: Option<SnapshotEntry>,
+}
+
+impl SnapshotDiffRow {
+    fn new(
+        path: impl Into<String>,
+        baseline: Option<&SnapshotEntry>,
+        current: Option<&SnapshotEntry>,
+    ) -> Self {
+        let status = match (baseline, current) {
+            (None, Some(_)) => SnapshotDiffStatus::Added,
+            (Some(_), None) => SnapshotDiffStatus::Removed,
+            (Some(baseline), Some(current)) if baseline == current => SnapshotDiffStatus::Unchanged,
+            (Some(_), Some(_)) => SnapshotDiffStatus::Modified,
+            (None, None) => SnapshotDiffStatus::Unchanged,
+        };
+
+        Self {
+            path: path.into(),
+            status,
+            baseline: baseline.cloned(),
+            current: current.cloned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotDiff {
+    rows: BTreeMap<String, SnapshotDiffRow>,
+}
+
+impl SnapshotDiff {
+    fn new(rows: BTreeMap<String, SnapshotDiffRow>) -> Self {
+        Self { rows }
+    }
+
+    pub fn rows(&self) -> Vec<&SnapshotDiffRow> {
+        self.rows.values().collect()
+    }
+
+    pub fn row(&self, path: impl AsRef<str>) -> SnapshotResult<&SnapshotDiffRow> {
+        let path = normalize_snapshot_path(path.as_ref());
+
+        self.rows.get(&path).ok_or(SnapshotError::NotFound(path))
+    }
+
+    pub fn added_count(&self) -> usize {
+        self.count_by_status(SnapshotDiffStatus::Added)
+    }
+
+    pub fn removed_count(&self) -> usize {
+        self.count_by_status(SnapshotDiffStatus::Removed)
+    }
+
+    pub fn modified_count(&self) -> usize {
+        self.count_by_status(SnapshotDiffStatus::Modified)
+    }
+
+    pub fn unchanged_count(&self) -> usize {
+        self.count_by_status(SnapshotDiffStatus::Unchanged)
+    }
+
+    fn count_by_status(&self, status: SnapshotDiffStatus) -> usize {
+        self.rows
+            .values()
+            .filter(|row| row.status == status)
+            .count()
+    }
+}
+
+pub struct SnapshotComparer;
+
+impl SnapshotComparer {
+    pub fn compare(baseline: &SnapshotDocument, current: &SnapshotDocument) -> SnapshotDiff {
+        let mut rows = BTreeMap::new();
+
+        for path in baseline.entries.keys().chain(current.entries.keys()) {
+            rows.entry(path.clone()).or_insert_with(|| {
+                SnapshotDiffRow::new(path, baseline.entries.get(path), current.entries.get(path))
+            });
+        }
+
+        SnapshotDiff::new(rows)
+    }
+}
+
+fn is_direct_child(directory: &str, path: &str) -> bool {
+    if path == directory {
+        return false;
+    }
+
+    let prefix = if directory == "/" {
+        "/".to_owned()
+    } else {
+        format!("{}/", directory.trim_end_matches('/'))
+    };
+
+    path.strip_prefix(&prefix)
+        .is_some_and(|relative| !relative.is_empty() && !relative.contains('/'))
+}
+
+fn normalize_snapshot_path(path: &str) -> String {
+    let normalized = path.replace('\\', "/");
+    let mut segments = Vec::<&str>::new();
+
+    for segment in normalized.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => {
+                segments.pop();
+            }
+            _ => segments.push(segment),
+        }
+    }
+
+    if segments.is_empty() {
+        return "/".to_owned();
+    }
+
+    format!("/{}", segments.join("/"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn snapshot_document_stores_tree_entries_and_metadata() {
+        let snapshot = SnapshotDocument::new(
+            SnapshotMetadata::new("left-folder")
+                .with_created_at_ms(1_700_000_000_000)
+                .with_source_root("/work/left"),
+        )
+        .with_entry(SnapshotEntry::directory("/src"))
+        .with_entry(
+            SnapshotEntry::file("/src/main.rs", 12)
+                .with_modified_at_ms(1_700_000_000_123)
+                .with_content_hash("sha256:abc"),
+        );
+
+        assert_eq!(snapshot.metadata.name, "left-folder");
+        assert_eq!(snapshot.metadata.source_root.as_deref(), Some("/work/left"));
+        assert_eq!(snapshot.entries().len(), 2);
+        assert_eq!(
+            snapshot.entry("/src/main.rs").unwrap().kind,
+            SnapshotEntryKind::File
+        );
+        assert_eq!(snapshot.entry("/src/main.rs").unwrap().size, 12);
+    }
+
+    #[test]
+    fn snapshot_document_lists_direct_children() {
+        let snapshot = SnapshotDocument::new(SnapshotMetadata::new("tree"))
+            .with_entry(SnapshotEntry::directory("/src"))
+            .with_entry(SnapshotEntry::file("/src/main.rs", 12))
+            .with_entry(SnapshotEntry::file("/README.md", 6));
+
+        let root_entries = snapshot.list("/").unwrap();
+        let src_entries = snapshot.list("/src").unwrap();
+
+        assert_eq!(root_entries.len(), 2);
+        assert_eq!(root_entries[0].path, "/README.md");
+        assert_eq!(root_entries[1].path, "/src");
+        assert_eq!(src_entries[0].path, "/src/main.rs");
+    }
+
+    #[test]
+    fn snapshot_document_reports_missing_paths() {
+        let snapshot = SnapshotDocument::new(SnapshotMetadata::new("tree"));
+
+        let error = snapshot.entry("/missing.txt").unwrap_err();
+
+        assert!(matches!(
+            error,
+            SnapshotError::NotFound(path) if path == "/missing.txt"
+        ));
+    }
+
+    #[test]
+    fn snapshot_generator_builds_snapshot_from_scan_entries() {
+        let generator =
+            SnapshotGenerator::new("workspace", "/work").with_created_at_ms(1_700_000_000_000);
+        let snapshot = generator
+            .generate(vec![
+                SnapshotScanEntry::directory("/work/src"),
+                SnapshotScanEntry::file("/work/src/main.rs", 12)
+                    .with_modified_at_ms(1_700_000_000_123)
+                    .with_content_hash("sha256:abc"),
+            ])
+            .unwrap();
+
+        assert_eq!(snapshot.metadata.name, "workspace");
+        assert_eq!(snapshot.metadata.source_root.as_deref(), Some("/work"));
+        assert_eq!(
+            snapshot.entry("/src").unwrap().kind,
+            SnapshotEntryKind::Directory
+        );
+        assert_eq!(snapshot.entry("/src/main.rs").unwrap().size, 12);
+        assert_eq!(
+            snapshot
+                .entry("/src/main.rs")
+                .unwrap()
+                .content_hash
+                .as_deref(),
+            Some("sha256:abc")
+        );
+    }
+
+    #[test]
+    fn snapshot_store_serializes_and_restores_snapshot_documents() {
+        let snapshot = SnapshotDocument::new(SnapshotMetadata::new("workspace"))
+            .with_entry(SnapshotEntry::file("/README.md", 6).with_content_hash("sha256:readme"));
+
+        let bytes = SnapshotStore::save_to_bytes(&snapshot).unwrap();
+        let restored = SnapshotStore::load_from_bytes(&bytes).unwrap();
+
+        assert_eq!(restored.metadata.name, "workspace");
+        assert_eq!(
+            restored
+                .entry("/README.md")
+                .unwrap()
+                .content_hash
+                .as_deref(),
+            Some("sha256:readme")
+        );
+    }
+
+    #[test]
+    fn snapshot_generator_rejects_entries_outside_source_root() {
+        let generator = SnapshotGenerator::new("workspace", "/work");
+
+        let error = generator
+            .generate(vec![SnapshotScanEntry::file("/other/file.txt", 4)])
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            SnapshotError::OutsideRoot(path) if path == "/other/file.txt"
+        ));
+    }
+
+    #[test]
+    fn snapshot_comparer_classifies_added_removed_modified_and_unchanged_entries() {
+        let baseline = SnapshotDocument::new(SnapshotMetadata::new("baseline"))
+            .with_entry(SnapshotEntry::file("/removed.txt", 4).with_content_hash("sha256:old"))
+            .with_entry(SnapshotEntry::file("/changed.txt", 8).with_content_hash("sha256:old"))
+            .with_entry(SnapshotEntry::file("/same.txt", 6).with_content_hash("sha256:same"));
+        let current = SnapshotDocument::new(SnapshotMetadata::new("current"))
+            .with_entry(SnapshotEntry::file("/added.txt", 3).with_content_hash("sha256:new"))
+            .with_entry(SnapshotEntry::file("/changed.txt", 8).with_content_hash("sha256:new"))
+            .with_entry(SnapshotEntry::file("/same.txt", 6).with_content_hash("sha256:same"));
+
+        let diff = SnapshotComparer::compare(&baseline, &current);
+
+        assert_eq!(diff.rows().len(), 4);
+        assert_eq!(
+            diff.row("/added.txt").unwrap().status,
+            SnapshotDiffStatus::Added
+        );
+        assert_eq!(
+            diff.row("/removed.txt").unwrap().status,
+            SnapshotDiffStatus::Removed
+        );
+        assert_eq!(
+            diff.row("/changed.txt").unwrap().status,
+            SnapshotDiffStatus::Modified
+        );
+        assert_eq!(
+            diff.row("/same.txt").unwrap().status,
+            SnapshotDiffStatus::Unchanged
+        );
+    }
+
+    #[test]
+    fn snapshot_comparer_marks_metadata_changes_as_modified() {
+        let baseline = SnapshotDocument::new(SnapshotMetadata::new("baseline"))
+            .with_entry(SnapshotEntry::file("/main.rs", 8).with_modified_at_ms(100));
+        let current = SnapshotDocument::new(SnapshotMetadata::new("current"))
+            .with_entry(SnapshotEntry::file("/main.rs", 12).with_modified_at_ms(200));
+
+        let diff = SnapshotComparer::compare(&baseline, &current);
+
+        assert_eq!(
+            diff.row("/main.rs").unwrap().status,
+            SnapshotDiffStatus::Modified
+        );
+        assert_eq!(diff.modified_count(), 1);
+    }
+
+    #[test]
+    fn scan_directory_snapshot_captures_current_disk_tree() {
+        let root = unique_temp_dir("snapshot-scan");
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src").join("main.rs"), b"fn main() {}").unwrap();
+        fs::write(root.join("README.md"), b"hello").unwrap();
+
+        let snapshot = scan_directory_snapshot("workspace", &root).unwrap();
+        let bytes = SnapshotStore::save_to_bytes(&snapshot).unwrap();
+        let file = root.join("workspace.snapshot.json");
+        fs::write(&file, bytes).unwrap();
+        let restored = load_snapshot_file(&file).unwrap();
+
+        assert_eq!(restored.entry("/README.md").unwrap().size, 5);
+        assert_eq!(restored.entry("/src/main.rs").unwrap().size, 12);
+        assert_eq!(
+            restored.entry("/src").unwrap().kind,
+            SnapshotEntryKind::Directory
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("open-diff-{label}-{stamp}"));
+        fs::create_dir_all(&path).expect("temp dir");
+        path
+    }
+}

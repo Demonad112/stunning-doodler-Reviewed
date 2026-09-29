@@ -1,0 +1,503 @@
+import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+import { nextTick } from 'vue'
+import { beforeEach, describe, expect, it } from 'vitest'
+import TextDiffPanel from './TextDiffPanel.vue'
+import type { DiffLine } from '@/types/diff'
+
+describe('TextDiffPanel', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+  })
+
+  it('renders line numbers and diff text', () => {
+    const lines: DiffLine[] = [
+      {
+        leftNumber: 1,
+        rightNumber: 1,
+        leftText: 'same',
+        rightText: 'same',
+        kind: 'equal',
+        inlineSegments: { left: [], right: [] },
+      },
+      {
+        leftNumber: 2,
+        rightNumber: 2,
+        leftText: 'old',
+        rightText: 'new',
+        kind: 'modified',
+        inlineSegments: { left: [], right: [] },
+      },
+    ]
+
+    const wrapper = mount(TextDiffPanel, { props: { lines } })
+
+    expect(wrapper.text()).toContain('same')
+    expect(wrapper.text()).toContain('old')
+    expect(wrapper.text()).toContain('new')
+    expect(wrapper.find('.modified').exists()).toBe(true)
+  })
+
+  it('renders changed inline segments as highlighted spans', () => {
+    const lines: DiffLine[] = [
+      {
+        leftNumber: 1,
+        rightNumber: 1,
+        leftText: 'old value',
+        rightText: 'new value',
+        kind: 'modified',
+        inlineSegments: {
+          left: [
+            { text: 'old', changed: true },
+            { text: ' value', changed: false },
+          ],
+          right: [
+            { text: 'new', changed: true },
+            { text: ' value', changed: false },
+          ],
+        },
+      },
+    ]
+
+    const wrapper = mount(TextDiffPanel, { props: { lines } })
+    const changedSegments = wrapper.findAll('.inline-segment-changed')
+
+    expect(changedSegments).toHaveLength(2)
+    expect(changedSegments.map((segment) => segment.text())).toEqual(['old', 'new'])
+    expect(wrapper.text()).toContain('old value')
+    expect(wrapper.text()).toContain('new value')
+  })
+
+  it('keeps left and right cells in fixed-height synchronized rows', () => {
+    const lines: DiffLine[] = Array.from({ length: 3 }, (_, index) => {
+      const lineNumber = index + 1
+
+      return {
+        leftNumber: lineNumber,
+        rightNumber: lineNumber,
+        leftText: `left ${String(lineNumber)}`,
+        rightText: `right ${String(lineNumber)}`,
+        kind: 'equal',
+        inlineSegments: { left: [], right: [] },
+      }
+    })
+
+    const wrapper = mount(TextDiffPanel, { props: { lines } })
+    const body = wrapper.find('[data-testid="text-diff-scroll-container"]')
+    const rows = wrapper.findAll('.diff-row')
+
+    expect(body.exists()).toBe(true)
+    expect(body.classes()).toContain('diff-body-synchronized')
+    expect(rows).toHaveLength(3)
+
+    for (const row of rows) {
+      expect(row.attributes('style')).toContain('--text-diff-row-height: 18px')
+      expect(row.findAll('.cell')).toHaveLength(2)
+    }
+  })
+
+  it('virtualizes large text diffs with total height placeholders', async () => {
+    const lines: DiffLine[] = Array.from({ length: 100_000 }, (_, index) => {
+      const lineNumber = index + 1
+
+      return {
+        leftNumber: lineNumber,
+        rightNumber: lineNumber,
+        leftText: `left ${String(lineNumber)}`,
+        rightText: `right ${String(lineNumber)}`,
+        kind: 'equal',
+        inlineSegments: { left: [], right: [] },
+      }
+    })
+
+    const wrapper = mount(TextDiffPanel, { props: { lines } })
+    const body = wrapper.find('[data-testid="text-diff-scroll-container"]')
+
+    Object.defineProperty(body.element, 'clientHeight', { configurable: true, value: 240 })
+    await body.trigger('scroll')
+    await nextTick()
+
+    expect(wrapper.findAll('.diff-row').length).toBeLessThan(80)
+    expect(wrapper.find('[data-testid="text-diff-virtual-spacer"]').attributes('style')).toContain(
+      'height: 1800000px',
+    )
+
+    body.element.scrollTop = 18 * 50_000
+    await body.trigger('scroll')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('left 50001')
+    expect(wrapper.text()).not.toContain('left 1')
+  })
+
+  it('renders a diff minimap and jumps to selected diff markers', async () => {
+    const lines: DiffLine[] = Array.from({ length: 120 }, (_, index) => {
+      const lineNumber = index + 1
+      let kind: DiffLine['kind'] = 'equal'
+
+      if (lineNumber === 10) {
+        kind = 'added'
+      }
+
+      if (lineNumber === 60) {
+        kind = 'modified'
+      }
+
+      return {
+        leftNumber: kind === 'added' ? null : lineNumber,
+        rightNumber: lineNumber,
+        leftText: kind === 'added' ? '' : `left ${String(lineNumber)}`,
+        rightText: `right ${String(lineNumber)}`,
+        kind,
+        inlineSegments: { left: [], right: [] },
+      }
+    })
+
+    const wrapper = mount(TextDiffPanel, { props: { lines } })
+    const body = wrapper.find('[data-testid="text-diff-scroll-container"]')
+
+    Object.defineProperty(body.element, 'clientHeight', { configurable: true, value: 240 })
+
+    const markers = wrapper.findAll('[data-testid="text-diff-minimap-marker"]')
+
+    expect(markers).toHaveLength(2)
+    expect(markers[0]?.classes()).toContain('diff-minimap-marker-added')
+    expect(markers[1]?.classes()).toContain('diff-minimap-marker-modified')
+    expect(markers[1]?.attributes('style')).toContain('top:')
+
+    await markers[1]?.trigger('click')
+    await nextTick()
+
+    expect(body.element.scrollTop).toBe(18 * 59)
+    expect(wrapper.text()).toContain('left 60')
+  })
+
+  it('jumps to next and previous diffs from buttons and keyboard shortcuts', async () => {
+    const lines: DiffLine[] = Array.from({ length: 80 }, (_, index) => {
+      const lineNumber = index + 1
+      let kind: DiffLine['kind'] = 'equal'
+
+      if (lineNumber === 5 || lineNumber === 40) {
+        kind = 'modified'
+      }
+
+      return {
+        leftNumber: lineNumber,
+        rightNumber: lineNumber,
+        leftText: `left ${String(lineNumber)}`,
+        rightText: `right ${String(lineNumber)}`,
+        kind,
+        inlineSegments: { left: [], right: [] },
+      }
+    })
+
+    const wrapper = mount(TextDiffPanel, {
+      attachTo: document.body,
+      props: { lines },
+    })
+    const body = wrapper.find('[data-testid="text-diff-scroll-container"]')
+
+    Object.defineProperty(body.element, 'clientHeight', { configurable: true, value: 240 })
+
+    await wrapper.find('[data-testid="text-diff-next-diff"]').trigger('click')
+    await nextTick()
+
+    expect(body.element.scrollTop).toBe(18 * 4)
+
+    await wrapper.find('[data-testid="text-diff-next-diff"]').trigger('click')
+    await nextTick()
+
+    expect(body.element.scrollTop).toBe(18 * 39)
+
+    await wrapper.find('[data-testid="text-diff-previous-diff"]').trigger('click')
+    await nextTick()
+
+    expect(body.element.scrollTop).toBe(18 * 4)
+
+    wrapper.unmount()
+  })
+
+  it('filters to differences with surrounding context', async () => {
+    const lines: DiffLine[] = Array.from({ length: 12 }, (_, index) => {
+      const lineNumber = index + 1
+      const kind: DiffLine['kind'] = lineNumber === 6 ? 'modified' : 'equal'
+
+      return {
+        leftNumber: lineNumber,
+        rightNumber: lineNumber,
+        leftText: `left ${String(lineNumber)}`,
+        rightText: `right ${String(lineNumber)}`,
+        kind,
+        inlineSegments: { left: [], right: [] },
+      }
+    })
+
+    const wrapper = mount(TextDiffPanel, { props: { lines } })
+
+    expect(wrapper.text()).toContain('left 1')
+    expect(wrapper.text()).toContain('left 12')
+
+    await wrapper.find('[data-testid="text-diff-show-differences"]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('left 4')
+    expect(wrapper.text()).toContain('left 5')
+    expect(wrapper.text()).toContain('left 6')
+    expect(wrapper.text()).toContain('left 7')
+    expect(wrapper.text()).toContain('left 8')
+    expect(wrapper.text()).not.toContain('left 1')
+    expect(wrapper.text()).not.toContain('left 12')
+    expect(wrapper.find('[data-testid="text-diff-show-all"]').classes()).toContain(
+      'diff-filter-button',
+    )
+  })
+
+  it('filters to same lines only', async () => {
+    const lines: DiffLine[] = [
+      {
+        leftNumber: 1,
+        rightNumber: 1,
+        leftText: 'same line',
+        rightText: 'same line',
+        kind: 'equal',
+        inlineSegments: { left: [], right: [] },
+      },
+      {
+        leftNumber: 2,
+        rightNumber: 2,
+        leftText: 'left only',
+        rightText: 'right only',
+        kind: 'modified',
+        inlineSegments: { left: [], right: [] },
+      },
+    ]
+
+    const wrapper = mount(TextDiffPanel, { props: { lines } })
+
+    await wrapper.find('[data-testid="text-diff-show-same"]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('same line')
+    expect(wrapper.text()).not.toContain('left only')
+    expect(wrapper.find('[data-testid="text-diff-show-same"]').classes()).toContain(
+      'diff-filter-button-active',
+    )
+  })
+
+  it('updates difference context rows from the toolbar input', async () => {
+    const lines: DiffLine[] = Array.from({ length: 12 }, (_, index) => {
+      const lineNumber = index + 1
+      const kind: DiffLine['kind'] = lineNumber === 6 ? 'modified' : 'equal'
+
+      return {
+        leftNumber: lineNumber,
+        rightNumber: lineNumber,
+        leftText: `left ${String(lineNumber)}`,
+        rightText: `right ${String(lineNumber)}`,
+        kind,
+        inlineSegments: { left: [], right: [] },
+      }
+    })
+
+    const wrapper = mount(TextDiffPanel, { props: { lines } })
+
+    await wrapper.find('[data-testid="text-diff-show-differences"]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('left 4')
+    expect(wrapper.text()).toContain('left 8')
+
+    await wrapper.find('[data-testid="text-diff-context-lines"]').setValue('1')
+    await nextTick()
+
+    expect(wrapper.text()).not.toContain('left 4')
+    expect(wrapper.text()).toContain('left 5')
+    expect(wrapper.text()).toContain('left 6')
+    expect(wrapper.text()).toContain('left 7')
+    expect(wrapper.text()).not.toContain('left 8')
+  })
+
+  it('toggles visible markers for spaces and tabs', async () => {
+    const lines: DiffLine[] = [
+      {
+        leftNumber: 1,
+        rightNumber: 1,
+        leftText: 'left value\t1',
+        rightText: 'right value\t1',
+        kind: 'modified',
+        inlineSegments: {
+          left: [
+            { text: 'left value', changed: false },
+            { text: '\t1', changed: true },
+          ],
+          right: [
+            { text: 'right value', changed: false },
+            { text: '\t1', changed: true },
+          ],
+        },
+      },
+    ]
+
+    const wrapper = mount(TextDiffPanel, { props: { lines } })
+
+    expect(wrapper.findAll('.visible-whitespace')).toHaveLength(0)
+
+    await wrapper.find('[data-testid="text-diff-toggle-whitespace"]').trigger('click')
+    await nextTick()
+
+    const markers = wrapper.findAll('.visible-whitespace')
+
+    expect(markers.length).toBeGreaterThan(0)
+    expect(markers.map((marker) => marker.text())).toContain('·')
+    expect(markers.map((marker) => marker.text())).toContain('→')
+  })
+
+  it('toggles word wrap for long text rows', async () => {
+    const lines: DiffLine[] = [
+      {
+        leftNumber: 1,
+        rightNumber: 1,
+        leftText: 'left-'.repeat(80),
+        rightText: 'right-'.repeat(80),
+        kind: 'equal',
+        inlineSegments: { left: [], right: [] },
+      },
+    ]
+
+    const wrapper = mount(TextDiffPanel, { props: { lines } })
+    const panel = wrapper.find('.diff-panel')
+
+    expect(panel.classes()).not.toContain('diff-panel-word-wrap')
+
+    await wrapper.find('[data-testid="text-diff-toggle-word-wrap"]').trigger('click')
+    await nextTick()
+
+    expect(panel.classes()).toContain('diff-panel-word-wrap')
+    expect(wrapper.find('.cell').classes()).toContain('cell-word-wrap')
+  })
+
+  it('renders syntax tokens from grammar rules', () => {
+    const lines: DiffLine[] = [
+      {
+        leftNumber: 1,
+        rightNumber: 1,
+        leftText: 'fn main()',
+        rightText: '// fn comment',
+        kind: 'modified',
+        inlineSegments: { left: [], right: [] },
+      },
+    ]
+    const grammar = {
+      items: [
+        {
+          id: 'line-comment',
+          kind: 'comment',
+          matcher: { type: 'linePrefix' as const, value: '//' },
+          styleScope: 'comment.line',
+        },
+        {
+          id: 'keyword',
+          kind: 'keyword',
+          matcher: { type: 'keywords' as const, values: ['fn', 'let'] },
+          styleScope: 'keyword.control',
+        },
+      ],
+    }
+
+    const wrapper = mount(TextDiffPanel, { props: { lines, grammar } })
+
+    expect(wrapper.text()).toContain('fn main()')
+    expect(wrapper.text()).toContain('// fn comment')
+    expect(wrapper.find('[data-grammar-token="keyword"]').text()).toBe('fn')
+    expect(wrapper.find('[data-grammar-token="comment"]').text()).toBe('// fn comment')
+    expect(wrapper.find('[data-grammar-scope="keyword.control"]').exists()).toBe(true)
+    expect(wrapper.find('[data-grammar-scope="comment.line"]').exists()).toBe(true)
+  })
+
+  it('marks unimportant text differences from diff results', () => {
+    const lines: DiffLine[] = [
+      {
+        leftNumber: 1,
+        rightNumber: 1,
+        leftText: '// old comment',
+        rightText: '// new comment',
+        kind: 'modified',
+        inlineSegments: { left: [], right: [] },
+        important: false,
+      },
+    ]
+
+    const wrapper = mount(TextDiffPanel, { props: { lines } })
+
+    expect(wrapper.find('.diff-row-unimportant').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="text-diff-unimportant-row"]').exists()).toBe(true)
+  })
+
+  it('starts with wrap enabled when wrap-text default is on', () => {
+    localStorage.setItem('open-diff-wrap-text-default', '1')
+    setActivePinia(createPinia())
+
+    const lines: DiffLine[] = [
+      {
+        leftNumber: 1,
+        rightNumber: 1,
+        leftText: 'hello world',
+        rightText: 'hello world',
+        kind: 'equal',
+        inlineSegments: { left: [], right: [] },
+      },
+    ]
+
+    const wrapper = mount(TextDiffPanel, { props: { lines } })
+
+    expect(wrapper.find('.diff-panel-word-wrap').exists()).toBe(true)
+  })
+
+  it('exposes wrap toggle and jumpToLineNumber for session toolbar chrome', async () => {
+    const lines: DiffLine[] = [
+      {
+        leftNumber: 1,
+        rightNumber: 1,
+        leftText: 'one',
+        rightText: 'one',
+        kind: 'equal',
+        inlineSegments: { left: [], right: [] },
+      },
+      {
+        leftNumber: 2,
+        rightNumber: 2,
+        leftText: 'two',
+        rightText: 'too',
+        kind: 'modified',
+        inlineSegments: { left: [], right: [] },
+      },
+      {
+        leftNumber: 3,
+        rightNumber: 3,
+        leftText: 'three',
+        rightText: 'three',
+        kind: 'equal',
+        inlineSegments: { left: [], right: [] },
+      },
+    ]
+
+    const wrapper = mount(TextDiffPanel, { props: { lines } })
+    const panel = wrapper.vm as unknown as {
+      toggleWordWrap: () => void
+      isWordWrapEnabled: () => boolean
+      jumpToLineNumber: (line: number, side?: 'left' | 'right') => boolean
+    }
+
+    expect(panel.isWordWrapEnabled()).toBe(false)
+    panel.toggleWordWrap()
+    await nextTick()
+    expect(panel.isWordWrapEnabled()).toBe(true)
+    expect(wrapper.find('[data-testid="text-diff-toggle-word-wrap"]').classes()).toContain(
+      'diff-option-button-active',
+    )
+
+    expect(panel.jumpToLineNumber(2, 'left')).toBe(true)
+    expect(panel.jumpToLineNumber(99, 'left')).toBe(false)
+  })
+})
