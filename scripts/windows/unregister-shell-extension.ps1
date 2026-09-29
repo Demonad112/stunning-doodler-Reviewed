@@ -1,5 +1,5 @@
 param(
-  [string]$VerbKey = 'OpenDiff'
+  [string]$VerbKey = 'DeepServer'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,4 +17,4 @@ foreach ($key in $keys) {
   }
 }
 
-Write-Host 'Removed Open Diff Explorer context menu entries for files and folders.'
+Write-Host 'Removed DeepServer Explorer context menu entries for files and folders.'

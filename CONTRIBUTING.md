@@ -33,7 +33,7 @@ corepack pnpm tauri:dev
 
 ## Quality Checks
 
-Before opening a pull request, run:
+The pre-commit hook only formats and lints the staged files, so commits stay fast. The full gate below runs in CI on every pull request; run it locally first if you want to catch problems before pushing:
 
 ```bash
 corepack pnpm quality

@@ -12,7 +12,7 @@ Please do not create a public issue for a security vulnerability.
 Report vulnerabilities by opening a private security advisory on GitHub when
 available:
 
-https://github.com/kygo8/open-diff/security/advisories/new
+https://github.com/Demonad112/stunning-doodler-Reviewed/security/advisories/new
 
 If private advisories are unavailable, contact the maintainers through the
 repository owner profile and include:

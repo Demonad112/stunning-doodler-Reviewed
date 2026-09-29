@@ -160,7 +160,7 @@ impl WindowsShellExtensionConfig {
         Self {
             product_name: product_name.into(),
             executable_path: executable_path.into(),
-            verb_key: "OpenDiff".to_owned(),
+            verb_key: "DeepServer".to_owned(),
         }
     }
 }
@@ -194,9 +194,9 @@ impl WindowsShellExtensionScriptBuilder {
         let directory_select_key = self.directory_select_left_key();
 
         format!(
-            r#"# Register Open Diff Windows Explorer context menu entries for the current user.
-# Compare with Open Diff: dual-select two items, or compare against a previously selected left side.
-# Select Left File/Folder for Compare: mark the left side, then use Compare with Open Diff on the right.
+            r#"# Register DeepServer Windows Explorer context menu entries for the current user.
+# Compare with DeepServer: dual-select two items, or compare against a previously selected left side.
+# Select Left File/Folder for Compare: mark the left side, then use Compare with DeepServer on the right.
 $ErrorActionPreference = 'Stop'
 
 $entries = @(
@@ -247,7 +247,7 @@ foreach ($entry in $entries) {{
             .join(",\n");
 
         format!(
-            r#"# Remove Open Diff Windows Explorer context menu entries for the current user.
+            r#"# Remove DeepServer Windows Explorer context menu entries for the current user.
 $ErrorActionPreference = 'Stop'
 
 $keys = @(
@@ -379,10 +379,10 @@ mod tests {
 
         let script = WindowsShellExtensionScriptBuilder::new(config).registration_script();
 
-        assert!(script.contains("HKCU:\\Software\\Classes\\*\\shell\\OpenDiff"));
-        assert!(script.contains("HKCU:\\Software\\Classes\\Directory\\shell\\OpenDiff"));
-        assert!(script.contains("HKCU:\\Software\\Classes\\*\\shell\\OpenDiffSelectLeft"));
-        assert!(script.contains("HKCU:\\Software\\Classes\\Directory\\shell\\OpenDiffSelectLeft"));
+        assert!(script.contains("HKCU:\\Software\\Classes\\*\\shell\\DeepServer"));
+        assert!(script.contains("HKCU:\\Software\\Classes\\Directory\\shell\\DeepServer"));
+        assert!(script.contains("HKCU:\\Software\\Classes\\*\\shell\\DeepServerSelectLeft"));
+        assert!(script.contains("HKCU:\\Software\\Classes\\Directory\\shell\\DeepServerSelectLeft"));
         assert!(script.contains("Compare with Open Diff"));
         assert!(script.contains("Select Left File for Compare"));
         assert!(script.contains("Select Left Folder for Compare"));
@@ -404,10 +404,10 @@ mod tests {
         let script = WindowsShellExtensionScriptBuilder::new(config).uninstall_script();
 
         assert!(script.contains("Remove-Item"));
-        assert!(script.contains("HKCU:\\Software\\Classes\\*\\shell\\OpenDiff"));
-        assert!(script.contains("HKCU:\\Software\\Classes\\Directory\\shell\\OpenDiff"));
-        assert!(script.contains("HKCU:\\Software\\Classes\\*\\shell\\OpenDiffSelectLeft"));
-        assert!(script.contains("HKCU:\\Software\\Classes\\Directory\\shell\\OpenDiffSelectLeft"));
+        assert!(script.contains("HKCU:\\Software\\Classes\\*\\shell\\DeepServer"));
+        assert!(script.contains("HKCU:\\Software\\Classes\\Directory\\shell\\DeepServer"));
+        assert!(script.contains("HKCU:\\Software\\Classes\\*\\shell\\DeepServerSelectLeft"));
+        assert!(script.contains("HKCU:\\Software\\Classes\\Directory\\shell\\DeepServerSelectLeft"));
     }
 
     #[test]

@@ -4,7 +4,7 @@ export const deDE: LanguagePack = {
   locale: 'de-DE',
   label: 'Deutsch',
   messages: {
-    'app.brand': 'Open Diff',
+    'app.brand': 'DeepServer',
     'app.ready': 'Bereit',
     'app.workspaceStatus': 'Arbeitsbereich für den Local-First-Vergleich',
     'command.nextDifference': 'Nächster Unterschied',
@@ -183,13 +183,13 @@ export const deDE: LanguagePack = {
     'ui.helpContents': 'Inhalt',
     'ui.contextHelp': 'Kontexthilfe',
     'ui.contextHelpTopic': 'Hilfe: {topic}',
-    'ui.about': 'Über Open Diff',
+    'ui.about': 'Über DeepServer',
     'ui.checkForUpdates': 'Nach Updates suchen',
     'ui.support': 'Support',
     'ui.maturity.ready': 'Bereit',
     'ui.maturity.partial': 'Teilweise',
     'ui.maturity.limited': 'Begrenzt',
-    'ui.aboutTitle': 'Über Open Diff',
+    'ui.aboutTitle': 'Über DeepServer',
     'ui.aboutVersion': 'Version {version}',
     'ui.aboutLicense': 'Lizenziert unter Apache-2.0',
     'ui.aboutHomepage': 'Projekt-Homepage',
@@ -774,7 +774,7 @@ export const deDE: LanguagePack = {
     'ui.applyToFile': 'Auf Datei anwenden',
     'ui.difftool': 'difftool',
     'ui.mergetool': 'mergetool',
-    'ui.confirmWriteGitConfig': 'Open Diff als Git-{kind} in die Git-Konfiguration schreiben?',
+    'ui.confirmWriteGitConfig': 'DeepServer als Git-{kind} in die Git-Konfiguration schreiben?',
     'ui.confirmWriteSvnConfig':
       'SVN-External-Diff-Wrapper und Snippet auf die Festplatte schreiben?',
     'ui.copyLeftToRight': 'Links nach rechts kopieren',
@@ -789,7 +789,7 @@ export const deDE: LanguagePack = {
     'ui.password': 'Passwort',
     'ui.oauthClientId': 'OAuth-Client-ID',
     'ui.oauthClientIdHint':
-      'Verwenden Sie die Client-ID Ihrer eigenen Dropbox- oder Microsoft-App. Open Diff liefert keine App-Geheimnisse.',
+      'Verwenden Sie die Client-ID Ihrer eigenen Dropbox- oder Microsoft-App. DeepServer liefert keine App-Geheimnisse.',
     'ui.oauthOpenBrowser': 'Autorisierungs-URL öffnen',
     'ui.oauthPasteRedirect': 'Weiterleitungs-URL oder Token einfügen',
     'ui.oauthApplyPaste': 'Eingefügtes Token übernehmen',
@@ -881,7 +881,7 @@ export const deDE: LanguagePack = {
       'Windows only. Unregister script generated but not applied.',
     'ui.windowsOnly': 'Nur Windows',
     'ui.shellExtensionHint':
-      'Fügt „Compare with Open Diff“ und „Select Left File/Folder for Compare“ im Explorer hinzu.',
+      'Fügt „Compare with DeepServer“ und „Select Left File/Folder for Compare“ im Explorer hinzu.',
     'ui.shellExtensionFlowHint':
       'Zwei Elemente auswählen und Compare wählen, oder zuerst Select Left und dann Compare auf der anderen Seite.',
     'ui.policyRemoteDisabled':
@@ -1082,7 +1082,7 @@ export const deDE: LanguagePack = {
     'ui.textEditingHint': 'Default wrap applies when opening new text compare and edit sessions.',
     'ui.openWithHint': 'Enabled applications appear in Folder Compare Open With actions.',
     'ui.applicationName': 'Application name',
-    'ui.shellOptionsHint': 'Register shell integration so the OS can open paths in OpenDiff.',
+    'ui.shellOptionsHint': 'Register shell integration so the OS can open paths in DeepServer.',
     'ui.backupRetentionCount': 'Nummerierte Sicherungen behalten',
     'ui.commandsVisibility': 'Befehle',
     'ui.commandsVisibilityHint':
@@ -1226,7 +1226,7 @@ export const deDE: LanguagePack = {
     'ui.binaryCompareBufferSize': 'Puffergröße für Binärvergleich',
     'ui.binaryCompareBufferSizeHint': 'Standard-Fensterlänge für neue Hex-Vergleiche.',
     'ui.fileChangedOnDiskReload': 'Datei auf dem Datenträger geändert. Neu laden?',
-    'ui.confirmQuitMessage': 'Open Diff beenden?',
+    'ui.confirmQuitMessage': 'DeepServer beenden?',
     'ui.toOutput': 'Zur Ausgabe',
     'ui.folderMergeRulesHint':
       'Automatische Kopien gehen in die Ausgabe; Konflikte öffnen die Textzusammenführung.',
