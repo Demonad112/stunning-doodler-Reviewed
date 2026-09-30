@@ -1,3 +1,9 @@
+IDS_AGE_DAYS={} days ago
+IDS_AGE_HOURS={} hr ago
+IDS_AGE_JUST_NOW=just now
+IDS_AGE_MINUTES={} min ago
+IDS_AGE_MONTHS={} mo ago
+IDS_AGE_YEARS={} yrs ago
 IDS_LEDGER_ADDED=Added
 IDS_LEDGER_BASELINE=Baseline
 IDS_LEDGER_CLOSE=Close
@@ -27,3 +33,5 @@ IDS_LEDGER_TITLE=Folder Ledger Comparison
 IDS_LEDGER_UNCHANGED=Unchanged
 IDS_MENU_FOLDER_LEDGER_COMPARE=&Compare with Folder Ledger...
 IDS_MENU_FOLDER_LEDGER_EXPORT=Export Folder &Ledger...
+IDS_MENU_FORK_RELATIVE_AGES=Show &Relative Ages
+IDS_MENU_FORK_TRACK_CHANGES=&Track Changes Between Scans

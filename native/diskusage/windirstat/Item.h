@@ -137,6 +137,7 @@ public:
     bool DrawSubItem(int subitem, CDC* pdc, CRect rc, UINT state, int* width, int* focusLeft) override;
     std::wstring GetText(int subitem) const override;
     COLORREF GetItemTextColor() const override;
+    COLORREF GetSubItemTextColor(int subitem) const override; // altWinDirStat
     int CompareSibling(const CTreeListItem* tlib, int subitem) const override;
     int GetTreeListChildCount() const noexcept override { return IsLeaf() ? 0 : static_cast<int>(GetChildren().size()); }
     CTreeListItem* GetTreeListChild(const int i) const noexcept override { return GetChildren()[i]; }

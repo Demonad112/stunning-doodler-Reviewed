@@ -260,6 +260,10 @@ protected:
     void OnUpdateFolderLedgerExport(CCmdUI* pCmdUI);
     void OnFolderLedgerExport();
     void OnFolderLedgerCompare();
+    void OnForkTrackChanges();
+    void OnUpdateForkTrackChanges(CCmdUI* pCmdUI);
+    void OnForkRelativeAges();
+    void OnUpdateForkRelativeAges(CCmdUI* pCmdUI);
 };
 
 inline std::span<const RouteEntry> CWinDirStatModel::Routes()
@@ -280,6 +284,10 @@ inline std::span<const RouteEntry> CWinDirStatModel::Routes()
         Route::Command<&OnFolderLedgerExport>(ID_FOLDER_LEDGER_EXPORT),
         Route::Update<&OnUpdateFolderLedgerExport>(ID_FOLDER_LEDGER_EXPORT),
         Route::Command<&OnFolderLedgerCompare>(ID_FOLDER_LEDGER_COMPARE),
+        Route::Command<&OnForkTrackChanges>(ID_FORK_TRACK_CHANGES),
+        Route::Update<&OnUpdateForkTrackChanges>(ID_FORK_TRACK_CHANGES),
+        Route::Command<&OnForkRelativeAges>(ID_FORK_RELATIVE_AGES),
+        Route::Update<&OnUpdateForkRelativeAges>(ID_FORK_RELATIVE_AGES),
         Route::Command<&OnEditCopy>(ID_EDIT_COPY_CLIPBOARD),
         Route::Update<&OnUpdateCentralHandler>(ID_EDIT_COPY_CLIPBOARD),
         Route::Command<&OnCleanupEmptyRecycleBin>(ID_CLEANUP_EMPTY_BIN),

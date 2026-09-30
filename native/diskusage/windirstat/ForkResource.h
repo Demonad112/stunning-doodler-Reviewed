@@ -15,3 +15,5 @@
 
 #define ID_FOLDER_LEDGER_EXPORT         33900
 #define ID_FOLDER_LEDGER_COMPARE        33901
+#define ID_FORK_TRACK_CHANGES           33902
+#define ID_FORK_RELATIVE_AGES           33903

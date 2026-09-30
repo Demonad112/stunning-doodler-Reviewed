@@ -13,6 +13,8 @@
 
 #include "pch.h"
 #include "Ledger.h"
+#include "ForkSettings.h"
+#include "FileTreeControl.h"
 #include "LedgerCompareDlg.h"
 #include "ProgressDlg.h"
 
@@ -83,4 +85,25 @@ void CWinDirStatModel::OnFolderLedgerCompare()
     }
 
     LedgerCompareDlg(GetMainWindow(), std::move(*baseline), std::move(*current)).ShowModal();
+}
+
+void CWinDirStatModel::OnForkTrackChanges()
+{
+    ForkSettings::TrackChanges = !ForkSettings::TrackChanges;
+}
+
+void CWinDirStatModel::OnUpdateForkTrackChanges(CCmdUI* pCmdUI)
+{
+    pCmdUI->SetCheck(ForkSettings::TrackChanges ? 1 : 0);
+}
+
+void CWinDirStatModel::OnForkRelativeAges()
+{
+    ForkSettings::ShowRelativeAge = !ForkSettings::ShowRelativeAge;
+    CFileTreeControl::Get()->Invalidate();
+}
+
+void CWinDirStatModel::OnUpdateForkRelativeAges(CCmdUI* pCmdUI)
+{
+    pCmdUI->SetCheck(ForkSettings::ShowRelativeAge ? 1 : 0);
 }
