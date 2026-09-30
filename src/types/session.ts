@@ -15,6 +15,7 @@ export const sessionTypes = [
   'version-compare',
   'archive-compare',
   'script',
+  'disk-usage',
 ] as const
 
 export type SessionType = (typeof sessionTypes)[number]

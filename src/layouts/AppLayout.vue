@@ -17,6 +17,7 @@ import {
   FolderSync,
   FolderTree,
   GitMerge,
+  HardDrive,
   HelpCircle,
   Home,
   Image,
@@ -100,7 +101,7 @@ interface NavigationItem {
   type: SessionType
   icon: LucideIcon
   count: string
-  group: 'compare' | 'sources'
+  group: 'compare' | 'sources' | 'disk'
 }
 
 interface AppMenuDefinition {
@@ -272,6 +273,7 @@ const appMenus: AppMenuDefinition[] = [
       'open.versionCompare',
       'open.registryCompare',
       'open.archiveCompare',
+      'open.diskUsage',
       'open.textEdit',
       'open.textPatch',
       'open.clipboardCompare',
@@ -323,6 +325,7 @@ const appMenus: AppMenuDefinition[] = [
       'open.mediaCompare',
       'open.versionCompare',
       'open.archiveCompare',
+      'open.diskUsage',
       'open.textEdit',
       'open.textPatch',
       'open.clipboardCompare',
@@ -949,7 +952,7 @@ const navigationItems = computed<NavigationItem[]>(() =>
       type: entry.type,
       icon: sessionIcon(entry.type),
       count: sessionCount(entry.type),
-      group: sourceSessionTypes.has(entry.type) ? 'sources' : 'compare',
+      group: navigationGroup(entry.type),
     })),
 )
 
@@ -968,6 +971,12 @@ const visibleCompareItems = computed(() =>
 const visibleSourceItems = computed(() =>
   navigationItems.value.filter(
     (item) => item.group === 'sources' && matchesSidebarQuery(t(item.titleKey)),
+  ),
+)
+
+const visibleDiskItems = computed(() =>
+  navigationItems.value.filter(
+    (item) => item.group === 'disk' && matchesSidebarQuery(t(item.titleKey)),
   ),
 )
 
@@ -1693,6 +1702,7 @@ function sessionIcon(type: SessionType): LucideIcon {
     'version-compare': FileCog,
     'archive-compare': Package,
     script: Play,
+    'disk-usage': HardDrive,
   }
 
   return icons[type] ?? FileText
@@ -1713,6 +1723,14 @@ const sourceSessionTypes = new Set<SessionType>([
   'registry-compare',
   'version-compare',
 ])
+
+function navigationGroup(type: SessionType): NavigationItem['group'] {
+  if (type === 'disk-usage') {
+    return 'disk'
+  }
+
+  return sourceSessionTypes.has(type) ? 'sources' : 'compare'
+}
 </script>
 
 <template>
@@ -1946,6 +1964,28 @@ const sourceSessionTypes = new Set<SessionType>([
           </p>
           <button
             v-for="item in visibleSourceItems"
+            :key="item.route"
+            class="nav-item"
+            type="button"
+            :data-testid="`sidebar-nav-${item.type}`"
+            :class="{ active: route.path === item.route }"
+            @click="openNavigationItem(item)"
+          >
+            <component
+              :is="item.icon"
+              :size="15"
+            />
+            <span>{{ t(item.titleKey) }}</span>
+            <b>{{ item.count }}</b>
+          </button>
+          <p
+            v-if="visibleDiskItems.length > 0"
+            class="nav-section"
+          >
+            {{ t('ui.disk') }}
+          </p>
+          <button
+            v-for="item in visibleDiskItems"
             :key="item.route"
             class="nav-item"
             type="button"

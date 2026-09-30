@@ -197,6 +197,17 @@ export const sessionCatalog: SessionCatalogEntry[] = [
     maturity: 'ready',
     route: '/reports/scripts',
   },
+  {
+    type: 'disk-usage',
+    title: 'Disk Usage',
+    titleKey: 'ui.diskUsage',
+    summary: 'See what takes up space on a drive or share, and what changed between snapshots',
+    summaryKey: 'session.summary.diskUsage',
+    priority: 'P1',
+    implemented: true,
+    maturity: 'ready',
+    route: '/disk/usage',
+  },
 ]
 
 export const sessionPriorities: SessionPriority[] = ['P0', 'P1', 'P2', 'P3']

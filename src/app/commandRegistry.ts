@@ -67,6 +67,7 @@ export type CommandId =
   | 'open.mediaCompare'
   | 'open.versionCompare'
   | 'open.archiveCompare'
+  | 'open.diskUsage'
   | 'edit.selectAll'
   | 'edit.selectAllFiles'
   | 'edit.selectOrphans'
@@ -964,6 +965,16 @@ export const commandRegistry: AppCommand[] = [
     defaultShortcut: { keys: ['Ctrl', 'Alt', 'V'], scope: 'global' },
     placements: ['command-palette', 'menu'],
     action: { type: 'navigate', route: '/compare/version', titleKey: 'ui.versionCompare' },
+  },
+  {
+    id: 'open.diskUsage',
+    titleKey: 'ui.diskUsage',
+    keywords: ['disk', 'usage', 'space', 'drive', 'snapshot', 'treemap', 'open'],
+    enabled: true,
+    visibility: 'global',
+    defaultShortcut: { keys: ['Ctrl', 'Shift', 'D'], scope: 'global' },
+    placements: ['command-palette', 'menu'],
+    action: { type: 'navigate', route: '/disk/usage', titleKey: 'ui.diskUsage' },
   },
   {
     id: 'open.archiveCompare',

@@ -19,6 +19,7 @@ pub enum SessionType {
     TextPatch,
     MediaCompare,
     VersionCompare,
+    DiskUsage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
