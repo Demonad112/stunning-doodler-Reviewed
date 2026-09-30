@@ -17,6 +17,7 @@
 
 #include "pch.h"
 #include "Item.h"
+#include "ForkFormat.h"
 
 static constexpr wchar_t AsciiLower(const wchar_t value) noexcept
 {
@@ -251,7 +252,7 @@ std::wstring CItem::GetText(const int subitem) const
     case COL_LAST_CHANGE:
         if (!IsTypeOrFlag(IT_FREESPACE, IT_UNKNOWN, IT_HLINKS, IT_HLINKS_SET, IT_HLINKS_IDX))
         {
-            return FormatFileTime(GetLastChange());
+            return ForkFormat::LastChangeText(GetLastChange()); // altWinDirStat: relative age
         }
         break;
 
@@ -292,6 +293,14 @@ COLORREF CItem::GetItemTextColor() const
 
     // The rest is not colored
     return CTreeListItem::GetItemTextColor();
+}
+
+// altWinDirStat: dim the Last Change of folders untouched for over a year
+COLORREF CItem::GetSubItemTextColor(const int subitem) const
+{
+    if (subitem == COL_LAST_CHANGE && !IsTypeOrFlag(IT_FILE) && ForkFormat::ShouldDimLastChange(GetLastChange()))
+        return DarkMode::SystemColor(COLOR_GRAYTEXT);
+    return GetItemTextColor();
 }
 
 int CItem::CompareSibling(const CTreeListItem* tlib, const int subitem) const

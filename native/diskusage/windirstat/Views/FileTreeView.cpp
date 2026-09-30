@@ -17,6 +17,7 @@
 
 #include "pch.h"
 #include "FileTreeView.h"
+#include "ForkTooltips.h"
 
 void CFileTreeView::InitializeColumns()
 {
@@ -38,6 +39,7 @@ void CFileTreeView::InitializeColumns()
     control.OnColumnsInserted(
         { COL_NAME, COL_SIZE_PROPORTION },
         { COL_ITEMS, COL_FOLDERS, COL_ATTRIBUTES, COL_OWNER });
+    ForkTooltips::AttachHeader(control, ForkTooltips::FileTreeTip); // altWinDirStat
 }
 
 void CFileTreeView::OnUpdate(CWnd* sender, const MODEL_CHANGE change, CItem* item)
@@ -89,6 +91,7 @@ void CFileTopView::InitializeColumns()
     InsertCol(IDS_COL_LAST_CHANGE, LVCFMT_LEFT, 120, COL_ITEMTOP_LAST_CHANGE);
     control.SetSorting(COL_ITEMTOP_SIZE_PHYSICAL, false);
     control.OnColumnsInserted();
+    ForkTooltips::AttachHeader(control, ForkTooltips::TopListTip); // altWinDirStat
 }
 
 void CFileDupeView::InitializeColumns()

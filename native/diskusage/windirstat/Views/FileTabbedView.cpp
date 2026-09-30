@@ -19,6 +19,7 @@
 #include "FileTabbedView.h"
 #include "FileTreeView.h"
 #include "StorageAnalyticsView.h"
+#include "FileChangesView.h" // altWinDirStat
 
 template<typename Pane>
 Pane* CFileTabbedView::AddPane(int& index, const std::wstring_view& tabLabel)
@@ -58,6 +59,8 @@ int CFileTabbedView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
         return -1;
     }
 
+    m_fileChangesView = AddPane<CFileChangesView>(m_fileChangesViewIndex, IDS_CHANGES_TAB); // altWinDirStat
+    if (m_fileChangesView == nullptr) return -1; // altWinDirStat
     OnInitialUpdate();
     return 0;
 }
@@ -88,6 +91,7 @@ void CFileTabbedView::ResetOptionalTabVisibility()
     SetWatcherTabVisibility(false);
     SetPermsTabVisibility(false);
     SetStorageAnalyticsTabVisibility(false);
+    SetChangesTabVisibility(false); // altWinDirStat
     SetDupeTabVisibility(COptions::ScanForDuplicates &&
         CWinDirStatModel::Get()->GetRootItem() != nullptr);
 }
@@ -141,6 +145,13 @@ void CFileTabbedView::SetStorageAnalyticsTabVisibility(const bool show)
     GetTabControl().SetTabVisible(m_storageAnalyticsViewIndex, show);
 }
 
+// altWinDirStat: the Changes tab is shown only while a comparison is loaded
+void CFileTabbedView::SetChangesTabVisibility(const bool show)
+{
+    GetTabControl().SetTabVisible(m_fileChangesViewIndex, show);
+    if (!show && m_fileChangesView != nullptr) m_fileChangesView->SetResult(nullptr);
+}
+
 LRESULT CFileTabbedView::OnChangeActiveTab(const WPARAM wp, const LPARAM lp)
 {
     UNREFERENCED_PARAMETER(lp);
@@ -183,7 +194,8 @@ void CFileTabbedView::OnUpdate(CWnd* sender, const MODEL_CHANGE change, CItem* i
         static_cast<CWinDirStatPane*>(m_fileSearchView),
         static_cast<CWinDirStatPane*>(m_fileWatcherView),
         static_cast<CWinDirStatPane*>(m_filePermsView),
-        static_cast<CWinDirStatPane*>(m_storageAnalyticsView) })
+        static_cast<CWinDirStatPane*>(m_storageAnalyticsView),
+        static_cast<CWinDirStatPane*>(m_fileChangesView) }) // altWinDirStat
     {
         if (pane != nullptr && pane != sender)
         {
@@ -195,7 +207,7 @@ void CFileTabbedView::OnUpdate(CWnd* sender, const MODEL_CHANGE change, CItem* i
 bool CFileTabbedView::CycleTab(const bool forward)
 {
     const auto allTabs = { m_fileTreeViewIndex, m_fileTopViewIndex, m_fileDupeViewIndex,
-        m_fileSearchViewIndex, m_fileWatcherViewIndex, m_filePermsViewIndex, m_storageAnalyticsViewIndex };
+        m_fileSearchViewIndex, m_fileWatcherViewIndex, m_filePermsViewIndex, m_storageAnalyticsViewIndex, m_fileChangesViewIndex }; // altWinDirStat: + Changes
     std::vector<int> visibleTabs;
     for (const int tabIndex : allTabs)
     {

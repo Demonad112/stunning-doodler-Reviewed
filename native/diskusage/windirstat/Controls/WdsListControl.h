@@ -56,6 +56,8 @@ public:
     {
         return DarkMode::SystemColor(COLOR_WINDOWTEXT);
     }
+    // altWinDirStat: per-cell text colour; defaults to the row colour.
+    virtual COLORREF GetSubItemTextColor(int /*subitem*/) const { return GetItemTextColor(); }
 
     // Comparison methods for sorting
     virtual int Compare(const CWdsListItem* other, int subitem) const = 0;

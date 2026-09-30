@@ -22,6 +22,7 @@
 #include "FileTreeView.h"
 
 class CStorageAnalyticsView;
+class CFileChangesView; // altWinDirStat
 
 class CFileTabbedView final : public MessageTarget<CFileTabbedView, CWinDirStatPane>
 {
@@ -52,6 +53,9 @@ public:
     void SetWatcherTabVisibility(bool show = true);
     void SetPermsTabVisibility(bool show = true);
     void SetStorageAnalyticsTabVisibility(bool show = true);
+    void SetChangesTabVisibility(bool show = true); // altWinDirStat
+    CFileChangesView* GetFileChangesView() const { return m_fileChangesView; } // altWinDirStat
+    void SetActiveChangesView() { SetActiveView(m_fileChangesViewIndex); } // altWinDirStat
     bool IsDupeTabVisible() { return GetTabControl().IsTabVisible(m_fileDupeViewIndex); }
     bool IsSearchTabVisible() { return GetTabControl().IsTabVisible(m_fileSearchViewIndex); }
     bool IsWatcherTabVisible() { return GetTabControl().IsTabVisible(m_fileWatcherViewIndex); }
@@ -86,6 +90,8 @@ CFileTabbedView() = default;
     CFilePermsView* m_filePermsView = nullptr;
     int m_storageAnalyticsViewIndex = -1;
     CStorageAnalyticsView* m_storageAnalyticsView = nullptr;
+    int m_fileChangesViewIndex = -1; // altWinDirStat
+    CFileChangesView* m_fileChangesView = nullptr; // altWinDirStat
 
     void FocusActiveTabContent();
 

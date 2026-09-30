@@ -31,20 +31,27 @@ namespace
         return { argv.get(), argv.get() + argc };
     }
 
-    // Best effort: the exit code already reports the failure; this only says why.
-    void WriteError(const std::wstring& outPath, const std::wstring& message)
+    // Writes a UTF-8 side file next to the output. Best effort: it only explains the result.
+    void WriteNote(const std::wstring& notePath, const std::wstring& message)
     {
-        const std::wstring errPath = outPath + L".err";
         const int size = WideCharToMultiByte(CP_UTF8, 0, message.data(), static_cast<int>(message.size()), nullptr, 0, nullptr, nullptr);
         std::string utf8(static_cast<size_t>(size), '\0');
         WideCharToMultiByte(CP_UTF8, 0, message.data(), static_cast<int>(message.size()), utf8.data(), size, nullptr, nullptr);
-        std::ofstream(errPath, std::ios::binary | std::ios::trunc) << utf8;
+        std::ofstream(notePath, std::ios::binary | std::ios::trunc) << utf8;
+    }
+
+    // The exit code already reports the failure; <out>.err says why.
+    void WriteError(const std::wstring& outPath, const std::wstring& message)
+    {
+        WriteNote(outPath + L".err", message);
     }
 
     bool CompareLedgers(const std::wstring& baselinePath, const std::wstring& currentPath,
         const std::wstring& outPath, const bool all)
     {
-        DeleteFile((outPath + L".err").c_str()); // never leave a stale reason next to a fresh result
+        // Never leave a stale reason or warning next to a fresh result
+        DeleteFile((outPath + L".err").c_str());
+        DeleteFile((outPath + L".warn").c_str());
 
         std::wstring error;
         auto baseline = Ledger::Load(baselinePath, error);
@@ -69,6 +76,10 @@ namespace
             WriteError(outPath, L"Cannot write comparison to " + outPath);
             return false;
         }
+        // <out>.warn: the result is valid but may mislead (read by DeepServer next to the CSV).
+        if (Ledger::FiltersDiffer(*baseline, *current))
+            WriteNote(outPath + L".warn", L"The exclusion filters changed between the two scans, so some "
+                L"folders may show as Added or Removed only because they were filtered in or out.");
         return true;
     }
 }

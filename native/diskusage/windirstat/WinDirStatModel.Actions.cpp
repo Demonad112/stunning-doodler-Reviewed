@@ -27,6 +27,7 @@
 #include "SearchDlg.h"
 #include "ProgressDlg.h"
 #include "Filtering.h"
+#include "History.h"
 
 static std::optional<std::wstring> ChooseReportPath(const CDialog::FilePickerMode mode)
 {
@@ -1274,6 +1275,7 @@ void CWinDirStatModel::StartScanningEngine(std::vector<CItem*> items)
         // Sorting and other finalization tasks
         CItem::ScanItemsFinalize(GetRootItem());
         Get()->RebuildExtensionData();
+        if (stopReason == Default && CDirStatApp::Get()->GetSaveToPath().empty()) History::PublishScan(GetRootItem()); // altWinDirStat
 
         // Handle quiet save mode if path is set
         if (const auto savePath = CDirStatApp::Get()->GetSaveToPath(); !savePath.empty())

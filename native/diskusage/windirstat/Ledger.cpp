@@ -14,6 +14,9 @@
 #include "pch.h"
 #include "Ledger.h"
 #include "Item.h"
+#include "Options.h"
+
+#include <deque>
 
 namespace
 {
@@ -21,6 +24,7 @@ namespace
     constexpr std::wstring_view ledgerHeader = L"Path,Relative Path,Size (bytes),Files,Subfolders";
     constexpr std::wstring_view ledgerSuffix = L".ledger.csv";
     constexpr std::wstring_view rootRelative = L".";
+    constexpr std::wstring_view filtersPrefix = L"#filters=";
 
     std::wstring Key(std::wstring_view text)
     {
@@ -52,12 +56,12 @@ namespace
         return !ancestor.empty() && !path.empty() && RelativeTo(ancestor, path).has_value();
     }
 
-    // Lower-cased key of the parent row: "." for top-level folders, empty for the root itself.
-    std::wstring ParentKey(const std::wstring& relative)
+    // Relative path of the parent row: "." for top-level folders, empty for the root itself.
+    std::wstring ParentRelative(const std::wstring& relative)
     {
         if (relative == rootRelative) return {};
         const size_t slash = relative.find_last_of(L'\\');
-        return slash == std::wstring::npos ? std::wstring(rootRelative) : Key(std::wstring_view(relative).substr(0, slash));
+        return slash == std::wstring::npos ? std::wstring(rootRelative) : relative.substr(0, slash);
     }
 
     void SortRows(std::vector<Ledger::Row>& rows)
@@ -127,19 +131,32 @@ namespace
         return true;
     }
 
+    // Writes "<path>.tmp" and renames it over 'path', so a crash or full disk never leaves a
+    // half-written file under the real name.
     bool WriteFile(const std::wstring& path, const std::wstring& text)
     {
-        std::ofstream out(std::filesystem::path(path), std::ios::binary | std::ios::trunc);
-        if (!out.is_open()) return false;
-        out << "\xEF\xBB\xBF" << ToUtf8(text); // BOM so Excel opens non-ASCII paths correctly
-        out.flush();
-        return out.good();
+        const std::wstring temp = path + L".tmp";
+        {
+            std::ofstream out(std::filesystem::path(temp), std::ios::binary | std::ios::trunc);
+            if (!out.is_open()) return false;
+            out << "\xEF\xBB\xBF" << ToUtf8(text); // BOM so Excel opens non-ASCII paths correctly
+            out.flush();
+            if (!out.good())
+            {
+                out.close();
+                DeleteFileW(temp.c_str());
+                return false;
+            }
+        }
+        if (MoveFileExW(temp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) return true;
+        DeleteFileW(temp.c_str());
+        return false;
     }
 
     // Keeps only rows at or below 'root' and re-expresses them relative to it.
     Ledger::Snapshot Rebase(const Ledger::Snapshot& snapshot, const std::wstring& root)
     {
-        Ledger::Snapshot rebased{ .source = snapshot.source, .root = root };
+        Ledger::Snapshot rebased{ .source = snapshot.source, .root = root, .filters = snapshot.filters };
         for (const auto& row : snapshot.rows)
         {
             if (auto relative = RelativeTo(root, row.path); relative)
@@ -157,10 +174,38 @@ bool Ledger::IsLedgerPath(const std::wstring& path)
         _wcsicmp(path.c_str() + path.size() - ledgerSuffix.size(), ledgerSuffix.data()) == 0;
 }
 
+std::wstring Ledger::FilterFingerprint()
+{
+    const std::wstring text = std::format(L"{}{}{}{}{}{}{}{}{}{}{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        COptions::ExcludeJunctions.Obj(), COptions::ExcludeSymbolicLinksDirectory.Obj(),
+        COptions::ExcludeVolumeMountPoints.Obj(), COptions::ExcludeHiddenDirectory.Obj(),
+        COptions::ExcludeProtectedDirectory.Obj(), COptions::ExcludeDropboxIgnored.Obj(),
+        COptions::ExcludeSymbolicLinksFile.Obj(), COptions::ExcludeHiddenFile.Obj(),
+        COptions::ExcludeProtectedFile.Obj(), COptions::FilteringUseRegex.Obj(), COptions::FollowVolumeMountPoints.Obj(),
+        COptions::FilteringSizeMinimum.Obj(), COptions::FilteringSizeUnits.Obj(), COptions::FilteringSizeComparison.Obj(),
+        COptions::FilteringMaxAgeDays.Obj(), COptions::FilteringMaxAgeComparison.Obj(),
+        COptions::FilteringExcludeDirs.Obj(), COptions::FilteringExcludeFiles.Obj(),
+        COptions::FilteringIncludeDirs.Obj(), COptions::FilteringIncludeFiles.Obj());
+
+    std::uint64_t hash = 14695981039346656037ull;
+    for (const wchar_t c : text)
+    {
+        hash ^= static_cast<std::uint64_t>(c);
+        hash *= 1099511628211ull;
+    }
+    return std::format(L"{:016x}", hash);
+}
+
+bool Ledger::FiltersDiffer(const Snapshot& baseline, const Snapshot& current)
+{
+    return !baseline.filters.empty() && !current.filters.empty() && baseline.filters != current.filters;
+}
+
 Ledger::Snapshot Ledger::FromScan(const CItem* root)
 {
     Snapshot snapshot;
     if (root == nullptr) return snapshot;
+    snapshot.filters = FilterFingerprint();
 
     // A multi-drive scan has a synthetic "My Computer" root: keep absolute paths as the key.
     const bool multiRoot = root->GetItemType() == IT_MYCOMPUTER;
@@ -200,6 +245,8 @@ bool Ledger::Save(const std::wstring& path, const Snapshot& snapshot)
     std::wstring text(ledgerHeader);
     for (const auto& row : snapshot.rows)
         text += std::format(L"\r\n{},{},{},{},{}", Quote(row.path), Quote(row.relative), row.size, row.files, row.folders);
+    // Last, so CSV readers that take the first line as the header still see the normal columns.
+    if (!snapshot.filters.empty()) text += std::format(L"\r\n{}{}", filtersPrefix, snapshot.filters);
     return WriteFile(path, text);
 }
 
@@ -235,6 +282,11 @@ std::optional<Ledger::Snapshot> Ledger::Load(const std::wstring& path, std::wstr
             sawHeader = true;
             continue;
         }
+        if (line.starts_with(L'#'))  // Metadata line; unknown ones are ignored for forward compatibility
+        {
+            if (line.starts_with(filtersPrefix)) snapshot.filters = line.substr(filtersPrefix.size());
+            continue;
+        }
 
         auto fields = SplitCsv(line);
         Row row;
@@ -255,6 +307,13 @@ std::optional<Ledger::Snapshot> Ledger::Load(const std::wstring& path, std::wstr
         error = L"The file is empty";
         return std::nullopt;
     }
+    // Every ledger this app writes has exactly one "." row; without it the root size change and the
+    // narrowing in Compare are wrong, and a second one means the file was edited or concatenated.
+    if (const auto roots = std::ranges::count(snapshot.rows, std::wstring_view(rootRelative), &Row::relative); roots != 1)
+    {
+        error = roots == 0 ? L"No root row (Relative Path \".\")" : L"More than one root row (Relative Path \".\")";
+        return std::nullopt;
+    }
     SortRows(snapshot.rows);
     return snapshot;
 }
@@ -271,25 +330,44 @@ std::vector<Ledger::DiffRow> Ledger::Compare(Snapshot& baseline, Snapshot& curre
         else if (IsSameOrBelow(baseline.root, current.root)) baseline = Rebase(baseline, current.root);
     }
 
-    std::unordered_map<std::wstring, const Row*> currentByKey;
-    currentByKey.reserve(current.rows.size());
-    for (const auto& row : current.rows) currentByKey.emplace(Key(row.relative), &row);
+    // Match rows by exact relative path first, then case-insensitively among the rows left over. On
+    // case-sensitive folders "Data" and "data" are two folders and must not collapse into one, but a
+    // case-only rename still lines up.
+    std::unordered_map<std::wstring, size_t> currentByRelative;
+    currentByRelative.reserve(current.rows.size());
+    for (size_t i = 0; i < current.rows.size(); ++i) currentByRelative.emplace(current.rows[i].relative, i);
+    std::vector<bool> matched(current.rows.size());
 
     std::vector<DiffRow> diff;
+    std::vector<size_t> unmatched;
     diff.reserve(std::max(baseline.rows.size(), current.rows.size()));
     for (const auto& before : baseline.rows)
     {
         DiffRow row{ .relative = before.relative, .before = &before };
-        if (const auto it = currentByKey.find(Key(before.relative)); it != currentByKey.end())
+        if (const auto it = currentByRelative.find(before.relative); it != currentByRelative.end() && !matched[it->second])
         {
-            row.after = it->second;
-            currentByKey.erase(it);
+            row.after = &current.rows[it->second];
+            matched[it->second] = true;
         }
+        else unmatched.push_back(diff.size());
         diff.push_back(std::move(row));
     }
-    for (const auto& after : current.rows)
-        if (currentByKey.contains(Key(after.relative)))
-            diff.push_back({ .relative = after.relative, .after = &after });
+    if (!unmatched.empty())
+    {
+        std::unordered_map<std::wstring, std::deque<size_t>> currentByKey;  // Unmatched rows, in order
+        for (size_t i = 0; i < current.rows.size(); ++i)
+            if (!matched[i]) currentByKey[Key(current.rows[i].relative)].push_back(i);
+        for (const size_t d : unmatched)
+        {
+            const auto it = currentByKey.find(Key(diff[d].relative));
+            if (it == currentByKey.end() || it->second.empty()) continue;
+            diff[d].after = &current.rows[it->second.front()];
+            matched[it->second.front()] = true;
+            it->second.pop_front();
+        }
+    }
+    for (size_t i = 0; i < current.rows.size(); ++i)
+        if (!matched[i]) diff.push_back({ .relative = current.rows[i].relative, .after = &current.rows[i] });
 
     summary = {};
     for (auto& row : diff)
@@ -365,9 +443,23 @@ bool Ledger::SaveComparison(const std::wstring& path, const std::vector<DiffRow>
 
 std::vector<size_t> Ledger::Significant(const std::vector<DiffRow>& rows, const ULONGLONG minOwnDelta, const bool all)
 {
+    std::unordered_map<std::wstring, size_t> byRelative;
+    byRelative.reserve(rows.size());
+    for (size_t i = 0; i < rows.size(); ++i) byRelative.emplace(rows[i].relative, i);
+
+    // Parents are found by exact path, so "Data\sub" never lands under a sibling "data". The
+    // case-insensitive map is only built if a parent is missing (e.g. after a case-only rename).
     std::unordered_map<std::wstring, size_t> byKey;
-    byKey.reserve(rows.size());
-    for (size_t i = 0; i < rows.size(); ++i) byKey.emplace(Key(rows[i].relative), i);
+    const auto findParent = [&](const std::wstring& relative) -> size_t
+    {
+        const std::wstring parentRelative = ParentRelative(relative);
+        if (parentRelative.empty()) return SIZE_MAX;
+        if (const auto it = byRelative.find(parentRelative); it != byRelative.end()) return it->second;
+        if (byKey.empty())
+            for (size_t i = 0; i < rows.size(); ++i) byKey.emplace(Key(rows[i].relative), i);
+        const auto it = byKey.find(Key(parentRelative));
+        return it == byKey.end() ? SIZE_MAX : it->second;
+    };
 
     // A folder's own delta is its change minus the change of its direct child rows.
     std::vector<LONGLONG> own(rows.size());
@@ -375,10 +467,10 @@ std::vector<size_t> Ledger::Significant(const std::vector<DiffRow>& rows, const 
     for (size_t i = 0; i < rows.size(); ++i)
     {
         own[i] += rows[i].sizeDelta;
-        if (const auto it = byKey.find(ParentKey(rows[i].relative)); it != byKey.end() && it->second != i)
+        if (const size_t p = findParent(rows[i].relative); p != SIZE_MAX && p != i)
         {
-            parent[i] = it->second;
-            own[it->second] -= rows[i].sizeDelta;
+            parent[i] = p;
+            own[p] -= rows[i].sizeDelta;
         }
     }
 

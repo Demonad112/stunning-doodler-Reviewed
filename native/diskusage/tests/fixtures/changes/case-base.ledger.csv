@@ -1,0 +1,6 @@
+Path,Relative Path,Size (bytes),Files,Subfolders
+"D:\C",".",16000000,5,4
+"D:\C\Data","Data",10000000,2,1
+"D:\C\Data\sub","Data\sub",4000000,1,0
+"D:\C\data","data",5000000,2,0
+"D:\C\Logs","Logs",1000000,1,0

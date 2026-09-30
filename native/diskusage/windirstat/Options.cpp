@@ -159,7 +159,7 @@ void COptions::PostProcessPersistedSettings()
     // File-tree visibility is also consumed by non-UI exports, so initialize its defaults before any view exists.
     if (auto& visibility = FileTreeColumnVisibility.Obj(); visibility.empty())
     {
-        visibility = { 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0 };
+        visibility = { 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 0 }; // altWinDirStat: Logical size hidden by default
     }
 
     // Adjust windows for sanity

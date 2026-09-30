@@ -380,7 +380,17 @@ pub fn resolve_s3_endpoint_host(profile: &RemoteProfile) -> String {
             format!("s3.{region}.amazonaws.com")
         }
     } else {
-        host
+        with_explicit_port(host, profile)
+    }
+}
+
+/// Appends the profile's port (e.g. MinIO on 9000) unless the host already names one or it is the
+/// scheme's default, which the HTTP client leaves out of the Host header it sends and signs.
+fn with_explicit_port(host: String, profile: &RemoteProfile) -> String {
+    let default_port = if resolve_s3_https(profile) { 443 } else { 80 };
+    match profile.endpoint.port {
+        Some(port) if port != default_port && !host.contains(':') => format!("{host}:{port}"),
+        _ => host,
     }
 }
 
@@ -657,6 +667,22 @@ mod tests {
         .with_option("useHttps", "false");
         assert!(resolve_s3_path_style(&minio, "127.0.0.1"));
         assert!(!resolve_s3_https(&minio));
+        assert_eq!(resolve_s3_endpoint_host(&minio), "127.0.0.1:9000");
+
+        // The scheme's default port stays implicit, so the signed Host matches the one sent.
+        let default_port = RemoteProfile::new(
+            "minio-tls",
+            "MinIO TLS",
+            RemoteProtocol::S3,
+            RemoteEndpoint::new("minio.example.test")
+                .with_port(443)
+                .with_root_path("demo"),
+            CredentialReference::profile_store("minio-tls"),
+        );
+        assert_eq!(
+            resolve_s3_endpoint_host(&default_port),
+            "minio.example.test"
+        );
     }
 
     #[test]
