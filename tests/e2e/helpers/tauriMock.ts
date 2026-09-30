@@ -42,6 +42,7 @@ export async function installTauriInvokeMock(page: Page): Promise<void> {
         ? (args as { settings: Record<string, unknown> }).settings
         : {}
     let lastSettings: Record<string, unknown> = {}
+    let lastPreflight: Record<string, unknown> | null = null
     const transferSummary = (state: string, notCopied: number): Record<string, unknown> => ({
       id: 'run-e2e',
       settings: lastSettings,
@@ -106,27 +107,28 @@ export async function installTauriInvokeMock(page: Page): Promise<void> {
 
         if (command === 'transfer_prepare') {
           lastSettings = transferSettings(args)
+          lastPreflight = {
+            runId: 'run-e2e',
+            files: 3,
+            folders: 0,
+            bytes: 300,
+            excluded: 0,
+            alreadyThere: 0,
+            bytesNeeded: 300,
+            freeBytes: 1_000_000,
+            volume: 'E:\\',
+            enoughSpace: true,
+            writable: true,
+            writeError: null,
+            scanErrors: 0,
+            blocked: 0,
+            issueCount: 0,
+            issues: [],
+          }
 
           return Promise.resolve({
             summary: transferSummary('prepared', 0),
-            preflight: {
-              runId: 'run-e2e',
-              files: 3,
-              folders: 0,
-              bytes: 300,
-              excluded: 0,
-              alreadyThere: 0,
-              bytesNeeded: 300,
-              freeBytes: 1_000_000,
-              volume: 'E:\\',
-              enoughSpace: true,
-              writable: true,
-              writeError: null,
-              scanErrors: 0,
-              blocked: 0,
-              issueCount: 0,
-              issues: [],
-            },
+            preflight: lastPreflight,
           })
         }
 
@@ -139,7 +141,8 @@ export async function installTauriInvokeMock(page: Page): Promise<void> {
 
           return Promise.resolve({
             summary: transferSummary(run.state, run.notCopied.length),
-            preflight: null,
+            // The real command reads the run's preflight.json.
+            preflight: lastPreflight,
             notCopied: run.notCopied,
             recent: run.recent,
             running: false,
