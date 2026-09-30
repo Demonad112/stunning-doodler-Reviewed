@@ -433,7 +433,7 @@ jobs:
           (cd initial-evidence && sha256sum run-metadata.json run-url.txt platforms.txt > SHA256SUMS)
 
       - name: Upload initial release evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: initial-release-evidence
           path: initial-evidence/
@@ -465,7 +465,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6.0.10

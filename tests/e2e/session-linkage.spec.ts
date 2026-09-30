@@ -28,6 +28,18 @@ test('home catalog lists implemented sessions and opens text compare', async ({ 
   await expect(page.getByTestId('run-diff')).toBeVisible()
 })
 
+test('disk usage lists drives and asks for two snapshots of a location', async ({ page }) => {
+  await page.goto('/disk/usage')
+  await expect(page.getByTestId('disk-usage-location')).toBeVisible()
+  await expect(page.locator('#disk-usage-location-choices option')).toHaveCount(1)
+  await page.getByTestId('disk-usage-location').fill('C:\\')
+  await page.getByTestId('disk-usage-location').press('Enter')
+  await expect(page.getByTestId('disk-usage-need-snapshots')).toBeVisible()
+  expect(await lastInvoke(page, 'diskusage_list_snapshots')).toMatchObject({
+    args: { path: 'C:\\' },
+  })
+})
+
 test('text compare CTA issues diff_text', async ({ page }) => {
   await page.goto('/compare/text')
   await expect(page.getByTestId('run-diff')).toBeVisible()

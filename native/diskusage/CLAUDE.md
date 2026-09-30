@@ -1,32 +1,35 @@
-# altWinDirStat: notes for Claude
+# DeepServer Disk Usage engine: notes for Claude
 
-**What this repo is:** an unofficial fork of official WinDirStat 2.x (C++/MFC, Windows only). Read `HANDOFF.md` first. It holds the fork-diff table, CI details and the upstream-sync procedure.
+**What this folder is:** a fork of WinDirStat 2.x (C++, Windows only; custom `UiFramework`, not MFC; GPL-2), bundled in DeepServer as a separate program, `deepserver-diskusage.exe`. It started as the standalone altWinDirStat fork, whose repo is now read-only. Read `HANDOFF.md` first. It holds the fork-diff tables (altWinDirStat, DeepServer, and per-batch), the manual checklist and known gaps.
 
 ## Layout
-- `windirstat/`: app sources (`windirstat.vcxproj`). The pre-build PowerShell scripts live in `windirstat/Build/`.
-- `windirstat.sln` and `project.early.props`: the fork's version-stamp hook.
-- `installer/altWinDirStat.iss`: Inno Setup installer (ours). `setup/` holds upstream packaging and is unused.
-- `tests/Test-WinDirStat.ps1`: upstream's headless test suites.
-- `.github/workflows/build.yml`: CI and releases. `sync-upstream.yml` does the weekly upstream merge.
-- `docs/releases/<tag>.md`: release notes, used as the GitHub Release body.
+- `windirstat/`: app sources (`windirstat.vcxproj`). The pre-build PowerShell scripts are in `windirstat/Build/`; `Compress Strings.ps1` re-sorts `res/fork/lang_en.txt` and generates `res/LangStrings.h` (untracked).
+- Fork-owned sources: `Fork*.cpp/.h`, `Ledger`, `History`, `ForkSettings.h`, `Views/FileChangesView`, `Dialogs/LedgerCompareDlg`, `res/fork/lang_en.txt`.
+- `tests/Test-ForkChanges.ps1`: DeepServer's fork tests (Windows PowerShell 5.1; the GUI checks use a portable copy, so no registry writes).
+- `tests/Test-WinDirStat.ps1`, `.github/scripts/Stress-LargeScan.ps1`: upstream suites (PowerShell 7.6+).
+- Inert here, kept for upstream merges: `.github/workflows/build.yml`, `installer/altWinDirStat.iss`, `setup/`, `docs/releases/`.
 
-## Build
+## Build and test (from `native/diskusage`)
+```powershell
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -SkipAutomaticLocation
+msbuild windirstat.sln /m /p:Configuration=Release /p:Platform=x64 "/p:ExternalCompilerOptions=/DPRODUCTION=1"
+powershell -NoProfile -ExecutionPolicy Bypass -File tests\Test-ForkChanges.ps1 -ExePath build\altWinDirStat_x64.exe   # -SkipGui for headless only
 ```
-msbuild windirstat.sln /m /p:Configuration=Release /p:Platform=x64
-```
-- The project defaults to the VS2022 toolset (v143) and switches to v145 under VS2026; no override needed.
-- Output goes to `build\altWinDirStat_<arch>.exe`.
-- CI renames it to `altWinDirStat.exe` for the zip and the installer.
-- Linux or cloud sessions can't build: push a branch and let CI (build matrix, smoke, upstream tests, installer test) verify.
+- The output is still `build\altWinDirStat_<arch>.exe`. DeepServer CI (`.github/workflows/windows-installer.yml` at the repo root) copies it to `src-tauri/binaries/deepserver-diskusage-x86_64-pc-windows-msvc.exe`.
+- The toolset defaults to v143 (VS2022) and switches to v145 under VS2026.
+- DeepServer's end-to-end check against this exe runs from the repo root: `DISKUSAGE_ENGINE=<exe> cargo test -p diskusage-core --manifest-path src-tauri/Cargo.toml -- --ignored`. It covers snapshot → change → snapshot → compare.
+- The upstream suites and the stress test need pwsh 7.6+, so they run in CI (`engine-upstream-tests` job). The `Ui` suite is left out because it waits for windows titled "WinDirStat", and this build's title is "DeepServer Disk Usage".
 
 ## Rules
-- **Keep the fork diff small** so upstream merges stay easy. Prefer fork-owned files and appended blocks over editing upstream lines, and add every change to the table in `HANDOFF.md`.
-- **Keep upstream publishing files deleted:** `publish-*-to-winget-pkgs.yml`, `.github/FUNDING.yml`, `setup/chocolatey/`, `setup/store/`. They publish under the official identity. A sync merge can bring them back; CI's `fork-guard` job fails if it does.
-- **Settings stay under `HKCU\Software\DeepServer\DiskUsage`** (DeepServer build). Never write to the official `WinDirStat` key.
-
-## Versioning and releases
-- The fork's version is `ALT_VER_*` at the end of `windirstat/Version.h`. It overrides upstream's `PRD_*`.
-- Release: add `docs/releases/vX.Y.Z.md`, merge, then run **Build** by hand with `release_tag=vX.Y.Z`, or push the tag.
-- A `-suffix` tag makes a prerelease.
-- After a release, bump the `ALT_VER_*` defaults to the next version.
-- Legacy code (the 2014–2016 fork) is only at tags `v1.0.0`, `v0.1.0` and `legacy-final`. Don't bring it back into master.
+- **Keep the upstream diff small.** Prefer fork-owned files and appended blocks, and add every upstream edit to the tables in `HANDOFF.md`. Fork IDs use ranges upstream doesn't: 900, 1900–1909, 33900–33905.
+- **Settings live under `HKCU\Software\DeepServer\DiskUsage`**, section `DeepServer`. Never write to the WinDirStat or altWinDirStat keys.
+- **`IDS_APP_TITLE` stays "WinDirStat"**, because CSV headers use it. The visible name comes from `strWinDirStat` in `Constants.h`.
+- **Ledgers**, whether saved by `/saveto x.ledger.csv` or as automatic snapshots:
+  - header, then exactly one `.` root row, then trailing `#`-prefixed metadata such as `#filters=`
+  - readers have to skip `#` lines
+- **Snapshot history** is `%LOCALAPPDATA%\DeepServer\History\<FNV-1a-64 of the location key>\`; `DEEPSERVER_HISTORY_DIR` overrides it. It must stay in step with `src-tauri/crates/diskusage-core`.
+- **Headless runs DeepServer starts pass `/noelevate`.** `/compare` writes `<out>.err` on failure and `<out>.warn` when the filters differ.
+- **Versions:**
+  - the version is `ALT_VER_*` at the end of `windirstat/Version.h` (default 1.0.0)
+  - releases come from DeepServer's workflows (Batch 6), not engine tags
+  - the 2014–2016 legacy code exists only at the old repo's tags
