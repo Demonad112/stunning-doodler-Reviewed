@@ -208,6 +208,18 @@ export const sessionCatalog: SessionCatalogEntry[] = [
     maturity: 'ready',
     route: '/disk/usage',
   },
+  {
+    type: 'transfer-monitor',
+    title: 'Transfer Monitor',
+    titleKey: 'ui.transferMonitor',
+    summary:
+      'Copy a folder with verification, or watch another program copy it, and see every file that did not make it',
+    summaryKey: 'session.summary.transferMonitor',
+    priority: 'P1',
+    implemented: true,
+    maturity: 'ready',
+    route: '/transfer',
+  },
 ]
 
 export const sessionPriorities: SessionPriority[] = ['P0', 'P1', 'P2', 'P3']

@@ -17,6 +17,7 @@ import {
   FolderSync,
   FolderTree,
   GitMerge,
+  CopyCheck,
   HardDrive,
   HelpCircle,
   Home,
@@ -80,6 +81,9 @@ import { useFolderPathNavStore } from '@/stores/folderPathNav'
 import { useFolderMenuSelectionStore } from '@/stores/folderMenuSelection'
 import { useLastCompareStore } from '@/stores/lastCompare'
 import { useWorkspacesStore } from '@/stores/workspaces'
+import { useJobsStore } from '@/stores/jobs'
+import { useTransferStore } from '@/stores/transfer'
+import JobsProgressPanel from '@/components/jobs/JobsProgressPanel.vue'
 import { createFolderSnapshot } from '@/api/diff'
 import { folderSnapshotOutputPath } from '@/app/snapshotPath'
 import { openPathExternal, takeShellCompareLaunch } from '@/api/integration'
@@ -112,6 +116,15 @@ interface AppMenuDefinition {
 
 const route = useRoute()
 const router = useRouter()
+const jobs = useJobsStore()
+const transferStore = useTransferStore()
+/** Running transfers, shown in a corner while another screen is open. */
+const backgroundJobs = computed(() => (route.path.startsWith('/transfer') ? [] : jobs.runningJobs))
+
+function cancelBackgroundJob(): void {
+  void transferStore.cancel()
+}
+
 const i18n = useI18n()
 const { t } = i18n
 const settings = useSettingsStore()
@@ -146,11 +159,15 @@ onMounted(() => {
       const folderish =
         sessionType === 'folder-compare' ||
         sessionType === 'folder-sync' ||
-        sessionType === 'folder-merge'
+        sessionType === 'folder-merge' ||
+        sessionType === 'transfer-monitor'
       const kind = folderish ? 'directory' : 'file'
       const leftReadOnly = Boolean(launch.leftReadOnly)
       const rightReadOnly = Boolean(launch.rightReadOnly)
-      const title = `${launch.left.split(/[/\\]/).pop() ?? launch.left} <--> ${launch.right.split(/[/\\]/).pop() ?? launch.right}`
+      const leftName = launch.left.split(/[/\\]/).pop() ?? launch.left
+      const rightName = launch.right.split(/[/\\]/).pop() ?? launch.right
+      // "Copy with verification" launches with only the source.
+      const title = launch.right ? `${leftName} <--> ${rightName}` : leftName
       const favor = launch.favor === 'left' || launch.favor === 'right' ? launch.favor : undefined
 
       sessionLaunch.setPendingLaunch({
@@ -161,7 +178,7 @@ onMounted(() => {
         route: launch.route,
         locations: {
           left: { uri: launch.left, kind, readOnly: leftReadOnly },
-          right: { uri: launch.right, kind, readOnly: rightReadOnly },
+          right: launch.right ? { uri: launch.right, kind, readOnly: rightReadOnly } : undefined,
           center: launch.center ? { uri: launch.center, kind, readOnly: false } : undefined,
           output: launch.output ? { uri: launch.output, kind, readOnly: false } : undefined,
         },
@@ -274,6 +291,7 @@ const appMenus: AppMenuDefinition[] = [
       'open.registryCompare',
       'open.archiveCompare',
       'open.diskUsage',
+      'open.transferMonitor',
       'open.textEdit',
       'open.textPatch',
       'open.clipboardCompare',
@@ -326,6 +344,7 @@ const appMenus: AppMenuDefinition[] = [
       'open.versionCompare',
       'open.archiveCompare',
       'open.diskUsage',
+      'open.transferMonitor',
       'open.textEdit',
       'open.textPatch',
       'open.clipboardCompare',
@@ -1703,6 +1722,7 @@ function sessionIcon(type: SessionType): LucideIcon {
     'archive-compare': Package,
     script: Play,
     'disk-usage': HardDrive,
+    'transfer-monitor': CopyCheck,
   }
 
   return icons[type] ?? FileText
@@ -2166,6 +2186,14 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
         <section class="content">
           <RouterView :key="route.fullPath" />
         </section>
+        <JobsProgressPanel
+          v-if="backgroundJobs.length > 0"
+          class="app-background-jobs"
+          data-testid="app-background-jobs"
+          :jobs="backgroundJobs"
+          @cancel="cancelBackgroundJob"
+          @click="router.push('/transfer')"
+        />
       </section>
     </main>
 
@@ -2276,6 +2304,16 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
 </template>
 
 <style scoped>
+.app-background-jobs {
+  position: fixed;
+  right: 12px;
+  bottom: 36px;
+  z-index: 20;
+  width: min(360px, calc(100vw - 24px));
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
+}
+
 .app-shell {
   display: grid;
   grid-template-rows: 48px minmax(0, 1fr) 24px;

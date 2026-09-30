@@ -25,6 +25,7 @@ const sessionTitleByType: Record<SessionType, string> = {
   'archive-compare': 'Archive Compare',
   script: 'Script',
   'disk-usage': 'Disk Usage',
+  'transfer-monitor': 'Transfer Monitor',
 }
 
 export function createSessionFromLaunch(payload: SessionLaunchPayload): SessionDocument {

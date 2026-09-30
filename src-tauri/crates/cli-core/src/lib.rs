@@ -1311,6 +1311,7 @@ fn session_type_label(session_type: &session_core::SessionType) -> &'static str 
         session_core::SessionType::MediaCompare => "media-compare",
         session_core::SessionType::VersionCompare => "version-compare",
         session_core::SessionType::DiskUsage => "disk-usage",
+        session_core::SessionType::TransferMonitor => "transfer-monitor",
     }
 }
 

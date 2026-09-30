@@ -68,6 +68,7 @@ export type CommandId =
   | 'open.versionCompare'
   | 'open.archiveCompare'
   | 'open.diskUsage'
+  | 'open.transferMonitor'
   | 'edit.selectAll'
   | 'edit.selectAllFiles'
   | 'edit.selectOrphans'
@@ -975,6 +976,16 @@ export const commandRegistry: AppCommand[] = [
     defaultShortcut: { keys: ['Ctrl', 'Shift', 'D'], scope: 'global' },
     placements: ['command-palette', 'menu'],
     action: { type: 'navigate', route: '/disk/usage', titleKey: 'ui.diskUsage' },
+  },
+  {
+    id: 'open.transferMonitor',
+    titleKey: 'ui.transferMonitor',
+    keywords: ['transfer', 'copy', 'verify', 'watch', 'not copied', 'recovery', 'open'],
+    enabled: true,
+    visibility: 'global',
+    defaultShortcut: { keys: ['Ctrl', 'Shift', 'Y'], scope: 'global' },
+    placements: ['command-palette', 'menu'],
+    action: { type: 'navigate', route: '/transfer', titleKey: 'ui.transferMonitor' },
   },
   {
     id: 'open.archiveCompare',
