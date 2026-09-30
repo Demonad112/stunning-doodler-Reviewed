@@ -72,6 +72,15 @@ Change tracking and view polish (DeepServer Batch 3; design in `docs/superpowers
 | `windirstat/windirstat.vcxproj`, `windirstat/ForkResource.h` | new sources in the fork `ItemGroup`; commands 33902–33904, controls 1907–1909 | |
 | Added: `ForkSettings.h` (`TrackChanges`, `ShowRelativeAge`, `HistoryCapMB` in section `DeepServer`), `History`, `ForkFormat`, `ForkTooltips`, `Views/FileChangesView`, `tests/fixtures/changes/*` | | Snapshots live in `%LOCALAPPDATA%\DeepServer\History\<16-hex FNV-1a-64 of the location key>\` (`DEEPSERVER_HISTORY_DIR` overrides), the same layout `diskusage-core` reads. `.partial-*` files (DeepServer's in-progress scans) are skipped. Newest 5 per location; `HistoryCapMB` (default 2048, 0 = off) prunes the oldest across locations but keeps each location's newest |
 
+Cross-launch (DeepServer Batch 4):
+
+| File | Change | Why |
+|---|---|---|
+| `windirstat/windirstat.rc` | one item in the tree/list right-click menu (`IDR_POPUP_TREE`), after Open | *Compare in DeepServer* |
+| `windirstat/WinDirStatModel.h` | two declarations and two routes in the fork block | The handler and its enable check live in `ForkCommands.cpp` |
+| `windirstat/ForkResource.h`, `res/fork/lang_en.txt` (fork-owned) | command 33905, `IDS_MENU_FORK_COMPARE_IN_DEEPSERVER` | |
+| `windirstat/ForkCommands.cpp` (fork-owned) | *Compare in DeepServer*: runs `DeepServer.exe --shell-compare "<folder>"` from the engine's folder. One selected folder works like Explorer's *Compare with DeepServer* (first pick = left side, next pick opens the compare); two selected folders set the left side (`--select-left`), wait up to 10 s, then open the compare. Disabled unless 1–2 folders/drives are selected and `DeepServer.exe` sits next to the engine | Reuses DeepServer's existing shell-compare path, so no new argument parsing on either side |
+
 ## Build
 
 * **Visual Studio 2026:** build `windirstat.sln` as is.
@@ -157,6 +166,7 @@ Legacy 1.x and 2.x both use `HKCU\Software\altWinDirStat\altWinDirStat\<section>
 13. Dark mode: the Changes list, its header, the summary and the grey ages are readable. Resize narrow and wide: the summary truncates with an ellipsis and the checkbox stays right-aligned.
 14. File → Compare Folder Ledgers with two ledgers: the dialog shows rows with colours (the dialog check from the ledger feature).
 15. Scan `C:\` and press Stop within 2 seconds: no new snapshot is written.
+16. Installed DeepServer build: right-click one folder → **Compare in DeepServer**, then another → Compare in DeepServer again: DeepServer opens Folder Compare with the two. Select two folders and use it once: same result. Portable engine without `DeepServer.exe` beside it: the item is greyed out.
 
 ## Known gaps / next steps
 

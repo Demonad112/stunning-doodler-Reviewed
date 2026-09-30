@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Archive, ChevronDown, FolderOpen, Save } from '@lucide/vue'
+import { Archive, ChevronDown, FolderOpen, HardDrive, Save } from '@lucide/vue'
 import { useI18n } from '@/i18n'
 
 withDefaults(
@@ -7,17 +7,24 @@ withDefaults(
     browseTestId?: string
     saveTestId?: string
     archiveTestId?: string
+    diskUsageTestId?: string
     canSave?: boolean
     showSave?: boolean
     showArchive?: boolean
+    /** Adds "Analyze disk usage of this side" (Folder Compare). */
+    showDiskUsage?: boolean
+    canAnalyzeDiskUsage?: boolean
   }>(),
   {
     browseTestId: undefined,
     saveTestId: undefined,
     archiveTestId: undefined,
+    diskUsageTestId: undefined,
     canSave: false,
     showSave: true,
     showArchive: false,
+    showDiskUsage: false,
+    canAnalyzeDiskUsage: false,
   },
 )
 
@@ -25,6 +32,7 @@ const emit = defineEmits<{
   browse: []
   save: []
   archive: []
+  'disk-usage': []
 }>()
 
 const { t } = useI18n()
@@ -59,6 +67,21 @@ const { t } = useI18n()
       @click="emit('archive')"
     >
       <Archive
+        :size="12"
+        aria-hidden="true"
+      />
+    </button>
+    <button
+      v-if="showDiskUsage"
+      class="bc-path-action bc-path-action-disk-usage"
+      type="button"
+      :data-testid="diskUsageTestId"
+      :aria-label="t('ui.analyzeDiskUsage')"
+      :title="t('ui.analyzeDiskUsage')"
+      :disabled="!canAnalyzeDiskUsage"
+      @click="emit('disk-usage')"
+    >
+      <HardDrive
         :size="12"
         aria-hidden="true"
       />

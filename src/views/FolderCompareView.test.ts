@@ -321,6 +321,26 @@ describe('FolderCompareView', () => {
     })
   })
 
+  it('opens Disk Usage on one side of the compare', async () => {
+    const wrapper = mountFolderCompareView()
+    const analyzeRight = wrapper.find('[data-testid="folder-disk-usage-right"]')
+
+    expect(analyzeRight.attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-testid="folder-right-root"]').setValue('E:/backup.zip')
+    expect(analyzeRight.attributes('disabled')).toBeDefined()
+
+    await wrapper.find('[data-testid="folder-right-root"]').setValue('E:/backup')
+    await analyzeRight.trigger('click')
+
+    expect(useSessionLaunchStore().pendingLaunch).toMatchObject({
+      sessionType: 'disk-usage',
+      route: '/disk/usage',
+      locations: { left: { uri: 'E:/backup' } },
+    })
+    expect(push).toHaveBeenCalledWith('/disk/usage')
+  })
+
   it('publishes both folder roots for Base Folders menu enablement', async () => {
     const wrapper = mountFolderCompareView()
     const folderMenuSelection = useFolderMenuSelectionStore()

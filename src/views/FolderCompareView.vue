@@ -2021,6 +2021,40 @@ function operationEntryPaths(): string[] {
 }
 
 const leftSideIsArchive = computed(() => isArchivePath(leftRoot.value))
+
+/** Disk Usage scans real folders only, not archives or snapshot files. */
+function canAnalyzeDiskUsage(root: string): boolean {
+  return root.trim().length > 0 && !isArchivePath(root) && !isSnapshotPath(root)
+}
+
+/** Opens Disk Usage on one side of the compare (cross-launch). */
+function analyzeDiskUsage(root: string): void {
+  if (!canAnalyzeDiskUsage(root)) {
+    return
+  }
+
+  const title = t('ui.diskUsage')
+
+  sessionLaunch.setPendingLaunch({
+    id: crypto.randomUUID(),
+    source: 'command',
+    sessionType: 'disk-usage',
+    title,
+    route: '/disk/usage',
+    locations: { left: { uri: root.trim(), kind: 'directory', readOnly: true } },
+    autoRun: false,
+  })
+  const opened = tabs.openTab({
+    title,
+    titleKey: 'ui.diskUsage',
+    route: '/disk/usage',
+    dirty: false,
+    forceNew: settings.openSessionsInNewTab,
+  })
+
+  void router.push(opened.route)
+}
+
 const rightSideIsArchive = computed(() => isArchivePath(rightRoot.value))
 const leftSideIsSnapshot = computed(() => isSnapshotPath(leftRoot.value))
 const rightSideIsSnapshot = computed(() => isSnapshotPath(rightRoot.value))
@@ -3308,8 +3342,12 @@ onUnmounted(() => {
                 archive-test-id="folder-browse-archive-left"
                 :show-save="false"
                 show-archive
+                disk-usage-test-id="folder-disk-usage-left"
+                show-disk-usage
+                :can-analyze-disk-usage="canAnalyzeDiskUsage(leftRoot)"
                 @browse="browseFolder('left')"
                 @archive="browseArchive('left')"
+                @disk-usage="analyzeDiskUsage(leftRoot)"
               />
               <span
                 v-if="leftSideIsArchive"
@@ -3352,8 +3390,12 @@ onUnmounted(() => {
                 archive-test-id="folder-browse-archive-right"
                 :show-save="false"
                 show-archive
+                disk-usage-test-id="folder-disk-usage-right"
+                show-disk-usage
+                :can-analyze-disk-usage="canAnalyzeDiskUsage(rightRoot)"
                 @browse="browseFolder('right')"
                 @archive="browseArchive('right')"
+                @disk-usage="analyzeDiskUsage(rightRoot)"
               />
               <span
                 v-if="rightSideIsArchive"

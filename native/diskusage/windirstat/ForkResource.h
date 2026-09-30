@@ -21,3 +21,4 @@
 #define IDC_CHANGES_SHOW_ALL            1908
 #define IDC_CHANGES_LIST                1909
 #define ID_FORK_CLEAN_HISTORY           33904
+#define ID_FORK_COMPARE_IN_DEEPSERVER   33905
