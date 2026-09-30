@@ -6,9 +6,11 @@ mod diskusage;
 mod linux_dnd;
 mod shell_startup;
 mod sources;
+mod transfer;
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(transfer::TransferJobs::default())
         .setup(|_app| {
             #[cfg(target_os = "linux")]
             {
@@ -90,6 +92,16 @@ pub fn run() {
             commands::save_text_file,
             commands::test_remote_profile,
             commands::touch_folder_entry,
+            transfer::transfer_cancel,
+            transfer::transfer_copy_to_recovery,
+            transfer::transfer_export_report,
+            transfer::transfer_list_runs,
+            transfer::transfer_load_run,
+            transfer::transfer_prepare,
+            transfer::transfer_retry,
+            transfer::transfer_start,
+            transfer::transfer_watch,
+            transfer::transfer_watch_finish,
             commands::write_git_integration,
             commands::write_svn_integration
         ])
