@@ -6,11 +6,27 @@ export interface InvokeCall {
   args: unknown
 }
 
+type EventCallback = (event: { event: string; id: number; payload: unknown }) => void
+
+/** What `transfer_load_run` answers; specs change it with `setTransferRun`. */
+export interface MockTransferRun {
+  state: string
+  notCopied: unknown[]
+  recent: unknown[]
+}
+
 type WindowWithInvokeLog = Window & {
   __OPEN_DIFF_INVOKE_LOG__?: InvokeCall[]
   __TAURI_INTERNALS__?: {
     invoke: (command: string, args?: unknown) => Promise<unknown>
+    transformCallback: (callback: EventCallback, once?: boolean) => number
   }
+  __TAURI_EVENT_PLUGIN_INTERNALS__?: {
+    unregisterListener: (event: string, id: number) => void
+  }
+  /** Delivers a Tauri event to the page's `listen()` handlers. */
+  __E2E_EMIT__?: (event: string, payload: unknown) => void
+  __E2E_TRANSFER_RUN__?: MockTransferRun
 }
 
 export async function installTauriInvokeMock(page: Page): Promise<void> {
@@ -18,11 +34,147 @@ export async function installTauriInvokeMock(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const tauriWindow = window as WindowWithInvokeLog
     const log: InvokeCall[] = []
+    const callbacks = new Map<number, EventCallback>()
+    const listeners = new Map<string, number[]>()
+    let nextCallbackId = 1
+    const transferSettings = (args: unknown): Record<string, unknown> =>
+      args && typeof args === 'object' && 'settings' in args
+        ? (args as { settings: Record<string, unknown> }).settings
+        : {}
+    let lastSettings: Record<string, unknown> = {}
+    const transferSummary = (state: string, notCopied: number): Record<string, unknown> => ({
+      id: 'run-e2e',
+      settings: lastSettings,
+      state,
+      createdAtMs: 1,
+      startedAtMs: null,
+      finishedAtMs: null,
+      machine: 'E2E',
+      user: 'e2e',
+      totals: {
+        plannedFiles: 3,
+        plannedBytes: 300,
+        folders: 0,
+        excluded: 0,
+        copied: 3 - notCopied,
+        copiedBytes: 100,
+        skippedIdentical: 0,
+        notCopied,
+        notCopiedBytes: 200,
+      },
+      error: null,
+    })
 
     tauriWindow.__OPEN_DIFF_INVOKE_LOG__ = log
+    tauriWindow.__E2E_TRANSFER_RUN__ = { state: 'prepared', notCopied: [], recent: [] }
+    tauriWindow.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+      unregisterListener: (event: string, id: number) => {
+        listeners.set(
+          event,
+          (listeners.get(event) ?? []).filter((listenerId) => listenerId !== id),
+        )
+        callbacks.delete(id)
+      },
+    }
+    tauriWindow.__E2E_EMIT__ = (event: string, payload: unknown) => {
+      for (const id of listeners.get(event) ?? []) {
+        callbacks.get(id)?.({ event, id, payload })
+      }
+    }
     tauriWindow.__TAURI_INTERNALS__ = {
+      transformCallback: (callback: EventCallback) => {
+        const id = nextCallbackId++
+
+        callbacks.set(id, callback)
+
+        return id
+      },
       invoke: (command: string, args?: unknown) => {
         log.push({ command, args })
+
+        if (command === 'plugin:event|listen') {
+          const { event, handler } = args as { event: string; handler: number }
+
+          listeners.set(event, [...(listeners.get(event) ?? []), handler])
+
+          return Promise.resolve(handler)
+        }
+
+        if (command === 'plugin:event|unlisten') {
+          return Promise.resolve(null)
+        }
+
+        if (command === 'transfer_prepare') {
+          lastSettings = transferSettings(args)
+
+          return Promise.resolve({
+            summary: transferSummary('prepared', 0),
+            preflight: {
+              runId: 'run-e2e',
+              files: 3,
+              folders: 0,
+              bytes: 300,
+              excluded: 0,
+              alreadyThere: 0,
+              bytesNeeded: 300,
+              freeBytes: 1_000_000,
+              volume: 'E:\\',
+              enoughSpace: true,
+              writable: true,
+              writeError: null,
+              scanErrors: 0,
+              blocked: 0,
+              issueCount: 0,
+              issues: [],
+            },
+          })
+        }
+
+        if (command === 'transfer_load_run') {
+          const run = tauriWindow.__E2E_TRANSFER_RUN__ ?? {
+            state: 'prepared',
+            notCopied: [],
+            recent: [],
+          }
+
+          return Promise.resolve({
+            summary: transferSummary(run.state, run.notCopied.length),
+            preflight: null,
+            notCopied: run.notCopied,
+            recent: run.recent,
+            running: false,
+            folder: 'C:\\Users\\e2e\\AppData\\Local\\DeepServer\\Transfers\\run-e2e',
+          })
+        }
+
+        if (command === 'transfer_copy_to_recovery') {
+          return Promise.resolve({
+            folder: 'E:\\Backup_NotCopied\\run-e2e',
+            listFile: 'E:\\Backup_NotCopied\\run-e2e\\NOT-COPIED.csv',
+            copied: 1,
+            skipped: [],
+          })
+        }
+
+        if (command === 'transfer_export_report') {
+          return Promise.resolve({
+            format: 'html',
+            outputPath: 'E:\\DeepServer transfer run-e2e.html',
+            bytesWritten: 2048,
+          })
+        }
+
+        if (
+          command === 'transfer_start' ||
+          command === 'transfer_retry' ||
+          command === 'transfer_watch'
+        ) {
+          return Promise.resolve(null)
+        }
+
+        if (command === 'transfer_cancel' || command === 'transfer_watch_finish') {
+          return Promise.resolve(true)
+        }
 
         if (command === 'diff_text') {
           return Promise.resolve({
@@ -419,6 +571,23 @@ export function invokeLog(page: Page): Promise<InvokeCall[]> {
 
     return tauriWindow.__OPEN_DIFF_INVOKE_LOG__ ?? []
   })
+}
+
+/** Sends a Tauri event (e.g. `transfer://items`) to the page. */
+export async function emitTauriEvent(page: Page, event: string, payload: unknown): Promise<void> {
+  await page.evaluate(
+    ([name, body]) => {
+      ;(window as WindowWithInvokeLog).__E2E_EMIT__?.(name, body)
+    },
+    [event, payload] as const,
+  )
+}
+
+/** Sets what `transfer_load_run` returns from now on. */
+export async function setTransferRun(page: Page, run: MockTransferRun): Promise<void> {
+  await page.evaluate((next) => {
+    ;(window as WindowWithInvokeLog).__E2E_TRANSFER_RUN__ = next
+  }, run)
 }
 
 export async function lastInvoke(page: Page, command: string): Promise<InvokeCall | undefined> {
