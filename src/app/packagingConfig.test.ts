@@ -148,6 +148,17 @@ describe('packagingConfig', () => {
       expect(hooks).toContain(`${String.raw`Software\Classes\Directory\shell`}\\${key}`)
     }
     expect(hooks).toContain('--shell-compare --select-left')
+    // Copy with verification opens the Transfer Monitor on a folder or a whole drive.
+    for (const root of ['Directory', 'Drive']) {
+      const key = `Software\\Classes\\${root}\\shell\\DeepServerCopyVerify`
+
+      expect(hooks).toContain(`WriteRegStr HKLM "${key}"`)
+      expect(hooks).toContain(`DeleteRegKey HKLM "${key}"`)
+      expect(hooks).toContain(
+        `DeleteRegKey HKCU "Software\\Classes\\${root}\\shell\\\${VERB}CopyVerify"`,
+      )
+    }
+    expect(hooks).toContain(String.raw`--copy-verify "%1"`)
     expect(hooks).toContain('NSIS_HOOK_POSTUNINSTALL')
     // The exe comes from mainBinaryName, never a hardcoded Cargo target name.
     expect(hooks).toContain(String.raw`$INSTDIR\${MAINBINARYNAME}.exe`)

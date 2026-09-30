@@ -36,6 +36,10 @@ fn main() {
             }
             std::process::exit(cli_exit_code_value(result.exit_code));
         }
+        CliCommand::CopyVerify { path } => {
+            eprintln!("copy-verify opens the Transfer Monitor; run DeepServer.exe --copy-verify \"{path}\"");
+            std::process::exit(cli_exit_code_value(cli_core::CliExitCode::UsageError));
+        }
         CliCommand::ShellCompare { path, select_left } => {
             let store = ShellCompareStateStore::new(shell_compare_state_path());
             let outcome = if select_left {

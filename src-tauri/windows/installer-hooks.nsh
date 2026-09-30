@@ -9,6 +9,8 @@
   DeleteRegKey HKCU "Software\Classes\Directory\shell\${VERB}"
   DeleteRegKey HKCU "Software\Classes\*\shell\${VERB}SelectLeft"
   DeleteRegKey HKCU "Software\Classes\Directory\shell\${VERB}SelectLeft"
+  DeleteRegKey HKCU "Software\Classes\Directory\shell\${VERB}CopyVerify"
+  DeleteRegKey HKCU "Software\Classes\Drive\shell\${VERB}CopyVerify"
 !macroend
 
 ; Disk-usage engine entries. The key name is the engine's own (wds::strWinDirStat), so the per-user entry
@@ -46,6 +48,13 @@
   WriteRegStr HKLM "Software\Classes\Directory\shell\DeepServerSelectLeft" "MUIVerb" "Select Left Folder for Compare"
   WriteRegStr HKLM "Software\Classes\Directory\shell\DeepServerSelectLeft" "Icon" "$INSTDIR\${MAINBINARYNAME}.exe"
   WriteRegStr HKLM "Software\Classes\Directory\shell\DeepServerSelectLeft\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" --shell-compare --select-left "%1"'
+  ; Transfer Monitor with this folder or drive as the source.
+  WriteRegStr HKLM "Software\Classes\Directory\shell\DeepServerCopyVerify" "MUIVerb" "Copy with verification (DeepServer)"
+  WriteRegStr HKLM "Software\Classes\Directory\shell\DeepServerCopyVerify" "Icon" "$INSTDIR\${MAINBINARYNAME}.exe"
+  WriteRegStr HKLM "Software\Classes\Directory\shell\DeepServerCopyVerify\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" --copy-verify "%1"'
+  WriteRegStr HKLM "Software\Classes\Drive\shell\DeepServerCopyVerify" "MUIVerb" "Copy with verification (DeepServer)"
+  WriteRegStr HKLM "Software\Classes\Drive\shell\DeepServerCopyVerify" "Icon" "$INSTDIR\${MAINBINARYNAME}.exe"
+  WriteRegStr HKLM "Software\Classes\Drive\shell\DeepServerCopyVerify\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" --copy-verify "%1"'
 
   ; Only when the engine was bundled (release builds pass src-tauri/tauri.engine.conf.json).
   ${If} ${FileExists} "$INSTDIR\deepserver-diskusage.exe"
@@ -70,6 +79,8 @@
   DeleteRegKey HKLM "Software\Classes\Directory\shell\DeepServer"
   DeleteRegKey HKLM "Software\Classes\*\shell\DeepServerSelectLeft"
   DeleteRegKey HKLM "Software\Classes\Directory\shell\DeepServerSelectLeft"
+  DeleteRegKey HKLM "Software\Classes\Directory\shell\DeepServerCopyVerify"
+  DeleteRegKey HKLM "Software\Classes\Drive\shell\DeepServerCopyVerify"
   ; Entries the app itself wrote for the uninstalling user (Settings > Shell integration).
   !insertmacro DS_DELETE_USER_MENU "DeepServer"
   !insertmacro DS_DELETE_DISKUSAGE_MENU HKLM

@@ -17,6 +17,10 @@ pub enum CliCommand {
         path: String,
         select_left: bool,
     },
+    /// Opens the Transfer Monitor with `path` as the source ("Copy with verification").
+    CopyVerify {
+        path: String,
+    },
     GitDifftoolConfig {
         executable_path: String,
         scope: GitConfigScope,
@@ -235,6 +239,7 @@ where
     match command.as_str() {
         "--help" | "-h" | "help" => Ok(help_invocation()),
         "--shell-compare" | "shell-compare" => parse_shell_compare(args.collect()),
+        "--copy-verify" | "copy-verify" => parse_copy_verify(args.collect()),
         "git-difftool-config" => parse_git_difftool_config(args.collect()),
         "git-mergetool-config" => parse_git_mergetool_config(args.collect()),
         "svn-diff" => parse_svn_diff(args.collect()),
@@ -261,6 +266,7 @@ pub fn cli_help_text() -> String {
         "  compare [--quiet] <left> <right>".to_owned(),
         "  compare-folders [--quiet] <left> <right>".to_owned(),
         "  shell-compare [--select-left] <path>".to_owned(),
+        "  copy-verify <folder>   open the Transfer Monitor with this source".to_owned(),
         "  git-difftool-config [--global|--local] [--write] <executable-path>".to_owned(),
         "  git-mergetool-config [--global|--local] [--write] <executable-path>".to_owned(),
         "  svn-diff <svn external diff args>".to_owned(),
@@ -730,6 +736,16 @@ fn parse_shell_compare(args: Vec<String>) -> Result<CliInvocation, CliParseError
 
     Ok(CliInvocation {
         command: CliCommand::ShellCompare { path, select_left },
+        exit_code: CliExitCode::Success,
+    })
+}
+
+fn parse_copy_verify(args: Vec<String>) -> Result<CliInvocation, CliParseError> {
+    let [path] = <[String; 1]>::try_from(args)
+        .map_err(|_| usage_error("copy-verify requires a single source folder PATH"))?;
+
+    Ok(CliInvocation {
+        command: CliCommand::CopyVerify { path },
         exit_code: CliExitCode::Success,
     })
 }
@@ -1380,6 +1396,17 @@ mod tests {
                 select_left: true,
             }
         );
+
+        let copy_verify = parse_cli_args(["open-diff-app", "--copy-verify", "D:/Data"])
+            .expect("copy-verify should parse");
+        assert_eq!(
+            copy_verify.command,
+            CliCommand::CopyVerify {
+                path: "D:/Data".to_owned(),
+            }
+        );
+        assert!(parse_cli_args(["open-diff-app", "--copy-verify"]).is_err());
+        assert!(parse_cli_args(["open-diff-app", "--copy-verify", "a", "b"]).is_err());
 
         let folders = parse_cli_args(["open-diff-cli", "compare-folders", "left", "right"])
             .expect("folder compare should parse");

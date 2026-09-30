@@ -18,6 +18,8 @@ $selectFileLabel = 'Select Left File for Compare'
 $selectFolderLabel = 'Select Left Folder for Compare'
 $compareCommand = "`"$AppPath`" --shell-compare `"%1`""
 $selectLeftCommand = "`"$AppPath`" --shell-compare --select-left `"%1`""
+$copyVerifyLabel = "Copy with verification ($ProductName)"
+$copyVerifyCommand = "`"$AppPath`" --copy-verify `"%1`""
 $entries = @(
   @{
     Key = "HKCU:\Software\Classes\*\shell\$VerbKey"
@@ -38,6 +40,16 @@ $entries = @(
     Key = "HKCU:\Software\Classes\Directory\shell\${VerbKey}SelectLeft"
     Label = $selectFolderLabel
     Command = $selectLeftCommand
+  },
+  @{
+    Key = "HKCU:\Software\Classes\Directory\shell\${VerbKey}CopyVerify"
+    Label = $copyVerifyLabel
+    Command = $copyVerifyCommand
+  },
+  @{
+    Key = "HKCU:\Software\Classes\Drive\shell\${VerbKey}CopyVerify"
+    Label = $copyVerifyLabel
+    Command = $copyVerifyCommand
   }
 )
 
@@ -51,4 +63,4 @@ foreach ($entry in $entries) {
   Set-ItemProperty -Path "$($entry.Key)\command" -Name '(default)' -Value $entry.Command
 }
 
-Write-Host "Registered $ProductName Explorer context menu entries (Compare + Select Left)."
+Write-Host "Registered $ProductName Explorer context menu entries (Compare, Select Left, Copy with verification)."
