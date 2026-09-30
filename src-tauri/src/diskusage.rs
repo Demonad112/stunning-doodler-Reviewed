@@ -1,6 +1,6 @@
 //! Tauri commands for the bundled disk-usage engine (see `diskusage-core`).
 
-use diskusage_core::{ChangeRow, DiskUsageError, DriveInfo, SnapshotInfo};
+use diskusage_core::{Comparison, DiskUsageError, DriveInfo, SnapshotInfo};
 use shared_types::{AppErrorCode, AppErrorPayload};
 use std::path::{Path, PathBuf};
 
@@ -103,7 +103,7 @@ pub async fn diskusage_compare(
     baseline: String,
     current: String,
     all: bool,
-) -> Result<Vec<ChangeRow>, AppErrorPayload> {
+) -> Result<Comparison, AppErrorPayload> {
     let engine = locate_engine()?;
     run_blocking(move || {
         diskusage_core::compare_snapshots(&engine, Path::new(&baseline), Path::new(&current), all)

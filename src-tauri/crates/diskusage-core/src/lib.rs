@@ -16,6 +16,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 pub const KEEP_PER_LOCATION: usize = 5;
 /// `/compare` only reads two CSV files, so a minute means something is stuck.
 pub const COMPARE_TIMEOUT: Duration = Duration::from_secs(60);
+/// A headless scan of a very large server volume can take hours; past this it is treated as stuck.
+pub const SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(6 * 60 * 60);
 pub const HISTORY_DIR_ENV: &str = "DEEPSERVER_HISTORY_DIR";
 const LEDGER_SUFFIX: &str = ".ledger.csv";
 
@@ -215,8 +217,17 @@ fn write_location_file(dir: &Path, key: &str) -> io::Result<()> {
 }
 
 /// Scans `scan_root` headlessly with the engine and stores the ledger in the history folder.
-/// Blocks for the whole scan, so call it off the UI thread.
+/// Blocks for the whole scan (up to [`SNAPSHOT_TIMEOUT`]), so call it off the UI thread.
 pub fn take_snapshot(engine: &Path, root: &Path, scan_root: &str) -> Result<SnapshotInfo> {
+    take_snapshot_with_timeout(engine, root, scan_root, SNAPSHOT_TIMEOUT)
+}
+
+fn take_snapshot_with_timeout(
+    engine: &Path,
+    root: &Path,
+    scan_root: &str,
+    timeout: Duration,
+) -> Result<SnapshotInfo> {
     let scan_path = Path::new(scan_root.trim());
     if scan_root.trim().is_empty() || !scan_path.is_dir() {
         return Err(DiskUsageError::InvalidPath(scan_root.to_owned()));
@@ -230,18 +241,28 @@ pub fn take_snapshot(engine: &Path, root: &Path, scan_root: &str) -> Result<Snap
     // half-written ledger must never show up as the newest snapshot.
     let name = snapshot_file_name(SystemTime::now());
     let temp = dir.join(format!(".partial-{name}"));
-    let status = Command::new(engine)
-        .arg("/noelevate")
-        .arg("/saveto")
-        .arg(&temp)
-        .arg(scan_path)
-        .status()?;
-    if !status.success() || !temp.is_file() {
-        let _ = fs::remove_file(&temp);
-        return Err(DiskUsageError::Engine {
-            code: status.code(),
-            message: String::new(),
-        });
+    // `/saveto` reports failure only through its exit code; it writes no `.err` note.
+    let status = run_with_timeout(
+        Command::new(engine)
+            .arg("/noelevate")
+            .arg("/saveto")
+            .arg(&temp)
+            .arg(scan_path),
+        timeout,
+    );
+    match status {
+        Ok(status) if status.success() && temp.is_file() => {}
+        Ok(status) => {
+            let _ = fs::remove_file(&temp);
+            return Err(DiskUsageError::Engine {
+                code: status.code(),
+                message: String::new(),
+            });
+        }
+        Err(error) => {
+            let _ = fs::remove_file(&temp);
+            return Err(error);
+        }
     }
 
     let final_path = dir.join(&name);
@@ -376,13 +397,22 @@ fn split_csv_line(line: &str) -> Vec<String> {
     fields
 }
 
+/// Result of `/compare`: the changed folders, plus the engine's `<out>.warn` note when the result is
+/// valid but may mislead (the exclusion filters differ between the two snapshots).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Comparison {
+    pub rows: Vec<ChangeRow>,
+    pub warning: Option<String>,
+}
+
 /// Runs the engine's `/compare`. `all` lists every changed folder instead of only significant ones.
 pub fn compare_snapshots(
     engine: &Path,
     baseline: &Path,
     current: &Path,
     all: bool,
-) -> Result<Vec<ChangeRow>> {
+) -> Result<Comparison> {
     let out = std::env::temp_dir().join(format!(
         "deepserver-compare-{}-{}.csv",
         std::process::id(),
@@ -392,6 +422,7 @@ pub fn compare_snapshots(
             .as_nanos()
     ));
     let err = PathBuf::from(format!("{}.err", out.display()));
+    let warn = PathBuf::from(format!("{}.warn", out.display()));
 
     let mut command = Command::new(engine);
     command.arg("/compare").arg(baseline).arg(current).arg(&out);
@@ -400,7 +431,12 @@ pub fn compare_snapshots(
     }
     let result = run_with_timeout(&mut command, COMPARE_TIMEOUT).and_then(|status| {
         if status.success() {
-            parse_comparison_csv(&fs::read_to_string(&out)?)
+            let rows = parse_comparison_csv(&fs::read_to_string(&out)?)?;
+            let warning = fs::read_to_string(&warn)
+                .ok()
+                .map(|text| text.trim_start_matches('\u{FEFF}').trim().to_owned())
+                .filter(|text| !text.is_empty());
+            Ok(Comparison { rows, warning })
         } else {
             Err(DiskUsageError::Engine {
                 code: status.code(),
@@ -413,6 +449,7 @@ pub fn compare_snapshots(
     });
     let _ = fs::remove_file(&out);
     let _ = fs::remove_file(&err);
+    let _ = fs::remove_file(&warn);
     result
 }
 
@@ -710,6 +747,107 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(error, DiskUsageError::InvalidPath(_)));
+    }
+
+    /// Writes a batch file that stands in for the engine; `body` runs with the engine's arguments.
+    #[cfg(windows)]
+    fn fake_engine(dir: &Path, body: &str) -> PathBuf {
+        fs::create_dir_all(dir).unwrap();
+        let path = dir.join("fake-engine.cmd");
+        fs::write(&path, format!("@echo off\r\n{body}\r\n")).unwrap();
+        path
+    }
+
+    #[cfg(windows)]
+    const FAKE_HEADER: &str = "echo Folder,Change,Baseline Size (bytes),Current Size (bytes),Size Change (bytes),Baseline Files,Current Files,Files Change> \"%~4\"";
+
+    #[cfg(windows)]
+    fn leftover_compare_files() -> usize {
+        let prefix = format!("deepserver-compare-{}-", std::process::id());
+        fs::read_dir(std::env::temp_dir())
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with(&prefix))
+            .count()
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn compare_returns_the_filter_warning_and_cleans_up() {
+        let dir = std::env::temp_dir().join(format!("diskusage-core-warn-{}", std::process::id()));
+        let engine = fake_engine(
+            &dir,
+            &format!(
+                // Redirect first: a trailing `2>>` would redirect stderr instead.
+                "{FAKE_HEADER}\r\n>> \"%~4\" echo \"new\",\"Added\",,4096,4096,,2,2\r\n\
+                 > \"%~4.warn\" echo The exclusion filters changed.\r\nexit /b 0"
+            ),
+        );
+        let before = leftover_compare_files();
+
+        let comparison = compare_snapshots(
+            &engine,
+            Path::new("a.ledger.csv"),
+            Path::new("b.ledger.csv"),
+            false,
+        )
+        .unwrap();
+        assert_eq!(comparison.rows.len(), 1);
+        assert_eq!(comparison.rows[0].change, ChangeKind::Added);
+        assert_eq!(
+            comparison.warning.as_deref(),
+            Some("The exclusion filters changed.")
+        );
+        assert_eq!(leftover_compare_files(), before);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn compare_without_a_warning_note_has_none() {
+        let dir =
+            std::env::temp_dir().join(format!("diskusage-core-nowarn-{}", std::process::id()));
+        let engine = fake_engine(&dir, &format!("{FAKE_HEADER}\r\nexit /b 0"));
+
+        let comparison = compare_snapshots(
+            &engine,
+            Path::new("a.ledger.csv"),
+            Path::new("b.ledger.csv"),
+            true,
+        )
+        .unwrap();
+        assert!(comparison.rows.is_empty());
+        assert_eq!(comparison.warning, None);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn snapshot_that_hangs_times_out_and_leaves_no_partial_file() {
+        let dir = std::env::temp_dir().join(format!("diskusage-core-hang-{}", std::process::id()));
+        // Writes a partial ledger (argument 3 is the /saveto target), then hangs.
+        let engine = fake_engine(
+            &dir.join("engine"),
+            "echo x> \"%~3\"\r\nping -n 30 127.0.0.1 > nul",
+        );
+        let scanned = dir.join("scanned");
+        fs::create_dir_all(&scanned).unwrap();
+        let root = dir.join("history");
+        let scan_root = scanned.to_string_lossy().into_owned();
+
+        let error =
+            take_snapshot_with_timeout(&engine, &root, &scan_root, Duration::from_millis(1500))
+                .unwrap_err();
+        assert!(matches!(error, DiskUsageError::TimedOut));
+        let names: Vec<String> = fs::read_dir(location_dir(&root, &scan_root))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["location.txt".to_owned()]);
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[cfg(windows)]
