@@ -54,6 +54,24 @@ This folder is the disk-usage engine bundled in DeepServer (`native/diskusage` i
 | `.github/scripts/Stress-LargeScan.ps1`, `ForkCommands.cpp`, `ForkResource.h`, `res/fork/lang_en.txt` | UTF-8 BOM / key order as the pre-build formatter writes them | Committed as formatted so every build leaves a clean tree |
 | Removed: `.github/workflows/sync-upstream.yml`, `maintenance.yml` | | Upstream sync and prerelease cleanup belonged to the standalone fork; `build.yml` here is inert (DeepServer CI builds the engine in `windows-installer.yml`) |
 
+Change tracking and view polish (DeepServer Batch 3; design in `docs/superpowers/specs/2026-09-29-change-tracking-design.md`, plan in `docs/superpowers/plans/2026-09-29-change-tracking.md`):
+
+| File | Change | Why |
+|---|---|---|
+| `windirstat/WinDirStat.cpp` | `#include "ForkCli.h"` and `ForkCli::RunIfRequested()` after the bootstrap language load | Headless `/compare`, handled before upstream's strict parser |
+| `windirstat/WinDirStatModel.Actions.cpp` | `#include "History.h"` and one line after `RebuildExtensionData()`: `History::PublishScan` when `stopReason == Default` and not `/saveto` | Automatic snapshots and the Changes tab; stopped scans are excluded |
+| `windirstat/WinDirStatModel.h` | five more declarations and routes in the fork block | Options-menu toggles and history clean-up |
+| `windirstat/windirstat.rc` | three Options-menu items plus a separator | Track Changes, Show Relative Ages, Clean Up Change History |
+| `windirstat/Views/FileTabbedView.h/.cpp` | forward declaration, include, two members, three inline methods, `SetChangesTabVisibility`, `AddPane` (added last), and the Changes view added to `ResetOptionalTabVisibility`, `OnUpdate` and `CycleTab` | Hosts the Changes tab without shifting upstream tab indices |
+| `windirstat/Controls/WdsListControl.h/.cpp` | `CWdsListItem::GetSubItemTextColor` virtual (defaults to the row colour); `DrawItem` calls it | Per-cell colour for dimmed ages |
+| `windirstat/Item.h`, `windirstat/Item.Extended.cpp` | `GetSubItemTextColor` override; Last Change text via `ForkFormat::LastChangeText` | Readable ages; stale folders dimmed |
+| `windirstat/Views/FileTreeView.cpp` | `ForkTooltips::AttachHeader` at the end of the All Files and Largest Files `InitializeColumns` | Header tooltips |
+| `windirstat/Options.cpp` | default `FileTreeColumnVisibility`: Logical size off | Less clutter on fresh profiles; existing layouts untouched |
+| `windirstat/Ledger.cpp/.h` (fork-owned) | Exact-path matching before case-insensitive fallback in `Compare`/`Significant` (E7); `Load` requires exactly one root row, every write goes through `<path>.tmp` + rename (E8); trailing `#filters=<fingerprint>` line and `FiltersDiffer` (E23) | Case-sensitive folders, corrupt files, filter changes misread as deletions |
+| `windirstat/ForkCli.cpp` (fork-owned) | `/compare` writes `<out>.warn` when the two ledgers' filter fingerprints differ | DeepServer can show the warning next to its compare table |
+| `windirstat/windirstat.vcxproj`, `windirstat/ForkResource.h` | new sources in the fork `ItemGroup`; commands 33902–33904, controls 1907–1909 | |
+| Added: `ForkSettings.h` (`TrackChanges`, `ShowRelativeAge`, `HistoryCapMB` in section `DeepServer`), `History`, `ForkFormat`, `ForkTooltips`, `Views/FileChangesView`, `tests/fixtures/changes/*` | | Snapshots live in `%LOCALAPPDATA%\DeepServer\History\<16-hex FNV-1a-64 of the location key>\` (`DEEPSERVER_HISTORY_DIR` overrides), the same layout `diskusage-core` reads. `.partial-*` files (DeepServer's in-progress scans) are skipped. Newest 5 per location; `HistoryCapMB` (default 2048, 0 = off) prunes the oldest across locations but keeps each location's newest |
+
 ## Build
 
 * **Visual Studio 2026:** build `windirstat.sln` as is.
@@ -119,6 +137,26 @@ Legacy 1.x and 2.x both use `HKCU\Software\altWinDirStat\altWinDirStat\<section>
   * It refuses final releases.
   * It exists because cloud Claude sessions can't delete tags through their git proxy.
 * **Old branches:** `Problem-commit`, `attempt-removal-of-ConcRT-deps` and `fix-blank-header-ctrl` are 2014–2016 legacy branches, and `claude/no-command-line` is a legacy-codebase feature branch. None is merged into master. They're kept for history; delete them only on purpose.
+
+## Manual checklist: Changes tab, ages, tooltips and history
+
+`tests/Test-ForkChanges.ps1` (run by DeepServer CI in `windows-installer.yml`, GUI checks included) covers `/compare`, snapshots, retention, the size cap and filter fingerprints. These need a person (x64 build, history at its default location):
+
+1. Scan a scratch folder `%TEMP%\awds-manual` containing `a\b` and `c`. Close the app.
+2. Add a 20 MB file to `a\b`, delete `c`, create `d\e`. Scan the same folder again. Expected: a **Changes** tab; the summary reads `Since <date> (…): net …, 1 new, 1 removed, 1 grew, 0 shrank`; rows `a\b` (Grown, orange), `c` (Removed, red), `d` (Added, green); `a` and `.` not listed.
+3. Tick **Show all changed folders**: `a` and `.` appear. Untick: they disappear.
+4. Click each column header: it sorts; clicking again reverses.
+5. Double-click `a\b`: All Files activates with `a\b` selected. Double-click `c`: nothing happens.
+6. F5: the tab stays and still compares against the first session.
+7. Options → Track Changes Between Scans off: the tab disappears; a rescan shows no tab and writes no snapshot. Turn it back on.
+8. Scan a folder never scanned before: no Changes tab.
+9. Change an exclusion filter and rescan: the summary starts with the filter warning.
+10. Options → Clean Up Change History: the dialog shows the snapshot count, size and limit; Yes deletes the history and hides the tab.
+11. Last Change shows `N yrs ago (date)`; folders untouched for over a year are grey; Options → Show Relative Ages toggles both.
+12. Hover the All Files, Largest Files and Changes headers: a one-line explanation appears and follows the column under the mouse, also after reordering columns; the header's right-click menu still works.
+13. Dark mode: the Changes list, its header, the summary and the grey ages are readable. Resize narrow and wide: the summary truncates with an ellipsis and the checkbox stays right-aligned.
+14. File → Compare Folder Ledgers with two ledgers: the dialog shows rows with colours (the dialog check from the ledger feature).
+15. Scan `C:\` and press Stop within 2 seconds: no new snapshot is written.
 
 ## Known gaps / next steps
 

@@ -47,9 +47,11 @@ jobs:
         run: |
           msbuild windirstat.sln /m /nologo /v:minimal /p:Configuration=Release /p:Platform=x64 "/p:ExternalCompilerOptions=/DPRODUCTION=1"
           if ($LASTEXITCODE -ne 0) { throw 'msbuild failed' }
-      - name: Test disk-usage engine
+      - name: Test disk-usage engine (compare, change tracking, history)
         shell: pwsh
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File native/diskusage/tests/Test-ForkChanges.ps1 -ExePath native/diskusage/build/altWinDirStat_x64.exe -SkipGui
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File native/diskusage/tests/Test-ForkChanges.ps1 -ExePath native/diskusage/build/altWinDirStat_x64.exe
+          if ($LASTEXITCODE -ne 0) { throw "Engine tests failed (exit $LASTEXITCODE)" }
       - name: Stage engine as Tauri sidecar
         shell: pwsh
         run: |
