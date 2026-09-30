@@ -15,6 +15,8 @@
 #include "History.h"
 #include "ForkSettings.h"
 #include "Item.h"
+#include "FileTabbedView.h"
+#include "FileChangesView.h"
 
 namespace
 {
@@ -193,5 +195,18 @@ std::shared_ptr<const History::Result> History::OnScanComplete(const CItem* root
 
 void History::PublishScan(const CItem* root)
 {
-    (void)OnScanComplete(root);
+    auto result = OnScanComplete(root);
+    CMainFrame::Get()->InvokeInMessageThread([result = std::move(result)]() mutable
+    {
+        auto* tabs = CMainFrame::Get()->GetFileTabbedView();
+        if (tabs == nullptr) return;
+        if (!result)
+        {
+            tabs->SetChangesTabVisibility(false);
+            return;
+        }
+        // SetResult first: hiding the tab clears the result, so it must not run after it.
+        tabs->GetFileChangesView()->SetResult(std::move(result));
+        tabs->SetChangesTabVisibility(true);
+    });
 }

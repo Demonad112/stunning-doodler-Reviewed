@@ -15,6 +15,7 @@
 #include "Ledger.h"
 #include "ForkSettings.h"
 #include "FileTreeControl.h"
+#include "FileTabbedView.h"
 #include "LedgerCompareDlg.h"
 #include "ProgressDlg.h"
 
@@ -90,6 +91,7 @@ void CWinDirStatModel::OnFolderLedgerCompare()
 void CWinDirStatModel::OnForkTrackChanges()
 {
     ForkSettings::TrackChanges = !ForkSettings::TrackChanges;
+    if (!ForkSettings::TrackChanges) CMainFrame::Get()->GetFileTabbedView()->SetChangesTabVisibility(false);
 }
 
 void CWinDirStatModel::OnUpdateForkTrackChanges(CCmdUI* pCmdUI)
