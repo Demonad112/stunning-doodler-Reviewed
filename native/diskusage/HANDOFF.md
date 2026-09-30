@@ -80,6 +80,7 @@ Cross-launch (DeepServer Batch 4):
 | `windirstat/WinDirStatModel.h` | two declarations and two routes in the fork block | The handler and its enable check live in `ForkCommands.cpp` |
 | `windirstat/ForkResource.h`, `res/fork/lang_en.txt` (fork-owned) | command 33905, `IDS_MENU_FORK_COMPARE_IN_DEEPSERVER` | |
 | `windirstat/ForkCommands.cpp` (fork-owned) | *Compare in DeepServer*: runs `DeepServer.exe --shell-compare "<folder>"` from the engine's folder. One selected folder works like Explorer's *Compare with DeepServer* (first pick = left side, next pick opens the compare); two selected folders set the left side (`--select-left`), wait up to 10 s, then open the compare. Disabled unless 1–2 folders/drives are selected and `DeepServer.exe` sits next to the engine | Reuses DeepServer's existing shell-compare path, so no new argument parsing on either side |
+| `.github/scripts/Stress-LargeScan.ps1` | The ledger check counts folder rows without `#`-prefixed metadata lines | Ledgers end with `#filters=` since Batch 3 (E23); DeepServer CI runs this script in `windows-installer.yml` |
 
 ## Build
 
