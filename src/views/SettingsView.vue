@@ -3203,10 +3203,10 @@ onMounted(async () => {
           </label>
           <label class="stack-row">
             <span>{{ $t('ui.profileDefaultRootPath') }}</span>
-            <input
+            <PathInputWithBrowse
               v-model="profileDefaultsDraft.defaultRootPath"
-              data-testid="profile-default-root-path"
-              type="text"
+              test-id="profile-default-root-path"
+              directory
               @change="persistProfileDefaultsDraft"
             />
           </label>

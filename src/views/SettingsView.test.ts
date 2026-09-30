@@ -172,6 +172,14 @@ describe('SettingsView', () => {
       (wrapper.find('[data-testid="svn-wrapper-path"]').element as HTMLInputElement).value,
     ).toBe('')
     expect(wrapper.find('[data-testid="open-with-executable-browse"]').exists()).toBe(true)
+    // The remote profile root takes a folder (e.g. a \\server\share for SMB profiles).
+    vi.mocked(pickNativePath).mockResolvedValueOnce('D:/Shares')
+    await wrapper.find('[data-testid="profile-default-root-path-browse"]').trigger('click')
+    await flushPromises()
+    expect(pickNativePath).toHaveBeenLastCalledWith({ directory: true })
+    expect(
+      (wrapper.find('[data-testid="profile-default-root-path"]').element as HTMLInputElement).value,
+    ).toBe('D:/Shares')
   })
 
   it('uses the detected DeepServer path and suggests VS Code', async () => {
