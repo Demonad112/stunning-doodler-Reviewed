@@ -12,6 +12,7 @@ import {
   FolderOpen,
   FolderSync,
   GitMerge,
+  CopyCheck,
   HardDrive,
   Image,
   Table2,
@@ -58,11 +59,12 @@ type HomeLaunchType =
   | 'table-compare'
   | 'version-compare'
   | 'disk-usage'
+  | 'transfer-monitor'
 
 type HomeTileGroupId = 'compare' | 'copy-sync' | 'disk'
 
 /** Home left tree under New (Text Edit is center-only). */
-type HomeTreeType = Exclude<HomeLaunchType, 'text-edit' | 'disk-usage'>
+type HomeTreeType = Exclude<HomeLaunchType, 'text-edit' | 'disk-usage' | 'transfer-monitor'>
 
 interface QuickStartEntry extends SessionCatalogEntry {
   icon: LucideIcon
@@ -99,8 +101,11 @@ const homeTileGroups: { id: HomeTileGroupId; titleKey: string; types: HomeLaunch
       'version-compare',
     ],
   },
-  // Batch 5 adds the Transfer Monitor here.
-  { id: 'copy-sync', titleKey: 'ui.homeGroupCopySync', types: ['folder-sync'] },
+  {
+    id: 'copy-sync',
+    titleKey: 'ui.homeGroupCopySync',
+    types: ['folder-sync', 'transfer-monitor'],
+  },
   { id: 'disk', titleKey: 'ui.homeGroupDisk', types: ['disk-usage'] },
 ]
 
@@ -108,6 +113,7 @@ const homeTileGroups: { id: HomeTileGroupId; titleKey: string; types: HomeLaunch
 const homePickerKinds: Partial<Record<HomeLaunchType, 'directory' | 'file'>> = {
   'folder-compare': 'directory',
   'folder-sync': 'directory',
+  'transfer-monitor': 'directory',
   'text-compare': 'file',
   'hex-compare': 'file',
   'media-compare': 'file',
@@ -144,6 +150,7 @@ const quickStartIcons: Record<HomeLaunchType, LucideIcon> = {
   'text-merge': GitMerge,
   'version-compare': FileCog,
   'disk-usage': HardDrive,
+  'transfer-monitor': CopyCheck,
 }
 
 const router = useRouter()

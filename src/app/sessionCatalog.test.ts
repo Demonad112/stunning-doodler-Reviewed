@@ -25,6 +25,7 @@ describe('sessionCatalog', () => {
       'archive-compare',
       'script',
       'disk-usage',
+      'transfer-monitor',
     ])
     expect(sessionCatalog.every((entry) => entry.route)).toBe(true)
   })

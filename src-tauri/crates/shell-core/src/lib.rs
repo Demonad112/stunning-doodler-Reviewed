@@ -188,10 +188,20 @@ impl WindowsShellExtensionScriptBuilder {
             "\"{}\" --shell-compare --select-left \"%1\"",
             self.config.executable_path
         ));
+        let copy_verify_label = powershell_quote(&format!(
+            "Copy with verification ({})",
+            self.config.product_name
+        ));
+        let copy_verify_command = powershell_quote(&format!(
+            "\"{}\" --copy-verify \"%1\"",
+            self.config.executable_path
+        ));
         let file_compare_key = self.file_compare_key();
         let directory_compare_key = self.directory_compare_key();
         let file_select_key = self.file_select_left_key();
         let directory_select_key = self.directory_select_left_key();
+        let directory_copy_verify_key = self.directory_copy_verify_key();
+        let drive_copy_verify_key = self.drive_copy_verify_key();
 
         format!(
             r#"# Register DeepServer Windows Explorer context menu entries for the current user.
@@ -219,6 +229,16 @@ $entries = @(
     Key = '{directory_select_key}'
     Label = {select_folder_label}
     Command = {select_left_command}
+  }},
+  @{{
+    Key = '{directory_copy_verify_key}'
+    Label = {copy_verify_label}
+    Command = {copy_verify_command}
+  }},
+  @{{
+    Key = '{drive_copy_verify_key}'
+    Label = {copy_verify_label}
+    Command = {copy_verify_command}
   }}
 )
 
@@ -239,6 +259,8 @@ foreach ($entry in $entries) {{
             self.directory_compare_key(),
             self.file_select_left_key(),
             self.directory_select_left_key(),
+            self.directory_copy_verify_key(),
+            self.drive_copy_verify_key(),
         ];
         let keys_literal = keys
             .iter()
@@ -287,6 +309,20 @@ foreach ($key in $keys) {{
     fn directory_select_left_key(&self) -> String {
         format!(
             "HKCU:\\Software\\Classes\\Directory\\shell\\{}SelectLeft",
+            self.config.verb_key
+        )
+    }
+
+    fn directory_copy_verify_key(&self) -> String {
+        format!(
+            "HKCU:\\Software\\Classes\\Directory\\shell\\{}CopyVerify",
+            self.config.verb_key
+        )
+    }
+
+    fn drive_copy_verify_key(&self) -> String {
+        format!(
+            "HKCU:\\Software\\Classes\\Drive\\shell\\{}CopyVerify",
             self.config.verb_key
         )
     }
@@ -392,6 +428,12 @@ mod tests {
         assert!(script.contains("%1"));
         assert!(script
             .contains(r#""C:/Program Files/OpenDiff/open-diff-app.exe" --shell-compare "%1""#));
+        assert!(script.contains("HKCU:\\Software\\Classes\\Directory\\shell\\DeepServerCopyVerify"));
+        assert!(script.contains("HKCU:\\Software\\Classes\\Drive\\shell\\DeepServerCopyVerify"));
+        assert!(script.contains("Copy with verification (Open Diff)"));
+        assert!(
+            script.contains(r#""C:/Program Files/OpenDiff/open-diff-app.exe" --copy-verify "%1""#)
+        );
     }
 
     #[test]
@@ -408,6 +450,8 @@ mod tests {
         assert!(script.contains("HKCU:\\Software\\Classes\\Directory\\shell\\DeepServer"));
         assert!(script.contains("HKCU:\\Software\\Classes\\*\\shell\\DeepServerSelectLeft"));
         assert!(script.contains("HKCU:\\Software\\Classes\\Directory\\shell\\DeepServerSelectLeft"));
+        assert!(script.contains("HKCU:\\Software\\Classes\\Directory\\shell\\DeepServerCopyVerify"));
+        assert!(script.contains("HKCU:\\Software\\Classes\\Drive\\shell\\DeepServerCopyVerify"));
     }
 
     #[test]

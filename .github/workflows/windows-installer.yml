@@ -4,12 +4,14 @@ on:
   workflow_dispatch:
   push:
     branches: [windows-installer]
-  # Build the setup.exe on PRs that change what goes into it.
+  # Build the setup.exe on PRs that change what goes into it: the app (Rust and
+  # frontend), the installer hooks, and the engine.
   pull_request:
     paths:
-      - src-tauri/tauri.conf.json
-      - src-tauri/windows/**
-      - src-tauri/tauri.engine.conf.json
+      - src/**
+      - src-tauri/**
+      - package.json
+      - pnpm-lock.yaml
       - scripts/windows/package-portable.ps1
       - native/**
       - .github/workflows/windows-installer.yml
@@ -92,6 +94,12 @@ jobs:
           if ((Get-ItemProperty -LiteralPath $diskKey).'(default)' -notlike '*deepserver-diskusage.exe*') { throw "missing $diskKey" }
           $keys += 'HKLM:\Software\Classes\Directory\shell\DeepServer Disk Usage'
           if ($cmd -notlike '*DeepServer.exe*--shell-compare*') { throw "unexpected menu command: $cmd" }
+          foreach ($root in 'Directory', 'Drive') {
+            $copyKey = "HKLM:\Software\Classes\$root\shell\DeepServerCopyVerify"
+            $copyCmd = (Get-ItemProperty -LiteralPath "$copyKey\command").'(default)'
+            if ($copyCmd -notlike '*DeepServer.exe*--copy-verify*') { throw "unexpected copy-verify command: $copyCmd" }
+            $keys += $copyKey
+          }
           $p = Start-Process (Join-Path $env:ProgramFiles 'DeepServer\uninstall.exe') -ArgumentList '/S' -PassThru
           $p.WaitForExit(300000) | Out-Null
           # The NSIS uninstaller re-launches itself from %TEMP%, so poll for the cleanup.

@@ -223,6 +223,10 @@ export function contextHelpTopic(path: string): string {
     return 'disk-usage'
   }
 
+  if (path.startsWith('/transfer')) {
+    return 'transfer-monitor'
+  }
+
   if (path.includes('/settings')) {
     return 'options'
   }

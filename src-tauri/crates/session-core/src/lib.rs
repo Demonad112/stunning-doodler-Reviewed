@@ -20,6 +20,7 @@ pub enum SessionType {
     MediaCompare,
     VersionCompare,
     DiskUsage,
+    TransferMonitor,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

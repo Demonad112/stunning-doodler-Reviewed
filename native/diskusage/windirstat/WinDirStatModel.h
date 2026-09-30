@@ -267,6 +267,8 @@ protected:
     void OnForkCleanHistory();
     void OnForkCompareInDeepServer();
     void OnUpdateForkCompareInDeepServer(CCmdUI* pCmdUI);
+    void OnForkCopyWithVerification();
+    void OnUpdateForkCopyWithVerification(CCmdUI* pCmdUI);
 };
 
 inline std::span<const RouteEntry> CWinDirStatModel::Routes()
@@ -294,6 +296,8 @@ inline std::span<const RouteEntry> CWinDirStatModel::Routes()
         Route::Command<&OnForkCleanHistory>(ID_FORK_CLEAN_HISTORY),
         Route::Command<&OnForkCompareInDeepServer>(ID_FORK_COMPARE_IN_DEEPSERVER),
         Route::Update<&OnUpdateForkCompareInDeepServer>(ID_FORK_COMPARE_IN_DEEPSERVER),
+        Route::Command<&OnForkCopyWithVerification>(ID_FORK_COPY_WITH_VERIFICATION),
+        Route::Update<&OnUpdateForkCopyWithVerification>(ID_FORK_COPY_WITH_VERIFICATION),
         Route::Command<&OnEditCopy>(ID_EDIT_COPY_CLIPBOARD),
         Route::Update<&OnUpdateCentralHandler>(ID_EDIT_COPY_CLIPBOARD),
         Route::Command<&OnCleanupEmptyRecycleBin>(ID_CLEANUP_EMPTY_BIN),

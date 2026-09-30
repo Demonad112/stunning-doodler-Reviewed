@@ -4433,21 +4433,20 @@ fn copy_folder_merge_path(source: &Path, target: &Path) -> std::io::Result<()> {
         return Ok(());
     }
 
-    if target.is_dir() {
-        fs::remove_dir_all(target)?;
-    }
-
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
-    fs::copy(source, target).map(|_| ())
+    copy_file_replacing(source, target)
 }
 
 fn copy_path_recursive(source: &Path, target: &Path) -> std::io::Result<()> {
     if source.is_dir() {
         if target.is_file() {
-            fs::remove_file(target)?;
+            // Build the folder beside the file; the file goes only once the copy is complete.
+            let staged = staging_path(target);
+            let copied = copy_path_recursive(source, &staged);
+            if let Err(error) = copied.and_then(|()| fs::remove_file(target)) {
+                let _ = fs::remove_dir_all(&staged);
+                return Err(error);
+            }
+            return fs::rename(&staged, target);
         }
 
         fs::create_dir_all(target)?;
@@ -4460,15 +4459,49 @@ fn copy_path_recursive(source: &Path, target: &Path) -> std::io::Result<()> {
         return Ok(());
     }
 
-    if target.is_dir() {
-        fs::remove_dir_all(target)?;
-    }
+    copy_file_replacing(source, target)
+}
 
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent)?;
+/// Streams `source` over `target` through transfer-core: the old target (file or folder) is
+/// removed only after the new copy is complete and verified by size and time (E12, E13).
+fn copy_file_replacing(source: &Path, target: &Path) -> std::io::Result<()> {
+    let options = transfer_core::CopyOptions {
+        conflict: transfer_core::ConflictPolicy::Overwrite,
+        skip_identical: false,
+        retry_delays: Vec::new(),
+        ..transfer_core::CopyOptions::default()
+    };
+    let copy = |to: &Path| {
+        transfer_core::copy::copy_file(
+            source,
+            to,
+            &options,
+            &job_core::CancellationToken::default(),
+            &mut |_| {},
+        )
+        .map(|_| ())
+        .map_err(|failure| match failure.os_code {
+            Some(code) => std::io::Error::from_raw_os_error(code),
+            None => std::io::Error::other(failure.message),
+        })
+    };
+    if !target.is_dir() {
+        return copy(target);
     }
+    let staged = staging_path(target);
+    copy(&staged)?;
+    if let Err(error) = fs::remove_dir_all(target) {
+        let _ = fs::remove_file(&staged);
+        return Err(error);
+    }
+    fs::rename(&staged, target)
+}
 
-    fs::copy(source, target).map(|_| ())
+/// `name` → `name.odnew` beside it, for a copy that replaces something of another kind.
+fn staging_path(target: &Path) -> PathBuf {
+    let mut name = target.file_name().unwrap_or_default().to_os_string();
+    name.push(".odnew");
+    target.with_file_name(name)
 }
 
 fn folder_merge_path(root: &str, relative_path: &str) -> PathBuf {
@@ -8108,5 +8141,50 @@ mod tests {
             .as_nanos();
 
         std::env::temp_dir().join(format!("open-diff-{label}-{stamp}"))
+    }
+
+    #[test]
+    fn a_failed_copy_leaves_the_existing_target_alone() {
+        let root = unique_temp_dir("copy-keeps-target");
+        let target = root.join("target");
+        fs::create_dir_all(target.join("inside")).expect("target folder");
+        fs::write(target.join("inside/keep.txt"), "keep").expect("target file");
+
+        let missing = root.join("missing.txt");
+        assert!(copy_path_recursive(&missing, &target).is_err());
+        assert!(copy_folder_merge_path(&missing, &target).is_err());
+
+        assert_eq!(
+            fs::read_to_string(target.join("inside/keep.txt")).expect("still there"),
+            "keep"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn copies_replace_a_target_of_the_other_kind_once_complete() {
+        let root = unique_temp_dir("copy-replaces-kind");
+        fs::create_dir_all(root.join("source-dir/sub")).expect("source folder");
+        fs::write(root.join("source-dir/sub/a.txt"), "a").expect("source file");
+        fs::write(root.join("source.txt"), "file").expect("source file");
+        fs::create_dir_all(root.join("was-a-folder/old")).expect("old folder");
+        fs::write(root.join("was-a-file"), "old").expect("old file");
+
+        copy_path_recursive(&root.join("source.txt"), &root.join("was-a-folder"))
+            .expect("file over folder");
+        copy_path_recursive(&root.join("source-dir"), &root.join("was-a-file"))
+            .expect("folder over file");
+
+        assert_eq!(
+            fs::read_to_string(root.join("was-a-folder")).expect("now a file"),
+            "file"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("was-a-file/sub/a.txt")).expect("now a folder"),
+            "a"
+        );
+        assert!(!root.join("was-a-folder.odnew").exists());
+        assert!(!root.join("was-a-file.odnew").exists());
+        let _ = fs::remove_dir_all(root);
     }
 }

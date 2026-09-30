@@ -91,7 +91,29 @@ pub fn prepare_shell_startup(args: impl IntoIterator<Item = String>) -> ShellSta
             }
             ShellStartupDecision::Continue
         }
+        CliCommand::CopyVerify { path } => {
+            if let Err(error) = write_open_compare_launch(&copy_verify_payload(path)) {
+                eprintln!("DeepServer: failed to stage copy-verify launch: {error}");
+            }
+            ShellStartupDecision::Continue
+        }
         _ => ShellStartupDecision::Continue,
+    }
+}
+
+/// "Copy with verification" (Explorer or the Disk Usage engine): the Transfer Monitor with only
+/// the source filled in; the user picks the destination.
+fn copy_verify_payload(path: String) -> ShellCompareLaunchPayload {
+    ShellCompareLaunchPayload {
+        left: path,
+        right: String::new(),
+        route: "/transfer".to_owned(),
+        session_type: "transfer-monitor".to_owned(),
+        center: None,
+        output: None,
+        left_read_only: false,
+        right_read_only: false,
+        favor: None,
     }
 }
 
@@ -238,4 +260,21 @@ fn open_diff_config_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(home)
         .join(".config")
         .join("open-diff")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn copy_verify_launch_survives_the_launch_file_with_an_empty_destination() {
+        let payload = copy_verify_payload("D:/Client Data".to_owned());
+
+        let parsed = parse_shell_compare_launch(&encode_shell_compare_launch(&payload))
+            .expect("launch should parse");
+
+        assert_eq!(parsed, payload);
+        assert_eq!(parsed.right, "");
+        assert_eq!(parsed.route, "/transfer");
+    }
 }

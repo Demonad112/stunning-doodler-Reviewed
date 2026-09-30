@@ -85,7 +85,7 @@ describe('HomeView', () => {
     expect(wrapper.find('.bc-home-workspace').classes()).toContain('bc-home-workspace')
     expect(wrapper.find('.bc-home-instructions').exists()).toBe(true)
     expect(wrapper.find('.new-session-grid').exists()).toBe(true)
-    expect(wrapper.findAll('[data-testid="home-new-session-card"]')).toHaveLength(13)
+    expect(wrapper.findAll('[data-testid="home-new-session-card"]')).toHaveLength(14)
   })
 
   it('keeps Home chrome metrics aligned with home.png CSS px', () => {
@@ -110,7 +110,7 @@ describe('HomeView', () => {
 
     const cards = wrapper.findAll('[data-testid="home-new-session-card"]')
 
-    expect(cards).toHaveLength(13)
+    expect(cards).toHaveLength(14)
     expect(cards.map((card) => card.attributes('data-session-type'))).toEqual([
       'folder-compare',
       'folder-merge',
@@ -124,6 +124,7 @@ describe('HomeView', () => {
       'table-compare',
       'version-compare',
       'folder-sync',
+      'transfer-monitor',
       'disk-usage',
     ])
     expect(wrapper.find('[data-testid="home-how-to-start"]').text()).toContain(
@@ -142,7 +143,7 @@ describe('HomeView', () => {
     const wrapper = mountHomeView()
 
     expect(wrapper.find('[data-testid="home-new-session"]').exists()).toBe(true)
-    expect(wrapper.findAll('[data-testid="home-new-session-card"]')).toHaveLength(13)
+    expect(wrapper.findAll('[data-testid="home-new-session-card"]')).toHaveLength(14)
     expect(wrapper.find('[data-testid="home-recent-sessions"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="home-workspace-inspector"]').exists()).toBe(true)
     expect(wrapper.find('.drop-zone').exists()).toBe(false)
@@ -159,7 +160,7 @@ describe('HomeView', () => {
 
     expect(wrapper.find('[data-testid="home-group-compare"] h2').text()).toBe('Compare')
     expect(groupTypes('compare')).toHaveLength(11)
-    expect(groupTypes('copy-sync')).toEqual(['folder-sync'])
+    expect(groupTypes('copy-sync')).toEqual(['folder-sync', 'transfer-monitor'])
     expect(wrapper.find('[data-testid="home-group-copy-sync"] h2').text()).toBe('Copy & Sync')
     expect(groupTypes('disk')).toEqual(['disk-usage'])
   })

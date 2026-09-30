@@ -19,6 +19,7 @@ pub enum LogDomain {
     Remote,
     Conversion,
     Report,
+    Transfer,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -185,3 +185,20 @@ void CWinDirStatModel::OnForkCompareInDeepServer()
     }
     ShellExecuteWrapper(exe, L"--shell-compare " + QuoteArgument(folders.back()));
 }
+
+void CWinDirStatModel::OnUpdateForkCopyWithVerification(CCmdUI* pCmdUI)
+{
+    pCmdUI->Enable(ComparableFolders(GetAllSelected()).size() == 1 &&
+        std::filesystem::exists(DeepServerExe()));
+}
+
+// Opens DeepServer's Transfer Monitor with the selected folder or drive as the source; the
+// destination is chosen there. Same as Explorer's "Copy with verification (DeepServer)".
+void CWinDirStatModel::OnForkCopyWithVerification()
+{
+    const auto folders = ComparableFolders(GetAllSelected());
+    const std::wstring exe = DeepServerExe();
+    if (folders.size() != 1 || !std::filesystem::exists(exe)) return;
+
+    ShellExecuteWrapper(exe, L"--copy-verify " + QuoteArgument(folders.front()));
+}

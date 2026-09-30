@@ -8,7 +8,9 @@ $keys = @(
   "HKCU:\Software\Classes\*\shell\$VerbKey",
   "HKCU:\Software\Classes\Directory\shell\$VerbKey",
   "HKCU:\Software\Classes\*\shell\${VerbKey}SelectLeft",
-  "HKCU:\Software\Classes\Directory\shell\${VerbKey}SelectLeft"
+  "HKCU:\Software\Classes\Directory\shell\${VerbKey}SelectLeft",
+  "HKCU:\Software\Classes\Directory\shell\${VerbKey}CopyVerify",
+  "HKCU:\Software\Classes\Drive\shell\${VerbKey}CopyVerify"
 )
 
 foreach ($key in $keys) {
