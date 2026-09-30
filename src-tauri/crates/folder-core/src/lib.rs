@@ -1450,11 +1450,13 @@ pub enum FolderWalkEntry {
 /// `System Volume Information`) is reported as [`FolderWalkEntry::Error`] and the walk continues.
 /// Only an unreadable root or cancellation ends it with an error. Honours `follow_symlinks`,
 /// `show_hidden_files` and `exclude_junction_points` from `options`.
+///
+/// `visit` returns whether to go into a folder it was given; the value is ignored for other entries.
 pub fn walk_local_folder(
     root: impl AsRef<Path>,
     cancel_token: &job_core::CancellationToken,
     options: &FolderCompareOptions,
-    mut visit: impl FnMut(FolderWalkEntry),
+    mut visit: impl FnMut(FolderWalkEntry) -> bool,
 ) -> Result<(), FolderScanError> {
     let root = root.as_ref();
     let root_meta = fs::metadata(root).map_err(|error| FolderScanError::Vfs(error.to_string()))?;
@@ -1491,11 +1493,13 @@ pub fn walk_local_folder(
         for entry in read {
             match entry {
                 Ok(entry) => entries.push(entry),
-                Err(error) => visit(FolderWalkEntry::Error {
-                    relative_path: relative_path(root, &dir),
-                    path: dir.clone(),
-                    error,
-                }),
+                Err(error) => {
+                    visit(FolderWalkEntry::Error {
+                        relative_path: relative_path(root, &dir),
+                        path: dir.clone(),
+                        error,
+                    });
+                }
             }
         }
         entries.sort_by_key(|entry| entry.file_name());
@@ -1534,11 +1538,12 @@ pub fn walk_local_folder(
                             .map(|canonical| visited.insert(canonical))
                             .unwrap_or(false);
                         if first_visit {
-                            visit(FolderWalkEntry::Directory {
+                            if visit(FolderWalkEntry::Directory {
                                 relative_path: relative,
                                 path: path.clone(),
-                            });
-                            subfolders.push(path);
+                            }) {
+                                subfolders.push(path);
+                            }
                         } else {
                             visit(FolderWalkEntry::Link {
                                 relative_path: relative,
@@ -1560,11 +1565,12 @@ pub fn walk_local_folder(
             };
 
             if meta.is_dir() {
-                visit(FolderWalkEntry::Directory {
+                if visit(FolderWalkEntry::Directory {
                     relative_path: relative,
                     path: path.clone(),
-                });
-                subfolders.push(path);
+                }) {
+                    subfolders.push(path);
+                }
             } else {
                 visit(FolderWalkEntry::File {
                     relative_path: relative,
@@ -1879,6 +1885,7 @@ mod tests {
                 FolderWalkEntry::Link { relative_path, .. } => format!("L {relative_path}"),
                 FolderWalkEntry::Error { relative_path, .. } => format!("E {relative_path}"),
             });
+            true
         })
         .expect("walk should succeed");
         names
@@ -1923,7 +1930,7 @@ mod tests {
                 &root,
                 &CancellationToken::default(),
                 &FolderCompareOptions::default(),
-                |_| {}
+                |_| true
             ),
             Err(FolderScanError::Vfs(_))
         ));
@@ -1932,7 +1939,7 @@ mod tests {
         let token = CancellationToken::default();
         token.cancel();
         assert_eq!(
-            walk_local_folder(&root, &token, &FolderCompareOptions::default(), |_| {}),
+            walk_local_folder(&root, &token, &FolderCompareOptions::default(), |_| true),
             Err(FolderScanError::Cancelled)
         );
         let _ = fs::remove_dir_all(root);

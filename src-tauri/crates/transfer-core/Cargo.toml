@@ -1,0 +1,17 @@
+[package]
+name = "transfer-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+blake3 = "1.8"
+file-core = { path = "../file-core" }
+folder-core = { path = "../folder-core" }
+job-core = { path = "../job-core" }
+logging-core = { path = "../logging-core" }
+notify = "8"
+report-core = { path = "../report-core" }
+serde.workspace = true
+serde_json.workspace = true

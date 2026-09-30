@@ -29,6 +29,7 @@ members = [
   "crates/snapshot-core",
   "crates/sync-core",
   "crates/table-core",
+  "crates/transfer-core",
   "crates/update-core",
   "crates/shared-types",
   "crates/version-core",
@@ -103,6 +104,7 @@ shell-core = { path = "crates/shell-core" }
 snapshot-core = { path = "crates/snapshot-core" }
 sync-core = { path = "crates/sync-core" }
 table-core = { path = "crates/table-core" }
+transfer-core = { path = "crates/transfer-core" }
 version-core = { path = "crates/version-core" }
 vfs-core = { path = "crates/vfs-core" }
 rfd = "0.15"

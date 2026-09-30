@@ -1,6 +1,14 @@
 use logging_core::{LogDomain, LogStatus, StructuredLogEvent};
 use serde::{Deserialize, Serialize};
 
+mod transfer;
+
+pub use transfer::{
+    format_bytes, render_transfer_csv_report, render_transfer_html_report,
+    transfer_report_to_unified, ReportField, TransferReport, TransferReportGroup,
+    TransferReportRow,
+};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnifiedReport {
@@ -18,6 +26,8 @@ pub enum ReportKind {
     Folder,
     Table,
     Image,
+    /// A Transfer Monitor run (see [`TransferReport`]).
+    Transfer,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -659,6 +669,7 @@ fn report_kind_label(kind: &ReportKind) -> &'static str {
         ReportKind::Folder => "folder",
         ReportKind::Table => "table",
         ReportKind::Image => "image",
+        ReportKind::Transfer => "transfer",
     }
 }
 
