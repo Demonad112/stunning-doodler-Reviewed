@@ -4,12 +4,14 @@ on:
   workflow_dispatch:
   push:
     branches: [windows-installer]
-  # Build the setup.exe on PRs that change what goes into it.
+  # Build the setup.exe on PRs that change what goes into it: the app (Rust and
+  # frontend), the installer hooks, and the engine.
   pull_request:
     paths:
-      - src-tauri/tauri.conf.json
-      - src-tauri/windows/**
-      - src-tauri/tauri.engine.conf.json
+      - src/**
+      - src-tauri/**
+      - package.json
+      - pnpm-lock.yaml
       - scripts/windows/package-portable.ps1
       - native/**
       - .github/workflows/windows-installer.yml
