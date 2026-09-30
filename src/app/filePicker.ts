@@ -64,3 +64,24 @@ export async function pickNativePath(options: FilePickerOpenOptions): Promise<st
 }
 
 export const tauriFilePickerOpen: FilePickerOpen = (options) => pickNativePath(options)
+
+export interface DetectedExecutables {
+  /** This running DeepServer program (what Git, SVN and the Explorer menu should call). */
+  deepServer: string | null
+  vscode: string | null
+}
+
+/** Programs found on this PC, for path suggestions in Settings. Empty outside the desktop app. */
+export async function detectExecutables(): Promise<DetectedExecutables> {
+  const none: DetectedExecutables = { deepServer: null, vscode: null }
+
+  if (!isTauriRuntime()) {
+    return none
+  }
+
+  try {
+    return await invoke<DetectedExecutables>('detect_executables')
+  } catch {
+    return none
+  }
+}

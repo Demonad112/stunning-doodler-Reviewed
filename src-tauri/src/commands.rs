@@ -3348,6 +3348,57 @@ pub fn pick_path(directory: bool) -> Result<Option<String>, AppErrorPayload> {
     Ok(picked.map(|path| path.to_string_lossy().into_owned()))
 }
 
+/// Programs found on this PC, offered as suggestions next to the Settings path fields.
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DetectedExecutables {
+    /// This running DeepServer program, which Git, SVN and the Explorer menu should call.
+    pub deep_server: Option<String>,
+    pub vscode: Option<String>,
+}
+
+#[tauri::command]
+pub fn detect_executables() -> DetectedExecutables {
+    DetectedExecutables {
+        deep_server: std::env::current_exe()
+            .ok()
+            .map(|path| path.to_string_lossy().into_owned()),
+        vscode: find_vscode(|name| std::env::var_os(name)),
+    }
+}
+
+/// VS Code's per-user and machine-wide install folders, then `code` on PATH.
+fn find_vscode(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Option<String> {
+    let mut candidates = Vec::new();
+    if let Some(local) = var("LOCALAPPDATA") {
+        candidates.push(
+            PathBuf::from(local)
+                .join("Programs")
+                .join("Microsoft VS Code")
+                .join("Code.exe"),
+        );
+    }
+    for key in ["ProgramFiles", "ProgramFiles(x86)"] {
+        if let Some(dir) = var(key) {
+            candidates.push(
+                PathBuf::from(dir)
+                    .join("Microsoft VS Code")
+                    .join("Code.exe"),
+            );
+        }
+    }
+    if let Some(path) = var("PATH") {
+        for dir in std::env::split_paths(&path) {
+            candidates.push(dir.join("code.cmd"));
+            candidates.push(dir.join("code"));
+        }
+    }
+    candidates
+        .into_iter()
+        .find(|candidate| candidate.is_file())
+        .map(|found| found.to_string_lossy().into_owned())
+}
+
 fn path_kind_label(path: &Path) -> String {
     if path.is_dir() {
         "directory".to_owned()
@@ -5583,6 +5634,40 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn finds_vscode_in_the_user_install_before_path() {
+        let root = unique_temp_dir("detect-vscode");
+        let user_exe = root
+            .join("local")
+            .join("Programs")
+            .join("Microsoft VS Code")
+            .join("Code.exe");
+        let path_dir = root.join("bin");
+        fs::create_dir_all(user_exe.parent().unwrap()).expect("fixture directory");
+        fs::create_dir_all(&path_dir).expect("fixture directory");
+        fs::write(&user_exe, "x").expect("fixture file");
+        fs::write(path_dir.join("code.cmd"), "x").expect("fixture file");
+
+        let env = |name: &str| match name {
+            "LOCALAPPDATA" => Some(root.join("local").into_os_string()),
+            "PATH" => Some(path_dir.clone().into_os_string()),
+            _ => None,
+        };
+        assert_eq!(
+            find_vscode(env),
+            Some(user_exe.to_string_lossy().into_owned())
+        );
+
+        fs::remove_file(&user_exe).expect("remove fixture");
+        assert_eq!(
+            find_vscode(env),
+            Some(path_dir.join("code.cmd").to_string_lossy().into_owned())
+        );
+        assert_eq!(find_vscode(|_| None), None);
+
+        let _ = fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn reveal_fallback_open_path_uses_parent_for_files() {
