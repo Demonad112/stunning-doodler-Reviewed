@@ -386,6 +386,20 @@ export async function installTauriInvokeMock(page: Page): Promise<void> {
           return Promise.resolve(null)
         }
 
+        if (command === 'diskusage_list_drives') {
+          return Promise.resolve([
+            { root: 'C:\\', label: 'System', kind: 'fixed', totalBytes: 1e12, freeBytes: 4e11 },
+          ])
+        }
+
+        if (command === 'diskusage_list_snapshots') {
+          return Promise.resolve([])
+        }
+
+        if (command === 'diskusage_compare') {
+          return Promise.resolve({ rows: [], warning: null })
+        }
+
         if (command === 'detect_executables') {
           return Promise.resolve({ deepServer: null, vscode: null })
         }

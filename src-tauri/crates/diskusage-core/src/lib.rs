@@ -850,6 +850,51 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    /// The Disk Usage view's flow against the real engine: snapshot, add a folder, snapshot,
+    /// compare. Run with `DISKUSAGE_ENGINE=<engine exe> cargo test -p diskusage-core -- --ignored`
+    /// (CI does, right after building the engine).
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "needs the built engine; set DISKUSAGE_ENGINE"]
+    fn real_engine_reports_a_new_folder_between_snapshots() {
+        let engine = PathBuf::from(std::env::var("DISKUSAGE_ENGINE").expect("DISKUSAGE_ENGINE"));
+        let dir = std::env::temp_dir().join(format!("diskusage-core-real-{}", std::process::id()));
+        let scanned = dir.join("data");
+        fs::create_dir_all(scanned.join("old")).unwrap();
+        fs::write(scanned.join("old").join("small.txt"), "x").unwrap();
+        let root = dir.join("history");
+        let scan_root = scanned.to_string_lossy().into_owned();
+
+        let first = take_snapshot(&engine, &root, &scan_root).unwrap();
+        fs::create_dir_all(scanned.join("new")).unwrap();
+        fs::write(
+            scanned.join("new").join("big.bin"),
+            vec![0u8; 2 * 1024 * 1024],
+        )
+        .unwrap();
+        let second = take_snapshot(&engine, &root, &scan_root).unwrap();
+
+        assert_eq!(list_snapshots(&root, &scan_root).unwrap().len(), 2);
+        let comparison = compare_snapshots(
+            &engine,
+            Path::new(&first.path),
+            Path::new(&second.path),
+            false,
+        )
+        .unwrap();
+        let added = comparison
+            .rows
+            .iter()
+            .find(|row| row.folder == "new")
+            .expect("the new folder is listed");
+        assert_eq!(added.change, ChangeKind::Added);
+        assert_eq!(added.current_size, Some(2 * 1024 * 1024));
+        assert!(!comparison.rows.iter().any(|row| row.folder == "old"));
+        assert_eq!(comparison.warning, None);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[cfg(windows)]
     #[test]
     fn lists_at_least_the_system_drive() {
