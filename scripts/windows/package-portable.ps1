@@ -47,7 +47,14 @@ New-Item -ItemType Directory -Path $stagingRoot -Force | Out-Null
 
 Copy-Item -LiteralPath $appExe -Destination (Join-Path $stagingRoot "DeepServer.exe") -Force
 Copy-Item -LiteralPath $cliExe -Destination (Join-Path $stagingRoot "deepserver-cli.exe") -Force
-Copy-Item -LiteralPath (Join-Path $repoRoot "README.md") -Destination (Join-Path $stagingRoot "README.md") -Force
+# The disk-usage engine is a Tauri sidecar: `tauri build --config src-tauri/tauri.engine.conf.json`
+# copies it next to the app. Builds without it still package; the Disk Usage features then say it's missing.
+$engineExe = Join-Path $releaseRoot "deepserver-diskusage.exe"
+if (Test-Path -LiteralPath $engineExe) {
+  Copy-Item -LiteralPath $engineExe -Destination (Join-Path $stagingRoot "deepserver-diskusage.exe") -Force
+} else {
+  Write-Warning "Disk-usage engine not found at $engineExe; packaging without it."
+}Copy-Item -LiteralPath (Join-Path $repoRoot "README.md") -Destination (Join-Path $stagingRoot "README.md") -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot "LICENSE") -Destination (Join-Path $stagingRoot "LICENSE") -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot "NOTICE") -Destination (Join-Path $stagingRoot "NOTICE") -Force
 

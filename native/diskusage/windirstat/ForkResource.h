@@ -1,4 +1,4 @@
-// altWinDirStat - resource IDs for fork-only features (fork-owned; not part of upstream WinDirStat).
+﻿// altWinDirStat - resource IDs for fork-only features (fork-owned; not part of upstream WinDirStat).
 // Kept apart from resource.h, in ranges upstream doesn't use, so upstream resource changes merge cleanly.
 
 #pragma once

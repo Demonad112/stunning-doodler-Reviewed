@@ -62,7 +62,7 @@ void CDirStatApp::RestartApplication(const bool resetPreferences)
     if (resetPreferences)
     {
         // Clean up registry preferences
-        RegDeleteTree(HKEY_CURRENT_USER, L"Software\\altWinDirStat");
+        RegDeleteTree(HKEY_CURRENT_USER, L"Software\\DeepServer\\DiskUsage");
 
         // Enable portable mode by creating the file
         if (InPortableMode())
@@ -385,7 +385,8 @@ bool CDirStatApp::InitInstance()
     if (cmdInfo.HasMalformedCommandLine()) ExitProcess(1);
 
     const bool hideApp = !m_saveToPath.empty() || !m_saveDupesToPath.empty() || !m_savePermsToPath.empty();
-    const bool autoElevate = IsElevationAvailable() && COptions::AutoElevate && !COptions::ShowElevationPrompt;
+    const bool autoElevate = IsElevationAvailable() && COptions::AutoElevate && !COptions::ShowElevationPrompt &&
+        !ForkCli::NoElevateRequested(); // DeepServer: /noelevate keeps headless runs in this process
 
     // Elevate non-interactive operations before rejecting protected paths or applying changes.
     if (autoElevate && (hideApp || cmdInfo.IsLegacyUninstallRequested())) RunElevated(m_lpCmdLine);
@@ -463,7 +464,7 @@ bool CDirStatApp::InitInstance()
     }
 
     // Allow user to elevate if desired
-    if (IsElevationAvailable() && COptions::ShowElevationPrompt && !hideApp)
+    if (IsElevationAvailable() && COptions::ShowElevationPrompt && !hideApp && !ForkCli::NoElevateRequested())
     {
         const auto [nID, isChecked] = CMessageBoxDlg::Show(Localization::Lookup(IDS_ELEVATION_QUESTION),
             Localization::Lookup(IDS_DONT_SHOW_AGAIN),false, MB_YESNO | MB_ICONQUESTION, m_pMainWnd);

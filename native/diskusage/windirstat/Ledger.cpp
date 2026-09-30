@@ -334,6 +334,21 @@ std::wstring Ledger::ChangeName(const Change change)
     }
 }
 
+// Fixed English codes for the CSV so scripts and DeepServer can parse it whatever the UI language is
+// (like the ledger's fixed header). ChangeName() stays the localized text for the dialogs.
+static std::wstring_view ChangeCode(const Ledger::Change change)
+{
+    switch (change)
+    {
+    case Ledger::Change::Added:        return L"Added";
+    case Ledger::Change::Removed:      return L"Removed";
+    case Ledger::Change::Grown:        return L"Grown";
+    case Ledger::Change::Shrunk:       return L"Shrunk";
+    case Ledger::Change::FilesChanged: return L"FilesChanged";
+    default:                           return L"Unchanged";
+    }
+}
+
 bool Ledger::SaveComparison(const std::wstring& path, const std::vector<DiffRow>& rows)
 {
     std::wstring text = L"Folder,Change,Baseline Size (bytes),Current Size (bytes),Size Change (bytes),"
@@ -341,7 +356,7 @@ bool Ledger::SaveComparison(const std::wstring& path, const std::vector<DiffRow>
     const auto value = [](const Row* row, ULONGLONG Row::* field) { return row ? std::to_wstring(row->*field) : std::wstring(); };
     for (const auto& row : rows)
     {
-        text += std::format(L"\r\n{},{},{},{},{},{},{},{}", Quote(row.relative), Quote(ChangeName(row.change)),
+        text += std::format(L"\r\n{},{},{},{},{},{},{},{}", Quote(row.relative), Quote(std::wstring(ChangeCode(row.change))),
             value(row.before, &Row::size), value(row.after, &Row::size), row.sizeDelta,
             value(row.before, &Row::files), value(row.after, &Row::files), row.filesDelta);
     }

@@ -11,6 +11,13 @@
   DeleteRegKey HKCU "Software\Classes\Directory\shell\${VERB}SelectLeft"
 !macroend
 
+; Disk-usage engine entries. The key name is the engine's own (wds::strWinDirStat), so the per-user entry
+; its Options page can write overlays these instead of adding a second one.
+!macro DS_DELETE_DISKUSAGE_MENU ROOT
+  DeleteRegKey ${ROOT} "Software\Classes\Directory\shell\DeepServer Disk Usage"
+  DeleteRegKey ${ROOT} "Software\Classes\Drive\shell\DeepServer Disk Usage"
+!macroend
+
 !macro NSIS_HOOK_PREINSTALL
   ; DeepServer replaces OpenDiff. Offer to remove an existing OpenDiff so Explorer
   ; doesn't show both menus. Silent (/S) installs remove it without asking.
@@ -40,6 +47,16 @@
   WriteRegStr HKLM "Software\Classes\Directory\shell\DeepServerSelectLeft" "Icon" "$INSTDIR\${MAINBINARYNAME}.exe"
   WriteRegStr HKLM "Software\Classes\Directory\shell\DeepServerSelectLeft\command" "" '"$INSTDIR\${MAINBINARYNAME}.exe" --shell-compare --select-left "%1"'
 
+  ; Only when the engine was bundled (release builds pass src-tauri/tauri.engine.conf.json).
+  ${If} ${FileExists} "$INSTDIR\deepserver-diskusage.exe"
+    WriteRegStr HKLM "Software\Classes\Directory\shell\DeepServer Disk Usage" "MUIVerb" "Analyze disk usage"
+    WriteRegStr HKLM "Software\Classes\Directory\shell\DeepServer Disk Usage" "Icon" "$INSTDIR\deepserver-diskusage.exe"
+    WriteRegStr HKLM "Software\Classes\Directory\shell\DeepServer Disk Usage\command" "" '"$INSTDIR\deepserver-diskusage.exe" "%1"'
+    WriteRegStr HKLM "Software\Classes\Drive\shell\DeepServer Disk Usage" "MUIVerb" "Analyze disk usage"
+    WriteRegStr HKLM "Software\Classes\Drive\shell\DeepServer Disk Usage" "Icon" "$INSTDIR\deepserver-diskusage.exe"
+    WriteRegStr HKLM "Software\Classes\Drive\shell\DeepServer Disk Usage\command" "" '"$INSTDIR\deepserver-diskusage.exe" "%1"'
+  ${EndIf}
+
   ; Stale per-user entries left by OpenDiff's in-app registration point at a removed exe.
   !insertmacro DS_DELETE_USER_MENU "OpenDiff"
 !macroend
@@ -55,4 +72,6 @@
   DeleteRegKey HKLM "Software\Classes\Directory\shell\DeepServerSelectLeft"
   ; Entries the app itself wrote for the uninstalling user (Settings > Shell integration).
   !insertmacro DS_DELETE_USER_MENU "DeepServer"
+  !insertmacro DS_DELETE_DISKUSAGE_MENU HKLM
+  !insertmacro DS_DELETE_DISKUSAGE_MENU HKCU
 !macroend

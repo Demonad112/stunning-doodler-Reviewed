@@ -12,9 +12,9 @@
 
 ## Build
 ```
-msbuild windirstat.sln /m /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143
+msbuild windirstat.sln /m /p:Configuration=Release /p:Platform=x64
 ```
-- Drop the toolset override with VS2026.
+- The project defaults to the VS2022 toolset (v143) and switches to v145 under VS2026; no override needed.
 - Output goes to `build\altWinDirStat_<arch>.exe`.
 - CI renames it to `altWinDirStat.exe` for the zip and the installer.
 - Linux or cloud sessions can't build: push a branch and let CI (build matrix, smoke, upstream tests, installer test) verify.
@@ -22,7 +22,7 @@ msbuild windirstat.sln /m /p:Configuration=Release /p:Platform=x64 /p:PlatformTo
 ## Rules
 - **Keep the fork diff small** so upstream merges stay easy. Prefer fork-owned files and appended blocks over editing upstream lines, and add every change to the table in `HANDOFF.md`.
 - **Keep upstream publishing files deleted:** `publish-*-to-winget-pkgs.yml`, `.github/FUNDING.yml`, `setup/chocolatey/`, `setup/store/`. They publish under the official identity. A sync merge can bring them back; CI's `fork-guard` job fails if it does.
-- **Settings stay under `HKCU\Software\altWinDirStat`.** CI fails if anything is written to the official `WinDirStat` key.
+- **Settings stay under `HKCU\Software\DeepServer\DiskUsage`** (DeepServer build). Never write to the official `WinDirStat` key.
 
 ## Versioning and releases
 - The fork's version is `ALT_VER_*` at the end of `windirstat/Version.h`. It overrides upstream's `PRD_*`.

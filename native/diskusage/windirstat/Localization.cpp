@@ -125,15 +125,15 @@ bool Localization::LoadResource(const LANGID language)
 void Localization::ApplyForkBranding()
 {
     static constexpr std::wstring_view upstreamName = L"WinDirStat";
-    static constexpr std::wstring_view forkName = L"altWinDirStat";
+    static constexpr std::wstring_view forkName = L"DeepServer Disk Usage";
     static constexpr std::wstring_view keepSuffix = L" Team"; // "WinDirStat Team" is the copyright holder
 
     for (auto& [key, text] : m_map)
     {
         if (key == L"IDS_ABOUT_ABOUT_TEXTss")
         {
-            text = L"altWinDirStat, an unofficial fork of WinDirStat\n"
-                L"https://github.com/Demonad112/altWinDirStat\n\n" + text;
+            text = L"DeepServer Disk Usage, based on WinDirStat (through the altWinDirStat fork)\n"
+                L"https://github.com/Demonad112/stunning-doodler-Reviewed\n\n" + text;
             continue;
         }
 

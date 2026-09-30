@@ -35,7 +35,7 @@ public:
 private:
     static std::wstring RegistryPath(const std::wstring& section)
     {
-        return L"Software\\altWinDirStat\\altWinDirStat\\" + section;
+        return L"Software\\DeepServer\\DiskUsage\\" + section;
     }
 
     std::optional<std::wstring> m_iniPath;
