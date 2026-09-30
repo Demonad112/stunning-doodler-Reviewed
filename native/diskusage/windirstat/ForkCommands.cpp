@@ -16,6 +16,8 @@
 #include "ForkSettings.h"
 #include "FileTreeControl.h"
 #include "FileTabbedView.h"
+#include "History.h"
+#include "MessageBoxDlg.h"
 #include "LedgerCompareDlg.h"
 #include "ProgressDlg.h"
 
@@ -108,4 +110,20 @@ void CWinDirStatModel::OnForkRelativeAges()
 void CWinDirStatModel::OnUpdateForkRelativeAges(CCmdUI* pCmdUI)
 {
     pCmdUI->SetCheck(ForkSettings::ShowRelativeAge ? 1 : 0);
+}
+
+void CWinDirStatModel::OnForkCleanHistory()
+{
+    const History::Usage usage = History::GetUsage();
+    if (usage.snapshots == 0)
+    {
+        ShowMessageBox(Localization::Lookup(IDS_HISTORY_EMPTY), MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    const std::wstring question = Localization::Format(IDS_HISTORY_CLEANUP_CONFIRM, FormatCount(usage.snapshots),
+        FormatCount(usage.locations), FormatBytes(usage.bytes), ForkSettings::HistoryCapMB.Obj());
+    if (ShowMessageBox(question, MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+
+    History::CleanUp();
+    CMainFrame::Get()->GetFileTabbedView()->SetChangesTabVisibility(false);
 }

@@ -14,6 +14,7 @@
 #include "pch.h"
 #include "Ledger.h"
 #include "Item.h"
+#include "Options.h"
 
 #include <deque>
 
@@ -23,6 +24,7 @@ namespace
     constexpr std::wstring_view ledgerHeader = L"Path,Relative Path,Size (bytes),Files,Subfolders";
     constexpr std::wstring_view ledgerSuffix = L".ledger.csv";
     constexpr std::wstring_view rootRelative = L".";
+    constexpr std::wstring_view filtersPrefix = L"#filters=";
 
     std::wstring Key(std::wstring_view text)
     {
@@ -154,7 +156,7 @@ namespace
     // Keeps only rows at or below 'root' and re-expresses them relative to it.
     Ledger::Snapshot Rebase(const Ledger::Snapshot& snapshot, const std::wstring& root)
     {
-        Ledger::Snapshot rebased{ .source = snapshot.source, .root = root };
+        Ledger::Snapshot rebased{ .source = snapshot.source, .root = root, .filters = snapshot.filters };
         for (const auto& row : snapshot.rows)
         {
             if (auto relative = RelativeTo(root, row.path); relative)
@@ -172,10 +174,38 @@ bool Ledger::IsLedgerPath(const std::wstring& path)
         _wcsicmp(path.c_str() + path.size() - ledgerSuffix.size(), ledgerSuffix.data()) == 0;
 }
 
+std::wstring Ledger::FilterFingerprint()
+{
+    const std::wstring text = std::format(L"{}{}{}{}{}{}{}{}{}{}{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        COptions::ExcludeJunctions.Obj(), COptions::ExcludeSymbolicLinksDirectory.Obj(),
+        COptions::ExcludeVolumeMountPoints.Obj(), COptions::ExcludeHiddenDirectory.Obj(),
+        COptions::ExcludeProtectedDirectory.Obj(), COptions::ExcludeDropboxIgnored.Obj(),
+        COptions::ExcludeSymbolicLinksFile.Obj(), COptions::ExcludeHiddenFile.Obj(),
+        COptions::ExcludeProtectedFile.Obj(), COptions::FilteringUseRegex.Obj(), COptions::FollowVolumeMountPoints.Obj(),
+        COptions::FilteringSizeMinimum.Obj(), COptions::FilteringSizeUnits.Obj(), COptions::FilteringSizeComparison.Obj(),
+        COptions::FilteringMaxAgeDays.Obj(), COptions::FilteringMaxAgeComparison.Obj(),
+        COptions::FilteringExcludeDirs.Obj(), COptions::FilteringExcludeFiles.Obj(),
+        COptions::FilteringIncludeDirs.Obj(), COptions::FilteringIncludeFiles.Obj());
+
+    std::uint64_t hash = 14695981039346656037ull;
+    for (const wchar_t c : text)
+    {
+        hash ^= static_cast<std::uint64_t>(c);
+        hash *= 1099511628211ull;
+    }
+    return std::format(L"{:016x}", hash);
+}
+
+bool Ledger::FiltersDiffer(const Snapshot& baseline, const Snapshot& current)
+{
+    return !baseline.filters.empty() && !current.filters.empty() && baseline.filters != current.filters;
+}
+
 Ledger::Snapshot Ledger::FromScan(const CItem* root)
 {
     Snapshot snapshot;
     if (root == nullptr) return snapshot;
+    snapshot.filters = FilterFingerprint();
 
     // A multi-drive scan has a synthetic "My Computer" root: keep absolute paths as the key.
     const bool multiRoot = root->GetItemType() == IT_MYCOMPUTER;
@@ -215,6 +245,8 @@ bool Ledger::Save(const std::wstring& path, const Snapshot& snapshot)
     std::wstring text(ledgerHeader);
     for (const auto& row : snapshot.rows)
         text += std::format(L"\r\n{},{},{},{},{}", Quote(row.path), Quote(row.relative), row.size, row.files, row.folders);
+    // Last, so CSV readers that take the first line as the header still see the normal columns.
+    if (!snapshot.filters.empty()) text += std::format(L"\r\n{}{}", filtersPrefix, snapshot.filters);
     return WriteFile(path, text);
 }
 
@@ -248,6 +280,11 @@ std::optional<Ledger::Snapshot> Ledger::Load(const std::wstring& path, std::wstr
                 return std::nullopt;
             }
             sawHeader = true;
+            continue;
+        }
+        if (line.starts_with(L'#'))  // Metadata line; unknown ones are ignored for forward compatibility
+        {
+            if (line.starts_with(filtersPrefix)) snapshot.filters = line.substr(filtersPrefix.size());
             continue;
         }
 

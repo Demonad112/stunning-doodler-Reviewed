@@ -264,6 +264,7 @@ protected:
     void OnUpdateForkTrackChanges(CCmdUI* pCmdUI);
     void OnForkRelativeAges();
     void OnUpdateForkRelativeAges(CCmdUI* pCmdUI);
+    void OnForkCleanHistory();
 };
 
 inline std::span<const RouteEntry> CWinDirStatModel::Routes()
@@ -288,6 +289,7 @@ inline std::span<const RouteEntry> CWinDirStatModel::Routes()
         Route::Update<&OnUpdateForkTrackChanges>(ID_FORK_TRACK_CHANGES),
         Route::Command<&OnForkRelativeAges>(ID_FORK_RELATIVE_AGES),
         Route::Update<&OnUpdateForkRelativeAges>(ID_FORK_RELATIVE_AGES),
+        Route::Command<&OnForkCleanHistory>(ID_FORK_CLEAN_HISTORY),
         Route::Command<&OnEditCopy>(ID_EDIT_COPY_CLIPBOARD),
         Route::Update<&OnUpdateCentralHandler>(ID_EDIT_COPY_CLIPBOARD),
         Route::Command<&OnCleanupEmptyRecycleBin>(ID_CLEANUP_EMPTY_BIN),

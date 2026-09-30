@@ -36,6 +36,7 @@ namespace Ledger
         std::wstring source;        // Ledger file path, or empty for the live scan
         std::wstring root;          // Absolute path of the scan root
         std::vector<Row> rows;      // Sorted by relative path; rows[0] is the root when present
+        std::wstring filters;       // Exclusion-filter fingerprint ("#filters=" line); empty if unknown
     };
 
     enum class Change : std::uint8_t { Added, Removed, Grown, Shrunk, FilesChanged, Unchanged };
@@ -59,6 +60,14 @@ namespace Ledger
 
     // "*.ledger.csv" paths passed to Save Results or /saveto are written as ledgers.
     bool IsLedgerPath(const std::wstring& path);
+
+    // 16-hex FNV-1a 64 of every setting that decides what a scan includes (exclusions, include/exclude
+    // patterns, size and age filters, mount-point handling). Stored in each ledger FromScan writes.
+    std::wstring FilterFingerprint();
+
+    // True when both snapshots record a fingerprint and they differ: folders may then show as Added or
+    // Removed only because the filters changed.
+    bool FiltersDiffer(const Snapshot& baseline, const Snapshot& current);
 
     Snapshot FromScan(const CItem* root);
     bool Save(const std::wstring& path, const Snapshot& snapshot);

@@ -22,4 +22,6 @@ struct ForkSettings final
     inline static constexpr std::wstring_view Section = L"DeepServer";
     inline static Setting<bool> TrackChanges{ Section, L"TrackChanges", true };
     inline static Setting<bool> ShowRelativeAge{ Section, L"ShowRelativeAge", true };
+    // Total size limit for all change-history snapshots, in MB (0 = no limit). Oldest go first.
+    inline static Setting<int> HistoryCapMB{ Section, L"HistoryCapMB", 2048, 0, 1024 * 1024 };
 };

@@ -141,11 +141,15 @@ void CFileChangesView::UpdateSummary()
         ++counts[std::to_underlying(m_result->rows[i].change)];
     const auto count = [&](const Ledger::Change c) { return FormatCount(counts[std::to_underlying(c)]); };
 
-    m_summary.SetText(Localization::Format(IDS_CHANGES_SUMMARY,
+    std::wstring text = Localization::Format(IDS_CHANGES_SUMMARY,
         FormatFileTime(m_result->baselineTime), ForkFormat::RelativeAge(m_result->baselineTime, ForkFormat::Now()),
         Ledger::SignedBytes(m_result->summary.sizeDelta),
         count(Ledger::Change::Added), count(Ledger::Change::Removed),
-        count(Ledger::Change::Grown), count(Ledger::Change::Shrunk)));
+        count(Ledger::Change::Grown), count(Ledger::Change::Shrunk));
+    // The warning goes first so a narrow pane truncates the counts, not the warning.
+    if (Ledger::FiltersDiffer(m_result->baseline, m_result->current))
+        text = Localization::Lookup(IDS_CHANGES_FILTERS_CHANGED) + L" " + text;
+    m_summary.SetText(text);
 }
 
 void CFileChangesView::UpdateList()

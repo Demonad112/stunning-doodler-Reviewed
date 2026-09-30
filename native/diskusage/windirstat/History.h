@@ -48,4 +48,18 @@ namespace History
 
     // Called by the scan worker after a completed (not stopped) scan.
     void PublishScan(const CItem* root);
+
+    struct Usage
+    {
+        ULONGLONG bytes = 0;
+        size_t snapshots = 0;
+        size_t locations = 0;
+    };
+
+    // Disk use of all snapshots under Root() (DeepServer's in-progress ".partial-*" files excluded).
+    Usage GetUsage();
+
+    // Deletes every snapshot and location folder under Root(), except in-progress ".partial-*" files,
+    // and forgets this session's baselines. Returns the number of snapshots deleted.
+    size_t CleanUp();
 }

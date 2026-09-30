@@ -89,8 +89,31 @@ foreach ($name in 'noroot', 'duproot') {
     Check ($code -eq 1 -and $err -match 'root') "$name ledger is rejected" "(exit $code, err '$err')"
 }
 
+# --- /compare: warn when the two snapshots used different exclusion filters (E23) ------
+$filtersA = Join-Path $Fixtures 'filters-a.ledger.csv'
+foreach ($case in @(
+        @{ Other = 'filters-b.ledger.csv'; Warn = $true; Name = 'different filter fingerprints write a .warn file' },
+        @{ Other = 'filters-a2.ledger.csv'; Warn = $false; Name = 'same filter fingerprint writes no .warn file' })) {
+    $out = Join-Path $Work ($case.Other + '.csv')
+    $code = Invoke-App @('/compare', $filtersA, (Join-Path $Fixtures $case.Other), $out)
+    $warn = if (Test-Path "$out.warn") { (Get-Content -LiteralPath "$out.warn" -Raw).Trim() } else { '' }
+    $ok = $code -eq 0 -and (Test-Path $out) -and ($(if ($case.Warn) { $warn -match 'filter' } else { $warn -eq '' }))
+    Check $ok $case.Name "(exit $code, warn '$warn')"
+}
+$out = Join-Path $Work 'nofilters.csv'
+$code = Invoke-App @('/compare', $base, $filtersA, $out)
+Check ($code -eq 0 -and -not (Test-Path "$out.warn")) 'a snapshot without a fingerprint gives no warning' "(exit $code)"
+
 # --- GUI scan history (added in Task 2) -----------------------------------------------
 if (-not $SkipGui) {
+    # Run a portable copy: an ini next to the exe keeps these runs out of the user's registry settings.
+    $appDir = Join-Path $Work 'app'
+    New-Item -ItemType Directory -Force $appDir | Out-Null
+    $GuiExe = Join-Path $appDir (Split-Path $ExePath -Leaf)
+    Copy-Item -LiteralPath $ExePath -Destination $GuiExe
+    $ini = [IO.Path]::ChangeExtension($GuiExe, 'ini')
+    Set-Content -LiteralPath $ini -Value '' -Encoding ASCII
+
     $history = Join-Path $Work 'history'
     $env:DEEPSERVER_HISTORY_DIR = $history
     $tree = Join-Path $Work 'tree'
@@ -111,7 +134,7 @@ if (-not $SkipGui) {
     # Scans $target in the GUI and returns once a snapshot newer than any before the scan exists (or times out).
     function Invoke-GuiScan([string] $target) {
         $since = Get-NewestWrite
-        $p = Start-Process -FilePath $ExePath -ArgumentList ('/noelevate ' + (ConvertTo-Arg $target)) -PassThru
+        $p = Start-Process -FilePath $GuiExe -ArgumentList ('/noelevate ' + (ConvertTo-Arg $target)) -PassThru
         $sw = [Diagnostics.Stopwatch]::StartNew()
         while ((Get-NewestWrite) -le $since -and $sw.Elapsed.TotalSeconds -lt 60 -and -not $p.HasExited) {
             Start-Sleep -Milliseconds 200
@@ -132,6 +155,10 @@ if (-not $SkipGui) {
         # Compare only the leaf: %TEMP% may be an 8.3 short path that the app does not expand.
         Check ($loc.Trim() -clike '*\tree') 'location.txt holds the lower-cased root' "(got '$loc')"
         Check ($locations[0].Name -match '^[0-9a-f]{16}$') 'location folder is a 16-hex hash' "(got '$($locations[0].Name)')"
+    }
+    if ($snaps.Count -ge 1) {
+        $fingerprint = @(Get-Content -LiteralPath $snaps[0].FullName | Where-Object { $_ -match '^#filters=[0-9a-f]{16}$' })
+        Check ($fingerprint.Count -eq 1) 'snapshot records the exclusion-filter fingerprint'
     }
 
     # 2. Grow a nested folder by 5 MB and scan again in a new process
@@ -170,6 +197,18 @@ if (-not $SkipGui) {
     $count = @(Get-ChildItem -LiteralPath $locDir -Filter '*.ledger.csv').Count
     Check ($count -eq 5) 'retention keeps 5 snapshots' "(found $count)"
     Check (@(Get-ChildItem -LiteralPath $locDir -Filter '*.tmp').Count -eq 0) 'no leftover .tmp files'
+
+    # 7. A size cap prunes the oldest snapshots across locations, but never a location's newest (E24)
+    Set-Content -LiteralPath $ini -Value "[DeepServer]`r`nHistoryCapMB=1" -Encoding ASCII
+    $fake = Join-Path $history 'ffffffffffffffff'
+    New-Item -ItemType Directory -Force $fake | Out-Null
+    $pad = 'x' * (600KB)
+    foreach ($n in 1..3) { Set-Content -LiteralPath (Join-Path $fake "20000101-000000-00$n.ledger.csv") -Value $pad -Encoding ASCII }
+    Invoke-GuiScan $tree
+    $left = @(Get-ChildItem -LiteralPath $fake -Filter '*.ledger.csv' | ForEach-Object Name)
+    Check (($left -join '|') -eq '20000101-000000-003.ledger.csv') 'cap deletes the oldest snapshots but keeps each location''s newest' "(left '$($left -join '|')')"
+    $count = @(Get-ChildItem -LiteralPath $locDir -Filter '*.ledger.csv').Count
+    Check ($count -eq 5) 'cap leaves locations under the limit alone' "(found $count)"
 
     Remove-Item Env:\DEEPSERVER_HISTORY_DIR
 }

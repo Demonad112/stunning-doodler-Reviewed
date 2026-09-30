@@ -100,6 +100,47 @@ namespace
         for (size_t i = History::KeepPerLocation; i < files.size(); ++i) std::filesystem::remove(files[i], ec);
     }
 
+    // Location folders under the history root: exactly 16 lower-case hex digits.
+    bool IsLocationDir(const std::filesystem::directory_entry& entry)
+    {
+        std::error_code ec;
+        const std::wstring name = entry.path().filename().wstring();
+        return entry.is_directory(ec) && name.size() == 16 &&
+            std::ranges::all_of(name, [](const wchar_t c) { return (c >= L'0' && c <= L'9') || (c >= L'a' && c <= L'f'); });
+    }
+
+    // Keeps the whole history under capBytes by deleting the oldest snapshots across all locations.
+    // Each location keeps its newest snapshot (its next baseline), and files this process wrote stay.
+    void EnforceCap(const std::filesystem::path& root, const ULONGLONG capBytes)
+    {
+        if (capBytes == 0) return;
+        struct Candidate { std::filesystem::path path; ULONGLONG size; };
+        std::vector<Candidate> candidates;
+        ULONGLONG total = 0;
+        std::error_code ec;
+        for (const auto& entry : std::filesystem::directory_iterator(root, ec))
+        {
+            if (!IsLocationDir(entry)) continue;
+            const auto files = ListSnapshots(entry.path());
+            for (size_t i = 0; i < files.size(); ++i)
+            {
+                const ULONGLONG size = std::filesystem::file_size(files[i], ec);
+                if (ec) continue;
+                total += size;
+                if (i > 0 && !s_written.contains(Lower(files[i].wstring()))) candidates.push_back({ files[i], size });
+            }
+        }
+        if (total <= capBytes) return;
+
+        // Names are UTC timestamps, so sorting by name puts the oldest first.
+        std::ranges::sort(candidates, {}, [](const Candidate& c) { return c.path.filename().wstring(); });
+        for (const auto& candidate : candidates)
+        {
+            if (total <= capBytes) break;
+            if (std::filesystem::remove(candidate.path, ec)) total -= candidate.size;
+        }
+    }
+
     // UTF-16 with BOM so any path round-trips; CREATE_NEW leaves an existing file alone.
     void WriteLocationFile(const std::filesystem::path& dir, const std::wstring& key)
     {
@@ -179,6 +220,7 @@ std::shared_ptr<const History::Result> History::OnScanComplete(const CItem* root
             VTRACE(L"History: could not write {}", session.file.wstring());
         s_written.insert(Lower(session.file.wstring()));
         Prune(dir);
+        EnforceCap(Root(), static_cast<ULONGLONG>(std::max(0, ForkSettings::HistoryCapMB.Obj())) * 1024 * 1024);
 
         if (!session.baseline) return nullptr;
         result->baseline = *session.baseline;  // Copy: Compare may narrow it in place
@@ -191,6 +233,44 @@ std::shared_ptr<const History::Result> History::OnScanComplete(const CItem* root
         VTRACE(L"History: {}", std::wstring(e.what(), e.what() + strlen(e.what())));
         return nullptr;
     }
+}
+
+History::Usage History::GetUsage()
+{
+    Usage usage;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(Root(), ec))
+    {
+        if (!IsLocationDir(entry)) continue;
+        const auto files = ListSnapshots(entry.path());
+        if (!files.empty()) ++usage.locations;
+        for (const auto& file : files)
+        {
+            const ULONGLONG size = std::filesystem::file_size(file, ec);
+            if (ec) continue;
+            usage.bytes += size;
+            ++usage.snapshots;
+        }
+    }
+    return usage;
+}
+
+size_t History::CleanUp()
+{
+    const std::lock_guard guard(s_lock);
+    size_t deleted = 0;
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator(Root(), ec))
+    {
+        if (!IsLocationDir(entry)) continue;
+        for (const auto& file : ListSnapshots(entry.path()))
+            if (std::filesystem::remove(file, ec)) ++deleted;
+        std::filesystem::remove(entry.path() / L"location.txt", ec);
+        std::filesystem::remove(entry.path(), ec);  // Only succeeds once empty (a .partial-* file keeps it)
+    }
+    s_sessions.clear();
+    s_written.clear();
+    return deleted;
 }
 
 void History::PublishScan(const CItem* root)
