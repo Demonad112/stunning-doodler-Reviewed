@@ -15,6 +15,7 @@
 #include "FileChangesView.h"
 #include "FileTabbedView.h"
 #include "ForkFormat.h"
+#include "ForkTooltips.h"
 
 namespace
 {
@@ -76,6 +77,7 @@ int CFileChangesView::OnCreate(const LPCREATESTRUCT lpCreateStruct)
     const std::array widths{ 360, 90, 90, 90, 100, 80 };
     for (int i = 0; i < ColCount; ++i)
         m_list.InsertColumn(i, Localization::Lookup(columns[i]), i <= ColChange ? LVCFMT_LEFT : LVCFMT_RIGHT, ScaleForDpi(widths[i]));
+    ForkTooltips::AttachHeader(m_list, ForkTooltips::ChangesTip);
     m_list.SetBkColor(DarkMode::SystemColor(COLOR_WINDOW));
     m_list.SetTextBkColor(DarkMode::SystemColor(COLOR_WINDOW));
     m_list.SetTextColor(DarkMode::SystemColor(COLOR_WINDOWTEXT));
