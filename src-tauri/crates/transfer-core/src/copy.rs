@@ -43,6 +43,9 @@ pub enum ConflictPolicy {
 pub struct CopyOptions {
     pub verify: VerifyLevel,
     pub conflict: ConflictPolicy,
+    /// Report a destination with the same size and time as [`CopyOutcome::SkippedIdentical`]
+    /// instead of copying. Off when the caller already knows the content differs.
+    pub skip_identical: bool,
     /// Waits before each automatic retry of a transient error; the length is the retry count.
     pub retry_delays: Vec<Duration>,
 }
@@ -52,6 +55,7 @@ impl Default for CopyOptions {
         Self {
             verify: VerifyLevel::SizeAndTime,
             conflict: ConflictPolicy::Skip,
+            skip_identical: true,
             retry_delays: vec![
                 Duration::from_millis(500),
                 Duration::from_secs(1),
@@ -187,7 +191,10 @@ pub fn copy_file(
             ));
         }
         Ok(existing) => {
-            if existing.len() == source_size && times_match(source_time, existing.modified().ok()) {
+            if options.skip_identical
+                && existing.len() == source_size
+                && times_match(source_time, existing.modified().ok())
+            {
                 return Ok(CopyOutcome::SkippedIdentical);
             }
             let source_newer = match (source_time, existing.modified().ok()) {

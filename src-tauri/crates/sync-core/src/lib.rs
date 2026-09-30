@@ -260,9 +260,10 @@ fn execute_sync_plan_item(
             source_path,
             target_path,
             ..
-        } => vfs
-            .read(&VfsPath::new(source_path.clone()))
-            .and_then(|bytes| vfs.write(&VfsPath::new(target_path.clone()), &bytes)),
+        } => vfs.copy(
+            &VfsPath::new(source_path.clone()),
+            &VfsPath::new(target_path.clone()),
+        ),
         SyncAction::Delete { target_path } => vfs.delete(&VfsPath::new(target_path.clone())),
         SyncAction::Leave => Ok(()),
         SyncAction::Conflict { message, .. } => Err(vfs_core::VfsError::Io(message.clone())),

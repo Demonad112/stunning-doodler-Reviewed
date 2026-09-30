@@ -150,6 +150,12 @@ pub trait VfsProvider {
     fn metadata(&self, path: &VfsPath) -> VfsResult<VfsMetadata>;
 
     fn delete(&mut self, path: &VfsPath) -> VfsResult<()>;
+
+    /// Copies one file. The default reads it whole; [`LocalVfs`] streams it instead.
+    fn copy(&mut self, source: &VfsPath, target: &VfsPath) -> VfsResult<()> {
+        let bytes = self.read(source)?;
+        self.write(target, &bytes)
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -282,6 +288,34 @@ impl VfsProvider for LocalVfs {
         } else {
             fs::remove_file(path_buf(path)).map_err(|error| fs_error(path, error))
         }
+    }
+
+    /// Streams into `<target>.odpart` and renames it over the target when complete, keeping the
+    /// modified time, so large files never sit in memory and a failed copy leaves the old target.
+    fn copy(&mut self, source: &VfsPath, target: &VfsPath) -> VfsResult<()> {
+        let target_buf = path_buf(target);
+        if let Some(parent) = target_buf.parent() {
+            fs::create_dir_all(parent).map_err(|error| VfsError::Io(error.to_string()))?;
+        }
+        ensure_writable(target, &target_buf)?;
+        let mut input =
+            fs::File::open(path_buf(source)).map_err(|error| fs_error(source, error))?;
+        let modified = input.metadata().and_then(|meta| meta.modified()).ok();
+        let mut part_name = target_buf.file_name().unwrap_or_default().to_os_string();
+        part_name.push(".odpart");
+        let part = target_buf.with_file_name(part_name);
+        let written = fs::File::create(&part).and_then(|mut output| {
+            std::io::copy(&mut input, &mut output)?;
+            if let Some(modified) = modified {
+                output.set_modified(modified)?;
+            }
+            Ok(())
+        });
+        if let Err(error) = written.and_then(|()| fs::rename(&part, &target_buf)) {
+            let _ = fs::remove_file(&part);
+            return Err(fs_error(target, error));
+        }
+        Ok(())
     }
 }
 
@@ -715,5 +749,41 @@ mod tests {
             .as_nanos();
 
         std::env::temp_dir().join(format!("open-diff-{label}-{stamp}"))
+    }
+
+    #[test]
+    fn local_copy_streams_replaces_the_target_and_keeps_the_time() {
+        let root = unique_temp_dir("vfs-copy");
+        let source = root.join("source.bin");
+        let target = root.join("out/target.bin");
+        std::fs::create_dir_all(target.parent().expect("parent")).expect("dirs");
+        std::fs::write(&source, vec![3_u8; 3 * 1024 * 1024 + 1]).expect("source");
+        std::fs::write(&target, b"old").expect("old target");
+        let time = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_600_000_000);
+        std::fs::File::options()
+            .write(true)
+            .open(&source)
+            .and_then(|file| file.set_modified(time))
+            .expect("time");
+
+        LocalVfs::new()
+            .copy(
+                &VfsPath::new(source.display().to_string()),
+                &VfsPath::new(target.display().to_string()),
+            )
+            .expect("copy should succeed");
+
+        assert_eq!(
+            std::fs::read(&target).expect("target"),
+            std::fs::read(&source).expect("source")
+        );
+        assert_eq!(
+            std::fs::metadata(&target)
+                .and_then(|meta| meta.modified())
+                .expect("time"),
+            time
+        );
+        assert!(!root.join("out/target.bin.odpart").exists());
+        let _ = std::fs::remove_dir_all(root);
     }
 }
