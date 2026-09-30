@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import HomeView from './HomeView.vue'
 import { readClipboardTextSource } from '@/app/clipboardSource'
+import { isTauriRuntime } from '@/app/desktopDrop'
+import { pickNativePath } from '@/app/filePicker'
 import { sampleSavedSessions } from '@/app/savedSessions'
 import { saveNamedSessions } from '@/app/sessionPersistence'
 import { createAppI18n, installI18n } from '@/i18n'
@@ -20,6 +22,15 @@ vi.mock('@/app/clipboardSource', () => ({
     title: 'Clipboard Text',
     text: 'clipboard text',
   }),
+}))
+
+vi.mock('@/app/desktopDrop', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  isTauriRuntime: vi.fn().mockReturnValue(false),
+}))
+
+vi.mock('@/app/filePicker', () => ({
+  pickNativePath: vi.fn().mockResolvedValue(null),
 }))
 
 vi.mock('vue-router', () => ({
@@ -74,7 +85,7 @@ describe('HomeView', () => {
     expect(wrapper.find('.bc-home-workspace').classes()).toContain('bc-home-workspace')
     expect(wrapper.find('.bc-home-instructions').exists()).toBe(true)
     expect(wrapper.find('.new-session-grid').exists()).toBe(true)
-    expect(wrapper.findAll('[data-testid="home-new-session-card"]')).toHaveLength(12)
+    expect(wrapper.findAll('[data-testid="home-new-session-card"]')).toHaveLength(13)
   })
 
   it('keeps Home chrome metrics aligned with home.png CSS px', () => {
@@ -99,11 +110,10 @@ describe('HomeView', () => {
 
     const cards = wrapper.findAll('[data-testid="home-new-session-card"]')
 
-    expect(cards).toHaveLength(12)
+    expect(cards).toHaveLength(13)
     expect(cards.map((card) => card.attributes('data-session-type'))).toEqual([
       'folder-compare',
       'folder-merge',
-      'folder-sync',
       'text-compare',
       'text-merge',
       'text-edit',
@@ -113,6 +123,8 @@ describe('HomeView', () => {
       'registry-compare',
       'table-compare',
       'version-compare',
+      'folder-sync',
+      'disk-usage',
     ])
     expect(wrapper.find('[data-testid="home-how-to-start"]').text()).toContain(
       'Drag folders or files onto session icon',
@@ -130,11 +142,76 @@ describe('HomeView', () => {
     const wrapper = mountHomeView()
 
     expect(wrapper.find('[data-testid="home-new-session"]').exists()).toBe(true)
-    expect(wrapper.findAll('[data-testid="home-new-session-card"]')).toHaveLength(12)
+    expect(wrapper.findAll('[data-testid="home-new-session-card"]')).toHaveLength(13)
     expect(wrapper.find('[data-testid="home-recent-sessions"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="home-workspace-inspector"]').exists()).toBe(true)
     expect(wrapper.find('.drop-zone').exists()).toBe(false)
     expect(wrapper.find('.priority-groups').exists()).toBe(false)
+  })
+
+  it('groups the tiles into Compare, Copy & Sync and Disk', () => {
+    const wrapper = mountHomeView()
+    const groupTypes = (id: string): (string | undefined)[] =>
+      wrapper
+        .find(`[data-testid="home-group-${id}"]`)
+        .findAll('[data-testid="home-new-session-card"]')
+        .map((card) => card.attributes('data-session-type'))
+
+    expect(wrapper.find('[data-testid="home-group-compare"] h2').text()).toBe('Compare')
+    expect(groupTypes('compare')).toHaveLength(11)
+    expect(groupTypes('copy-sync')).toEqual(['folder-sync'])
+    expect(wrapper.find('[data-testid="home-group-copy-sync"] h2').text()).toBe('Copy & Sync')
+    expect(groupTypes('disk')).toEqual(['disk-usage'])
+  })
+
+  it('asks for both folders first on the desktop and runs the compare', async () => {
+    vi.mocked(isTauriRuntime).mockReturnValue(true)
+    vi.mocked(pickNativePath).mockResolvedValueOnce('D:/left').mockResolvedValueOnce('E:/right')
+    const wrapper = mountHomeView()
+    const launchStore = useSessionLaunchStore()
+
+    await wrapper.find('[data-session-type="folder-compare"]').trigger('click')
+    await flushPromises()
+
+    expect(pickNativePath).toHaveBeenCalledWith({ directory: true })
+    expect(launchStore.pendingLaunch).toMatchObject({
+      sessionType: 'folder-compare',
+      autoRun: true,
+      locations: {
+        left: { uri: 'D:/left', kind: 'directory' },
+        right: { uri: 'E:/right', kind: 'directory' },
+      },
+    })
+    expect(push).toHaveBeenCalledWith('/compare/folder')
+    vi.mocked(isTauriRuntime).mockReturnValue(false)
+  })
+
+  it('opens an empty session when a tile picker is cancelled', async () => {
+    vi.mocked(isTauriRuntime).mockReturnValue(true)
+    vi.mocked(pickNativePath).mockResolvedValueOnce('C:/a.txt').mockResolvedValueOnce(null)
+    const wrapper = mountHomeView()
+    const launchStore = useSessionLaunchStore()
+
+    await wrapper.find('[data-session-type="text-compare"]').trigger('click')
+    await flushPromises()
+
+    expect(pickNativePath).toHaveBeenLastCalledWith({ directory: false })
+    expect(launchStore.pendingLaunch).toMatchObject({ locations: {}, autoRun: false })
+    expect(push).toHaveBeenCalledWith('/compare/text')
+    vi.mocked(isTauriRuntime).mockReturnValue(false)
+  })
+
+  it('opens the Disk Usage tile without a picker', async () => {
+    vi.mocked(isTauriRuntime).mockReturnValue(true)
+    vi.mocked(pickNativePath).mockClear()
+    const wrapper = mountHomeView()
+
+    await wrapper.find('[data-session-type="disk-usage"]').trigger('click')
+    await flushPromises()
+
+    expect(pickNativePath).not.toHaveBeenCalled()
+    expect(push).toHaveBeenCalledWith('/disk/usage')
+    vi.mocked(isTauriRuntime).mockReturnValue(false)
   })
 
   it('opens quick-start session cards', async () => {
