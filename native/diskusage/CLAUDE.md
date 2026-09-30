@@ -21,7 +21,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\Test-ForkChanges.ps1 -
 - The upstream suites and the stress test need pwsh 7.6+, so they run in CI (`engine-upstream-tests` job). The `Ui` suite is left out because it waits for windows titled "WinDirStat", and this build's title is "DeepServer Disk Usage".
 
 ## Rules
-- **Keep the upstream diff small.** Prefer fork-owned files and appended blocks, and add every upstream edit to the tables in `HANDOFF.md`. Fork IDs use ranges upstream doesn't: 900, 1900–1909, 33900–33905.
+- **Keep the upstream diff small.** Prefer fork-owned files and appended blocks, and add every upstream edit to the tables in `HANDOFF.md`. Fork IDs use ranges upstream doesn't: 900, 1900–1909, 33900–33906.
 - **Settings live under `HKCU\Software\DeepServer\DiskUsage`**, section `DeepServer`. Never write to the WinDirStat or altWinDirStat keys.
 - **`IDS_APP_TITLE` stays "WinDirStat"**, because CSV headers use it. The visible name comes from `strWinDirStat` in `Constants.h`.
 - **Ledgers**, whether saved by `/saveto x.ledger.csv` or as automatic snapshots:

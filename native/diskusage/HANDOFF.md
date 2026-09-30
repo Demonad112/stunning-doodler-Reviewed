@@ -82,6 +82,15 @@ Cross-launch (DeepServer Batch 4):
 | `windirstat/ForkCommands.cpp` (fork-owned) | *Compare in DeepServer*: runs `DeepServer.exe --shell-compare "<folder>"` from the engine's folder. One selected folder works like Explorer's *Compare with DeepServer* (first pick = left side, next pick opens the compare); two selected folders set the left side (`--select-left`), wait up to 10 s, then open the compare. Disabled unless 1–2 folders/drives are selected and `DeepServer.exe` sits next to the engine | Reuses DeepServer's existing shell-compare path, so no new argument parsing on either side |
 | `.github/scripts/Stress-LargeScan.ps1` | The ledger check counts folder rows without `#`-prefixed metadata lines | Ledgers end with `#filters=` since Batch 3 (E23); DeepServer CI runs this script in `windows-installer.yml` |
 
+Copy with verification (DeepServer Batch 5):
+
+| File | Change | Why |
+|---|---|---|
+| `windirstat/windirstat.rc` | one more item in `IDR_POPUP_TREE`, after *Compare in DeepServer* | *Copy with verification (DeepServer)* |
+| `windirstat/WinDirStatModel.h` | two declarations and two routes in the fork block | Handler in `ForkCommands.cpp` |
+| `windirstat/ForkResource.h`, `res/fork/lang_en.txt` (fork-owned) | command 33906, `IDS_MENU_FORK_COPY_WITH_VERIFICATION` | |
+| `windirstat/ForkCommands.cpp` (fork-owned) | runs `DeepServer.exe --copy-verify "<folder>"`, which opens the Transfer Monitor with that folder or drive as the source. Enabled for exactly one selected folder/drive when `DeepServer.exe` sits next to the engine | Same argument the Explorer verb `DeepServerCopyVerify` uses |
+
 ## Build
 
 * **Visual Studio 2026:** build `windirstat.sln` as is.
@@ -168,6 +177,7 @@ Legacy 1.x and 2.x both use `HKCU\Software\altWinDirStat\altWinDirStat\<section>
 14. File → Compare Folder Ledgers with two ledgers: the dialog shows rows with colours (the dialog check from the ledger feature).
 15. Scan `C:\` and press Stop within 2 seconds: no new snapshot is written.
 16. Installed DeepServer build: right-click one folder → **Compare in DeepServer**, then another → Compare in DeepServer again: DeepServer opens Folder Compare with the two. Select two folders and use it once: same result. Portable engine without `DeepServer.exe` beside it: the item is greyed out.
+17. Installed DeepServer build: right-click one folder → **Copy with verification (DeepServer)**: DeepServer opens the Transfer Monitor with that folder as the source and asks for the destination. With two folders selected, or without `DeepServer.exe` beside the engine, the item is greyed out.
 
 ## Known gaps / next steps
 
