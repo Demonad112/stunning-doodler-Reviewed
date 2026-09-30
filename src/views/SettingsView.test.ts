@@ -7,11 +7,17 @@ import { useSavedSessionsStore } from '@/stores/savedSessions'
 import { serializeSessionPackage } from '@/app/sessionFile'
 import { sampleSavedSessions } from '@/app/savedSessions'
 import { writeGitIntegration, writeSvnIntegration } from '@/api/integration'
+import { detectExecutables, pickNativePath } from '@/app/filePicker'
 
 const push = vi.fn()
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
+}))
+
+vi.mock('@/app/filePicker', () => ({
+  pickNativePath: vi.fn().mockResolvedValue(null),
+  detectExecutables: vi.fn().mockResolvedValue({ deepServer: null, vscode: null }),
 }))
 
 vi.mock('@/api/diff', () => ({
@@ -139,6 +145,64 @@ describe('SettingsView', () => {
 
     expect(writeSvnIntegration).toHaveBeenCalledWith('/usr/bin/open-diff', '/tmp/open-diff-svn.sh')
     expect(wrapper.find('[data-testid="integration-status"]').text()).toContain('SVN')
+  })
+
+  it('browses for the program paths instead of typing them (E22)', async () => {
+    const wrapper = mountSettingsView()
+
+    await wrapper.find('[data-testid="options-section-integration"]').trigger('click')
+    vi.mocked(pickNativePath).mockResolvedValueOnce('C:\\Apps\\DeepServer.exe')
+    await wrapper.find('[data-testid="integration-executable-path-browse"]').trigger('click')
+    await flushPromises()
+
+    expect(pickNativePath).toHaveBeenLastCalledWith({ directory: false })
+    expect(
+      (wrapper.find('[data-testid="integration-executable-path"]').element as HTMLInputElement)
+        .value,
+    ).toBe('C:\\Apps\\DeepServer.exe')
+    // The shell card edits the same program path.
+    expect(
+      (wrapper.find('[data-testid="shell-executable-path"]').element as HTMLInputElement).value,
+    ).toBe('C:\\Apps\\DeepServer.exe')
+
+    vi.mocked(pickNativePath).mockResolvedValueOnce(null)
+    await wrapper.find('[data-testid="svn-wrapper-path-browse"]').trigger('click')
+    await flushPromises()
+    expect(
+      (wrapper.find('[data-testid="svn-wrapper-path"]').element as HTMLInputElement).value,
+    ).toBe('')
+    expect(wrapper.find('[data-testid="open-with-executable-browse"]').exists()).toBe(true)
+    // The remote profile root takes a folder (e.g. a \\server\share for SMB profiles).
+    vi.mocked(pickNativePath).mockResolvedValueOnce('D:/Shares')
+    await wrapper.find('[data-testid="profile-default-root-path-browse"]').trigger('click')
+    await flushPromises()
+    expect(pickNativePath).toHaveBeenLastCalledWith({ directory: true })
+    expect(
+      (wrapper.find('[data-testid="profile-default-root-path"]').element as HTMLInputElement).value,
+    ).toBe('D:/Shares')
+  })
+
+  it('uses the detected DeepServer path and suggests VS Code', async () => {
+    vi.mocked(detectExecutables).mockResolvedValueOnce({
+      deepServer: 'C:\\Program Files\\DeepServer\\DeepServer.exe',
+      vscode: 'C:\\Users\\me\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe',
+    })
+    const wrapper = mountSettingsView()
+
+    await flushPromises()
+
+    await wrapper.find('[data-testid="options-section-integration"]').trigger('click')
+    await wrapper.find('[data-testid="write-git-config"]').trigger('click')
+    await flushPromises()
+
+    expect(writeGitIntegration).toHaveBeenCalledWith(
+      'mergetool',
+      'C:\\Program Files\\DeepServer\\DeepServer.exe',
+      'global',
+    )
+    expect(wrapper.find('#open-with-executable-suggestions option').attributes('value')).toContain(
+      'Code.exe',
+    )
   })
 
   it('applies follow-system theme without inventing a command success', async () => {

@@ -164,8 +164,10 @@ else {
     $expectedFolders = 4 + $GridTop + $GridTop * $GridSub + $DeepLevels
     $rootRow = $lines | Where-Object { $_ -match '^"[^"]*","\.",' } | Select-Object -First 1
     $rootCols = if ($rootRow) { $rootRow.Substring($rootRow.IndexOf('".",') + 4).Split(',') } else { @() }
+    # DeepServer: ledgers end with '#'-prefixed metadata lines (e.g. #filters=), which aren't folder rows.
+    $folderRows = @($lines | Select-Object -Skip 1 | Where-Object { $_ -and -not $_.StartsWith('#') }).Count
     if ($lines[0].TrimStart([char]0xFEFF) -ne 'Path,Relative Path,Size (bytes),Files,Subfolders') { $failures.Add("Ledger header wrong: '$($lines[0])'") }
-    elseif ($lines.Count - 1 -ne $expectedFolders) { $failures.Add("Ledger has $($lines.Count - 1) folder rows; expected $expectedFolders") }
+    elseif ($folderRows -ne $expectedFolders) { $failures.Add("Ledger has $folderRows folder rows; expected $expectedFolders") }
     elseif ($rootCols.Count -lt 3 -or [long]$rootCols[0] -ne $byteCount -or [long]$rootCols[1] -ne $fileCount -or [long]$rootCols[2] -ne $expectedFolders - 1) {
         $failures.Add("Ledger root row wrong: '$rootRow'; expected $byteCount bytes, $fileCount files, $($expectedFolders - 1) subfolders") }
     else { Note ("Folder ledger: {0:N0} folder rows in {1:N1}s ({2:N0} KB); root totals match" -f $expectedFolders, $secs, ((Get-Item $ledger).Length / 1KB)) }

@@ -66,6 +66,7 @@ pub fn run() {
             commands::path_file_stamp,
             commands::path_volume_info,
             commands::pick_path,
+            commands::detect_executables,
             diskusage::diskusage_compare,
             diskusage::diskusage_list_drives,
             diskusage::diskusage_list_snapshots,

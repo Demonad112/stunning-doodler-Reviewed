@@ -219,6 +219,10 @@ export function contextHelpTopic(path: string): string {
     return 'version-compare'
   }
 
+  if (path.includes('/disk/usage')) {
+    return 'disk-usage'
+  }
+
   if (path.includes('/settings')) {
     return 'options'
   }

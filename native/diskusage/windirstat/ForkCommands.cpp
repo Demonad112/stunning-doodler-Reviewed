@@ -127,3 +127,61 @@ void CWinDirStatModel::OnForkCleanHistory()
     History::CleanUp();
     CMainFrame::Get()->GetFileTabbedView()->SetChangesTabVisibility(false);
 }
+
+namespace
+{
+    // DeepServer installs its main program next to this engine (deepserver-diskusage.exe).
+    std::wstring DeepServerExe()
+    {
+        return (std::filesystem::path(GetAppFolder()) / L"DeepServer.exe").wstring();
+    }
+
+    // Quotes one command-line argument; a trailing backslash (drive roots) is doubled so it can't
+    // escape the closing quote.
+    std::wstring QuoteArgument(const std::wstring& value)
+    {
+        return L"\"" + value + (value.ends_with(L'\\') ? L"\\" : L"") + L"\"";
+    }
+
+    // Folders and drives in the selection that DeepServer can compare (one or two of them).
+    std::vector<std::wstring> ComparableFolders(const std::vector<CItem*>& items)
+    {
+        std::vector<std::wstring> folders;
+        for (const auto* item : items)
+        {
+            if (!item->IsTypeOrFlag(IT_DIRECTORY, IT_DRIVE)) return {};
+            folders.push_back(item->GetPath());
+        }
+        if (folders.size() > 2) return {};
+        return folders;
+    }
+}
+
+void CWinDirStatModel::OnUpdateForkCompareInDeepServer(CCmdUI* pCmdUI)
+{
+    pCmdUI->Enable(!ComparableFolders(GetAllSelected()).empty() &&
+        std::filesystem::exists(DeepServerExe()));
+}
+
+// Uses DeepServer's Explorer compare commands: with one folder it works like Explorer's
+// "Compare with DeepServer" (the first pick is the left side, the next one opens the compare);
+// with two folders it sets the left side, waits for that quick run, then opens the compare.
+void CWinDirStatModel::OnForkCompareInDeepServer()
+{
+    const auto folders = ComparableFolders(GetAllSelected());
+    const std::wstring exe = DeepServerExe();
+    if (folders.empty() || !std::filesystem::exists(exe)) return;
+
+    if (folders.size() == 2)
+    {
+        HANDLE process = nullptr;
+        if (!ShellExecuteWrapper(exe, L"--shell-compare --select-left " + QuoteArgument(folders[0]),
+            L"", GetMainWindowHandle(), L"", SW_NORMAL, 0, &process)) return;
+        if (process != nullptr)
+        {
+            WaitForSingleObject(process, 10'000);
+            CloseHandle(process);
+        }
+    }
+    ShellExecuteWrapper(exe, L"--shell-compare " + QuoteArgument(folders.back()));
+}

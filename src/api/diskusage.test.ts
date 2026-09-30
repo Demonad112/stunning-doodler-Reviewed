@@ -33,6 +33,14 @@ describe('diskusage api', () => {
     expect(invoke).toHaveBeenCalledWith('diskusage_snapshot', { path: 'C:\\' })
   })
 
+  it('passes the engine warning through with the compared rows', async () => {
+    const comparison = { rows: [], warning: 'The exclusion filters changed.' }
+
+    vi.mocked(invoke).mockResolvedValueOnce(comparison)
+
+    await expect(compareSnapshots('a.ledger.csv', 'b.ledger.csv')).resolves.toEqual(comparison)
+  })
+
   it('compares snapshots, showing only significant changes by default', async () => {
     await compareSnapshots('a.ledger.csv', 'b.ledger.csv')
     await compareSnapshots('a.ledger.csv', 'b.ledger.csv', true)

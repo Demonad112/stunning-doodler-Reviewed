@@ -26,6 +26,7 @@ describe('session types', () => {
       'version-compare',
       'archive-compare',
       'script',
+      'disk-usage',
     ])
   })
 

@@ -12,13 +12,16 @@ import {
   FolderOpen,
   FolderSync,
   GitMerge,
+  HardDrive,
   Image,
   Table2,
   type LucideIcon,
 } from '@lucide/vue'
 import { readClipboardTextSource } from '@/app/clipboardSource'
+import { isTauriRuntime } from '@/app/desktopDrop'
 import { classifyDropInputs } from '@/app/dropInput'
 import { createLaunchFromDrop } from '@/app/dropLaunch'
+import { pickNativePath } from '@/app/filePicker'
 import { filterSavedSessions } from '@/app/savedSessions'
 import { selectSessionForDrop } from '@/app/sessionAutoSelect'
 import { sessionCatalog } from '@/app/sessionCatalog'
@@ -40,7 +43,7 @@ import type { SessionCatalogEntry } from '@/app/sessionCatalog'
 import type { SessionDocument, SessionType } from '@/types/session'
 import type { SessionLaunchLocation, SessionLaunchPayload } from '@/types/sessionLaunch'
 
-/** Home center launch buttons (12), matching home.png order. */
+/** Home center launch buttons, grouped as Compare, Copy & Sync and Disk. */
 type HomeLaunchType =
   | 'folder-compare'
   | 'folder-merge'
@@ -54,9 +57,12 @@ type HomeLaunchType =
   | 'registry-compare'
   | 'table-compare'
   | 'version-compare'
+  | 'disk-usage'
+
+type HomeTileGroupId = 'compare' | 'copy-sync' | 'disk'
 
 /** Home left tree under New (Text Edit is center-only). */
-type HomeTreeType = Exclude<HomeLaunchType, 'text-edit'>
+type HomeTreeType = Exclude<HomeLaunchType, 'text-edit' | 'disk-usage'>
 
 interface QuickStartEntry extends SessionCatalogEntry {
   icon: LucideIcon
@@ -75,20 +81,40 @@ function homeCardBand(type: string): 'tall' | 'short' {
   return homeTallLaunchTypes.has(type as HomeLaunchType) ? 'tall' : 'short'
 }
 
-const homeLaunchTypes: HomeLaunchType[] = [
-  'folder-compare',
-  'folder-merge',
-  'folder-sync',
-  'text-compare',
-  'text-merge',
-  'text-edit',
-  'hex-compare',
-  'media-compare',
-  'picture-compare',
-  'registry-compare',
-  'table-compare',
-  'version-compare',
+const homeTileGroups: { id: HomeTileGroupId; titleKey: string; types: HomeLaunchType[] }[] = [
+  {
+    id: 'compare',
+    titleKey: 'ui.homeGroupCompare',
+    types: [
+      'folder-compare',
+      'folder-merge',
+      'text-compare',
+      'text-merge',
+      'text-edit',
+      'hex-compare',
+      'media-compare',
+      'picture-compare',
+      'registry-compare',
+      'table-compare',
+      'version-compare',
+    ],
+  },
+  // Batch 5 adds the Transfer Monitor here.
+  { id: 'copy-sync', titleKey: 'ui.homeGroupCopySync', types: ['folder-sync'] },
+  { id: 'disk', titleKey: 'ui.homeGroupDisk', types: ['disk-usage'] },
 ]
+
+/** Tiles that ask for their two sides first (folders or files); the rest open empty. */
+const homePickerKinds: Partial<Record<HomeLaunchType, 'directory' | 'file'>> = {
+  'folder-compare': 'directory',
+  'folder-sync': 'directory',
+  'text-compare': 'file',
+  'hex-compare': 'file',
+  'media-compare': 'file',
+  'picture-compare': 'file',
+  'table-compare': 'file',
+  'version-compare': 'file',
+}
 
 const homeTreeTypes: HomeTreeType[] = [
   'folder-compare',
@@ -117,6 +143,7 @@ const quickStartIcons: Record<HomeLaunchType, LucideIcon> = {
   'text-edit': FileText,
   'text-merge': GitMerge,
   'version-compare': FileCog,
+  'disk-usage': HardDrive,
 }
 
 const router = useRouter()
@@ -161,14 +188,17 @@ const filteredSavedSessions = computed(() =>
     types: new Set(),
   }),
 )
-const quickStartEntries = computed<QuickStartEntry[]>(() =>
-  homeLaunchTypes
-    .map((type) => {
-      const entry = sessionCatalog.find((item) => item.type === type)
+const quickStartGroups = computed(() =>
+  homeTileGroups.map((group) => ({
+    ...group,
+    entries: group.types
+      .map((type) => {
+        const entry = sessionCatalog.find((item) => item.type === type)
 
-      return entry ? { ...entry, icon: quickStartIcons[type] } : undefined
-    })
-    .filter((entry): entry is QuickStartEntry => Boolean(entry?.route)),
+        return entry ? { ...entry, icon: quickStartIcons[type] } : undefined
+      })
+      .filter((entry): entry is QuickStartEntry => Boolean(entry?.route)),
+  })),
 )
 const homeTreeEntries = computed<QuickStartEntry[]>(() =>
   homeTreeTypes
@@ -217,10 +247,35 @@ const historyItems = computed(() =>
   })),
 )
 
-function openSession(entry: SessionCatalogEntry): void {
+/** Asks for both sides with native pickers; undefined when not on desktop or either is cancelled. */
+async function pickTileSides(
+  kind: 'directory' | 'file',
+): Promise<SessionLaunchPayload['locations'] | undefined> {
+  const left = await pickNativePath({ directory: kind === 'directory' })
+
+  if (!left) {
+    return undefined
+  }
+
+  const right = await pickNativePath({ directory: kind === 'directory' })
+
+  if (!right) {
+    return undefined
+  }
+
+  return {
+    left: { uri: left, kind, readOnly: false },
+    right: { uri: right, kind, readOnly: false },
+  }
+}
+
+async function openSession(entry: SessionCatalogEntry): Promise<void> {
   if (!entry.route) {
     return
   }
+
+  const pickerKind = homePickerKinds[entry.type as HomeLaunchType]
+  const picked = pickerKind && isTauriRuntime() ? await pickTileSides(pickerKind) : undefined
 
   sessionLaunch.setPendingLaunch({
     id: crypto.randomUUID(),
@@ -228,8 +283,8 @@ function openSession(entry: SessionCatalogEntry): void {
     sessionType: entry.type,
     title: `${t('ui.untitled')} ${t(entry.titleKey)}`,
     route: entry.route,
-    locations: {},
-    autoRun: false,
+    locations: picked ?? {},
+    autoRun: Boolean(picked),
   })
   const opened = tabs.openTab({
     title: entry.title,
@@ -620,7 +675,7 @@ function openSelectedPreview(): void {
     return
   }
 
-  openSession(quickStartEntries.value[0])
+  void openSession(quickStartGroups.value[0].entries[0])
 }
 
 onMounted(() => {
@@ -831,35 +886,43 @@ onMounted(() => {
           >
             <strong>{{ $t('ui.dragFoldersOrFilesOntoSessionIcon') }}</strong>
           </div>
-          <div class="new-session-grid">
-            <article
-              v-for="entry in quickStartEntries"
-              :key="entry.type"
-              class="new-session-card"
-              data-testid="home-new-session-card"
-              :data-session-type="entry.type"
-              :data-card-band="homeCardBand(entry.type)"
-              tabindex="0"
-              @click="openSession(entry)"
-              @keydown.enter="openSession(entry)"
-              @keydown.space.prevent="openSession(entry)"
-            >
-              <span class="session-card-icon">
-                <component
-                  :is="entry.icon"
-                  :size="48"
-                />
-              </span>
-              <h3>{{ $t(entry.titleKey) }}</h3>
-              <span
-                v-if="entry.maturity !== 'ready'"
-                class="session-maturity"
-                :data-testid="`home-maturity-${entry.type}`"
-                :data-maturity="entry.maturity"
-                >{{ $t(`ui.maturity.${entry.maturity}`) }}</span
+          <section
+            v-for="group in quickStartGroups"
+            :key="group.id"
+            class="new-session-group"
+            :data-testid="`home-group-${group.id}`"
+          >
+            <h2>{{ $t(group.titleKey) }}</h2>
+            <div class="new-session-grid">
+              <article
+                v-for="entry in group.entries"
+                :key="entry.type"
+                class="new-session-card"
+                data-testid="home-new-session-card"
+                :data-session-type="entry.type"
+                :data-card-band="homeCardBand(entry.type)"
+                tabindex="0"
+                @click="openSession(entry)"
+                @keydown.enter="openSession(entry)"
+                @keydown.space.prevent="openSession(entry)"
               >
-            </article>
-          </div>
+                <span class="session-card-icon">
+                  <component
+                    :is="entry.icon"
+                    :size="48"
+                  />
+                </span>
+                <h3>{{ $t(entry.titleKey) }}</h3>
+                <span
+                  v-if="entry.maturity !== 'ready'"
+                  class="session-maturity"
+                  :data-testid="`home-maturity-${entry.type}`"
+                  :data-maturity="entry.maturity"
+                  >{{ $t(`ui.maturity.${entry.maturity}`) }}</span
+                >
+              </article>
+            </div>
+          </section>
         </section>
 
         <section class="bc-home-secondary">
@@ -1374,6 +1437,12 @@ onMounted(() => {
   margin: 0;
   font-size: 13px;
   line-height: 18px;
+}
+
+.new-session-group h2 {
+  width: min(500px, calc(100% - 24px));
+  margin: 4px auto 0;
+  color: var(--app-text-muted);
 }
 
 .new-session-grid {

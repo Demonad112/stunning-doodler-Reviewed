@@ -34,6 +34,12 @@ export interface ChangeRow {
   filesChange: number
 }
 
+export interface Comparison {
+  rows: ChangeRow[]
+  /** Set when the result is valid but may mislead, e.g. the exclusion filters changed between scans. */
+  warning: string | null
+}
+
 export function listDrives(): Promise<DriveInfo[]> {
   return invoke<DriveInfo[]>('diskusage_list_drives')
 }
@@ -58,6 +64,6 @@ export function compareSnapshots(
   baseline: string,
   current: string,
   all = false,
-): Promise<ChangeRow[]> {
-  return invoke<ChangeRow[]>('diskusage_compare', { baseline, current, all })
+): Promise<Comparison> {
+  return invoke<Comparison>('diskusage_compare', { baseline, current, all })
 }

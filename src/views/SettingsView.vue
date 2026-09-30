@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { SelectOption } from 'naive-ui'
 import {
@@ -126,6 +126,8 @@ import { setArchiveExtensions as syncArchiveExtensionsBackend } from '@/api/diff
 import { loadExternalApplications, saveExternalApplications } from '@/app/externalApplications'
 import type { ExternalApplicationConfig } from '@/app/fileOpenActions'
 import WorkbenchShell from '@/components/workbench/WorkbenchShell.vue'
+import PathInputWithBrowse from '@/components/workbench/PathInputWithBrowse.vue'
+import { detectExecutables, type DetectedExecutables } from '@/app/filePicker'
 import WorkbenchInspector from '@/components/workbench/WorkbenchInspector.vue'
 import { useI18n } from '@/i18n'
 
@@ -139,7 +141,10 @@ const sharedSessionJsonDraft = ref('')
 const sharedSessionImportError = ref('')
 const gitKind = ref<'difftool' | 'mergetool'>('mergetool')
 const gitScope = ref<'global' | 'local'>('global')
-const executablePath = ref('open-diff')
+/** Program name Git/SVN/Explorer call when this DeepServer's own path isn't known (web preview). */
+const defaultProgramName = 'DeepServer'
+const executablePath = ref(defaultProgramName)
+const detectedExecutables = ref<DetectedExecutables>({ deepServer: null, vscode: null })
 const svnWrapperPath = ref('')
 const integrationStatus = ref('')
 const optionsStatus = ref('')
@@ -398,7 +403,7 @@ async function writeGitConfig(): Promise<void> {
   try {
     await writeGitIntegration(
       gitKind.value,
-      executablePath.value.trim() || 'open-diff',
+      executablePath.value.trim() || defaultProgramName,
       gitScope.value,
     )
     integrationStatus.value = t('status.gitConfigWritten', { kind: gitKind.value })
@@ -420,9 +425,9 @@ async function writeSvnConfig(): Promise<void> {
 
   try {
     const wrapper =
-      svnWrapperPath.value.trim() || `${executablePath.value.trim() || 'open-diff'}-svn.sh`
+      svnWrapperPath.value.trim() || `${executablePath.value.trim() || defaultProgramName}-svn.sh`
 
-    await writeSvnIntegration(executablePath.value.trim() || 'open-diff', wrapper)
+    await writeSvnIntegration(executablePath.value.trim() || defaultProgramName, wrapper)
     integrationStatus.value = t('status.svnConfigWritten')
   } catch (error) {
     integrationError.value = error instanceof Error ? error.message : String(error)
@@ -1456,6 +1461,15 @@ function parseShortcutText(value: string): string[] {
     .map((key) => key.trim())
     .filter(Boolean)
 }
+
+onMounted(async () => {
+  detectedExecutables.value = await detectExecutables()
+
+  // Git, SVN and the Explorer menu need this DeepServer's real path, not a bare program name.
+  if (executablePath.value === defaultProgramName && detectedExecutables.value.deepServer) {
+    executablePath.value = detectedExecutables.value.deepServer
+  }
+})
 </script>
 
 <template>
@@ -2495,11 +2509,11 @@ function parseShortcutText(value: string): string[] {
               data-testid="open-with-name"
               :placeholder="$t('ui.applicationName')"
             />
-            <input
+            <PathInputWithBrowse
               v-model="openWithDraft.executable"
-              type="text"
-              data-testid="open-with-executable"
+              test-id="open-with-executable"
               :placeholder="$t('ui.executablePath')"
+              :suggestions="[detectedExecutables.vscode]"
             />
             <NButton
               size="small"
@@ -2520,10 +2534,10 @@ function parseShortcutText(value: string): string[] {
           <div class="integration-config">
             <label>
               <span>{{ $t('ui.executablePath') }}</span>
-              <input
+              <PathInputWithBrowse
                 v-model="executablePath"
-                type="text"
-                data-testid="shell-executable-path"
+                test-id="shell-executable-path"
+                :suggestions="[detectedExecutables.deepServer]"
               />
             </label>
             <div class="settings-row shell-extension-row">
@@ -3189,10 +3203,10 @@ function parseShortcutText(value: string): string[] {
           </label>
           <label class="stack-row">
             <span>{{ $t('ui.profileDefaultRootPath') }}</span>
-            <input
+            <PathInputWithBrowse
               v-model="profileDefaultsDraft.defaultRootPath"
-              data-testid="profile-default-root-path"
-              type="text"
+              test-id="profile-default-root-path"
+              directory
               @change="persistProfileDefaultsDraft"
             />
           </label>
@@ -3422,10 +3436,10 @@ function parseShortcutText(value: string): string[] {
             <div class="settings-row">
               <label>
                 <span>{{ $t('ui.executablePath') }}</span>
-                <input
+                <PathInputWithBrowse
                   v-model="executablePath"
-                  type="text"
-                  data-testid="integration-executable-path"
+                  test-id="integration-executable-path"
+                  :suggestions="[detectedExecutables.deepServer]"
                 />
               </label>
               <label>
@@ -3461,10 +3475,9 @@ function parseShortcutText(value: string): string[] {
             <div class="settings-row">
               <label>
                 <span>{{ $t('ui.wrapperPath') }}</span>
-                <input
+                <PathInputWithBrowse
                   v-model="svnWrapperPath"
-                  type="text"
-                  data-testid="svn-wrapper-path"
+                  test-id="svn-wrapper-path"
                 />
               </label>
               <NButton
