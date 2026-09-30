@@ -22,10 +22,10 @@ jobs:
     name: Build Windows installer
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # the engine's pre-build stamps GIT_COUNT/GIT_COMMIT from history
-      - uses: microsoft/setup-msbuild@v2
+      - uses: microsoft/setup-msbuild@v3
       - uses: pnpm/action-setup@v6.0.10
         with:
           run_install: false
@@ -52,6 +52,12 @@ jobs:
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File native/diskusage/tests/Test-ForkChanges.ps1 -ExePath native/diskusage/build/altWinDirStat_x64.exe
           if ($LASTEXITCODE -ne 0) { throw "Engine tests failed (exit $LASTEXITCODE)" }
+      - name: Disk Usage flow against the real engine (snapshot, change, snapshot, compare)
+        shell: pwsh
+        run: |
+          $env:DISKUSAGE_ENGINE = (Resolve-Path native/diskusage/build/altWinDirStat_x64.exe).Path
+          cargo test -p diskusage-core --manifest-path src-tauri/Cargo.toml -- --ignored
+          if ($LASTEXITCODE -ne 0) { throw "diskusage-core engine test failed (exit $LASTEXITCODE)" }
       - name: Stage engine as Tauri sidecar
         shell: pwsh
         run: |
@@ -95,7 +101,7 @@ jobs:
             Start-Sleep -Seconds 2
           }
           'install/uninstall OK'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: DeepServer-windows
           path: out/
@@ -110,10 +116,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # the engine's pre-build stamps GIT_COUNT/GIT_COMMIT from history
-      - uses: microsoft/setup-msbuild@v2
+      - uses: microsoft/setup-msbuild@v3
       - name: Build disk-usage engine
         shell: pwsh
         working-directory: native/diskusage
