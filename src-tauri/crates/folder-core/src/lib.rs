@@ -1416,6 +1416,175 @@ fn scan_resolved_path(
     Ok(folder_node_from_fs_meta(root, path, &metadata, false).with_children(children))
 }
 
+/// One entry reported by [`walk_local_folder`]. Relative paths use `/`.
+#[derive(Debug)]
+pub enum FolderWalkEntry {
+    /// A file, or a symbolic link to a file (its target's size and time).
+    File {
+        relative_path: String,
+        path: PathBuf,
+        size: u64,
+        modified_at_ms: Option<u128>,
+        readonly: bool,
+    },
+    Directory {
+        relative_path: String,
+        path: PathBuf,
+    },
+    /// A link or junction to a folder (or a broken link) that the walk does not enter.
+    Link {
+        relative_path: String,
+        path: PathBuf,
+    },
+    /// An entry that could not be read. The walk carries on past it.
+    Error {
+        relative_path: String,
+        path: PathBuf,
+        error: io::Error,
+    },
+}
+
+/// Streams every entry under `root`, folder by folder, names sorted within a folder.
+///
+/// Unlike [`scan_local_folder_with_options`], an unreadable file or folder (for example
+/// `System Volume Information`) is reported as [`FolderWalkEntry::Error`] and the walk continues.
+/// Only an unreadable root or cancellation ends it with an error. Honours `follow_symlinks`,
+/// `show_hidden_files` and `exclude_junction_points` from `options`.
+pub fn walk_local_folder(
+    root: impl AsRef<Path>,
+    cancel_token: &job_core::CancellationToken,
+    options: &FolderCompareOptions,
+    mut visit: impl FnMut(FolderWalkEntry),
+) -> Result<(), FolderScanError> {
+    let root = root.as_ref();
+    let root_meta = fs::metadata(root).map_err(|error| FolderScanError::Vfs(error.to_string()))?;
+    if !root_meta.is_dir() {
+        return Err(FolderScanError::Vfs(format!(
+            "Not a folder: {}",
+            root.display()
+        )));
+    }
+    let mut visited = HashSet::new();
+    if let Ok(canonical) = fs::canonicalize(root) {
+        visited.insert(canonical);
+    }
+
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        if cancel_token.is_cancelled() {
+            return Err(FolderScanError::Cancelled);
+        }
+        let read = match fs::read_dir(&dir) {
+            Ok(read) => read,
+            Err(error) if dir == root => return Err(FolderScanError::Vfs(error.to_string())),
+            Err(error) => {
+                visit(FolderWalkEntry::Error {
+                    relative_path: relative_path(root, &dir),
+                    path: dir,
+                    error,
+                });
+                continue;
+            }
+        };
+
+        let mut entries = Vec::new();
+        for entry in read {
+            match entry {
+                Ok(entry) => entries.push(entry),
+                Err(error) => visit(FolderWalkEntry::Error {
+                    relative_path: relative_path(root, &dir),
+                    path: dir.clone(),
+                    error,
+                }),
+            }
+        }
+        entries.sort_by_key(|entry| entry.file_name());
+
+        let mut subfolders = Vec::new();
+        for entry in entries {
+            if cancel_token.is_cancelled() {
+                return Err(FolderScanError::Cancelled);
+            }
+            let name = entry.file_name();
+            if !options.show_hidden_files && name.to_string_lossy().starts_with('.') {
+                continue;
+            }
+            let path = entry.path();
+            let relative = relative_path(root, &path);
+            let link_meta = match fs::symlink_metadata(&path) {
+                Ok(meta) => meta,
+                Err(error) => {
+                    visit(FolderWalkEntry::Error {
+                        relative_path: relative,
+                        path,
+                        error,
+                    });
+                    continue;
+                }
+            };
+
+            let meta = if link_meta.file_type().is_symlink() {
+                if options.exclude_junction_points {
+                    continue;
+                }
+                match fs::metadata(&path) {
+                    Ok(target) if target.is_file() => target,
+                    Ok(_) if options.follow_symlinks => {
+                        let first_visit = fs::canonicalize(&path)
+                            .map(|canonical| visited.insert(canonical))
+                            .unwrap_or(false);
+                        if first_visit {
+                            visit(FolderWalkEntry::Directory {
+                                relative_path: relative,
+                                path: path.clone(),
+                            });
+                            subfolders.push(path);
+                        } else {
+                            visit(FolderWalkEntry::Link {
+                                relative_path: relative,
+                                path,
+                            });
+                        }
+                        continue;
+                    }
+                    _ => {
+                        visit(FolderWalkEntry::Link {
+                            relative_path: relative,
+                            path,
+                        });
+                        continue;
+                    }
+                }
+            } else {
+                link_meta
+            };
+
+            if meta.is_dir() {
+                visit(FolderWalkEntry::Directory {
+                    relative_path: relative,
+                    path: path.clone(),
+                });
+                subfolders.push(path);
+            } else {
+                visit(FolderWalkEntry::File {
+                    relative_path: relative,
+                    path,
+                    size: meta.len(),
+                    modified_at_ms: meta
+                        .modified()
+                        .ok()
+                        .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+                        .map(|duration| duration.as_millis()),
+                    readonly: meta.permissions().readonly(),
+                });
+            }
+        }
+        // Reverse so the stack visits sub-folders in name order.
+        pending.extend(subfolders.into_iter().rev());
+    }
+    Ok(())
+}
+
 fn folder_node_from_fs_meta(
     root: &Path,
     path: &Path,
@@ -1693,6 +1862,106 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    fn walk_names(root: &std::path::Path, options: &FolderCompareOptions) -> Vec<String> {
+        let mut names = Vec::new();
+        walk_local_folder(root, &CancellationToken::default(), options, |entry| {
+            names.push(match entry {
+                FolderWalkEntry::File {
+                    relative_path,
+                    size,
+                    ..
+                } => {
+                    format!("F {relative_path} {size}")
+                }
+                FolderWalkEntry::Directory { relative_path, .. } => format!("D {relative_path}"),
+                FolderWalkEntry::Link { relative_path, .. } => format!("L {relative_path}"),
+                FolderWalkEntry::Error { relative_path, .. } => format!("E {relative_path}"),
+            });
+        })
+        .expect("walk should succeed");
+        names
+    }
+
+    #[test]
+    fn walk_streams_files_and_folders_in_name_order() {
+        let root = unique_temp_dir("folder-walk");
+        fs::create_dir_all(root.join("b/inner")).expect("folders should be created");
+        fs::create_dir_all(root.join("a")).expect("folder should be created");
+        fs::write(root.join("z.txt"), "zz").expect("file should be written");
+        fs::write(root.join("a/one.txt"), "1").expect("file should be written");
+        fs::write(root.join("b/inner/deep.txt"), "deep").expect("file should be written");
+        fs::write(root.join(".hidden"), "h").expect("file should be written");
+
+        assert_eq!(
+            walk_names(&root, &FolderCompareOptions::default()),
+            vec![
+                "F .hidden 1",
+                "D a",
+                "D b",
+                "F z.txt 2",
+                "F a/one.txt 1",
+                "D b/inner",
+                "F b/inner/deep.txt 4",
+            ]
+        );
+        let no_hidden = FolderCompareOptions {
+            show_hidden_files: false,
+            ..FolderCompareOptions::default()
+        };
+        assert!(!walk_names(&root, &no_hidden).contains(&"F .hidden 1".to_owned()));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn walk_fails_for_missing_root_and_stops_when_cancelled() {
+        let root = unique_temp_dir("folder-walk-missing");
+        assert!(matches!(
+            walk_local_folder(
+                &root,
+                &CancellationToken::default(),
+                &FolderCompareOptions::default(),
+                |_| {}
+            ),
+            Err(FolderScanError::Vfs(_))
+        ));
+
+        fs::create_dir_all(&root).expect("folder should be created");
+        let token = CancellationToken::default();
+        token.cancel();
+        assert_eq!(
+            walk_local_folder(&root, &token, &FolderCompareOptions::default(), |_| {}),
+            Err(FolderScanError::Cancelled)
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn walk_reports_an_unreadable_folder_and_keeps_going() {
+        let root = unique_temp_dir("folder-walk-denied");
+        fs::create_dir_all(root.join("locked")).expect("folder should be created");
+        fs::write(root.join("locked/secret.txt"), "s").expect("file should be written");
+        fs::write(root.join("open.txt"), "o").expect("file should be written");
+        let locked = root.join("locked");
+        // Deny "list folder" to Everyone (S-1-1-0), like System Volume Information.
+        let deny = std::process::Command::new("icacls")
+            .arg(&locked)
+            .args(["/deny", "*S-1-1-0:(RD)"])
+            .output()
+            .expect("icacls should run");
+        assert!(deny.status.success(), "icacls /deny failed");
+
+        let names = walk_names(&root, &FolderCompareOptions::default());
+
+        let _ = std::process::Command::new("icacls")
+            .arg(&locked)
+            .args(["/remove:d", "*S-1-1-0"])
+            .output();
+        let _ = fs::remove_dir_all(&root);
+        assert_eq!(names, vec!["D locked", "F open.txt 1", "E locked"]);
     }
 
     #[test]
