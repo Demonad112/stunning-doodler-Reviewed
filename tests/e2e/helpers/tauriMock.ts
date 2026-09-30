@@ -381,6 +381,15 @@ export async function installTauriInvokeMock(page: Page): Promise<void> {
           return Promise.resolve(null)
         }
 
+        // A cancelled native picker; Home tiles then open their session empty.
+        if (command === 'pick_path') {
+          return Promise.resolve(null)
+        }
+
+        if (command === 'detect_executables') {
+          return Promise.resolve({ deepServer: null, vscode: null })
+        }
+
         return Promise.resolve({})
       },
     }

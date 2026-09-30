@@ -55,9 +55,9 @@ export async function pickNativePath(options: FilePickerOpenOptions): Promise<st
   }
 
   try {
-    const selected = await invoke<string | null>('pick_path', { directory: options.directory })
+    const selected = await invoke<unknown>('pick_path', { directory: options.directory })
 
-    return selected
+    return typeof selected === 'string' && selected.length > 0 ? selected : null
   } catch {
     return null
   }
