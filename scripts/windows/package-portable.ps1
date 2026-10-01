@@ -54,7 +54,8 @@ if (Test-Path -LiteralPath $engineExe) {
   Copy-Item -LiteralPath $engineExe -Destination (Join-Path $stagingRoot "deepserver-diskusage.exe") -Force
 } else {
   Write-Warning "Disk-usage engine not found at $engineExe; packaging without it."
-}Copy-Item -LiteralPath (Join-Path $repoRoot "README.md") -Destination (Join-Path $stagingRoot "README.md") -Force
+}
+Copy-Item -LiteralPath (Join-Path $repoRoot "README.md") -Destination (Join-Path $stagingRoot "README.md") -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot "LICENSE") -Destination (Join-Path $stagingRoot "LICENSE") -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot "NOTICE") -Destination (Join-Path $stagingRoot "NOTICE") -Force
 

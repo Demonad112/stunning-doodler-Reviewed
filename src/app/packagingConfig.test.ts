@@ -171,6 +171,32 @@ describe('packagingConfig', () => {
     expect(hooks).toContain(String.raw`CurrentVersion\Uninstall\OpenDiff`)
   })
 
+  it('builds an offline / server installer flavour with the WebView2 runtime bundled (E19)', () => {
+    const offlineConfig = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'src-tauri/tauri.offline.conf.json'), 'utf8'),
+    ) as TauriConfig & { bundle: { externalBin?: string[] } }
+
+    expect(offlineConfig.bundle.externalBin).toEqual(['binaries/deepserver-diskusage'])
+    expect(offlineConfig.bundle.windows?.webviewInstallMode).toEqual({
+      type: 'offlineInstaller',
+      silent: true,
+    })
+  })
+
+  it('keeps the app, package and Cargo workspace versions in step', () => {
+    const config = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'src-tauri/tauri.conf.json'), 'utf8'),
+    ) as TauriConfig & { version: string }
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as {
+      version: string
+    }
+    const cargo = readFileSync(resolve(process.cwd(), 'src-tauri/Cargo.toml'), 'utf8')
+    const workspaceVersion = /\[workspace\.package\]\s*\nversion = "([^"]+)"/.exec(cargo)?.[1]
+
+    expect(manifest.version).toBe(config.version)
+    expect(workspaceVersion).toBe(config.version)
+  })
+
   it('bundles the disk-usage engine as a sidecar with its own Explorer entries', () => {
     const engineConfig = JSON.parse(
       readFileSync(resolve(process.cwd(), 'src-tauri/tauri.engine.conf.json'), 'utf8'),

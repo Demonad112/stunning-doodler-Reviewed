@@ -1,0 +1,226 @@
+name: Build Windows
+
+# Reusable: builds and tests the disk-usage engine, then builds both installer flavours, the portable zip and
+# SHA256SUMS.txt, smoke-tests both installers and uploads everything as the DeepServer-windows artifact.
+# Called by ci.yml (pull requests, main) and release.yml (v* tags).
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to build (defaults to the triggering ref)
+        required: false
+        type: string
+        default: ''
+      sign:
+        description: Sign the binaries when signing secrets are configured
+        required: false
+        type: boolean
+        default: false
+    # Signing secrets are optional; without them the build stays unsigned. Names match altWinDirStat's build.yml.
+    # Azure Trusted Signing: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, SIGNING_ENDPOINT, SIGNING_ACCOUNT, SIGNING_PROFILE.
+    # Or a .pfx: SIGNING_PFX_BASE64 (base64 of the .pfx) and SIGNING_PFX_PASSWORD.
+    secrets:
+      AZURE_TENANT_ID:
+        required: false
+      AZURE_CLIENT_ID:
+        required: false
+      AZURE_CLIENT_SECRET:
+        required: false
+      SIGNING_ENDPOINT:
+        required: false
+      SIGNING_ACCOUNT:
+        required: false
+      SIGNING_PROFILE:
+        required: false
+      SIGNING_PFX_BASE64:
+        required: false
+      SIGNING_PFX_PASSWORD:
+        required: false
+    outputs:
+      version:
+        description: The app version from src-tauri/tauri.conf.json
+        value: ${{ jobs.build.outputs.version }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and smoke-test installers
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      # Read by scripts/windows/sign.ps1 (and the Azure dlib) whenever a step signs; empty when not configured.
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      DEEPSERVER_SIGN_PFX_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0 # the engine's pre-build stamps GIT_COUNT/GIT_COMMIT from history
+      - uses: microsoft/setup-msbuild@v3
+      - uses: pnpm/action-setup@v6.0.10
+        with:
+          run_install: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: corepack enable
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          cache-workspaces: src-tauri
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "DeepServer $version"
+
+      - name: Check signing configuration
+        id: sign
+        shell: pwsh
+        env:
+          WANT_SIGN: ${{ inputs.sign }}
+          HAS_AZURE: ${{ secrets.SIGNING_ACCOUNT != '' }}
+          HAS_PFX: ${{ secrets.SIGNING_PFX_BASE64 != '' }}
+        run: |
+          $mode = 'none'
+          if ($env:WANT_SIGN -eq 'true') {
+            $mode = if ($env:HAS_AZURE -eq 'true') { 'azure' } elseif ($env:HAS_PFX -eq 'true') { 'pfx' } else { 'none' }
+            if ($mode -eq 'none') { Write-Host "::notice::No signing secrets configured - this build is UNSIGNED (SmartScreen will warn)." }
+          }
+          "mode=$mode" >> $env:GITHUB_OUTPUT
+          "DEEPSERVER_SIGN_MODE=$mode" >> $env:GITHUB_ENV
+          "Signing: $mode"
+      - name: Prepare signing (Azure Trusted Signing)
+        if: steps.sign.outputs.mode == 'azure'
+        shell: pwsh
+        env:
+          SIGNING_ENDPOINT: ${{ secrets.SIGNING_ENDPOINT }}
+          SIGNING_ACCOUNT: ${{ secrets.SIGNING_ACCOUNT }}
+          SIGNING_PROFILE: ${{ secrets.SIGNING_PROFILE }}
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'trusted-signing'
+          nuget install Microsoft.Trusted.Signing.Client -OutputDirectory $dir -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw 'nuget install failed' }
+          $dlib = Get-ChildItem $dir -Recurse -Filter Azure.CodeSigning.Dlib.dll | Where-Object FullName -match '\\x64\\' | Select-Object -First 1
+          if (-not $dlib) { throw 'Azure.CodeSigning.Dlib.dll not found' }
+          $metadata = Join-Path $dir 'metadata.json'
+          @{ Endpoint = $env:SIGNING_ENDPOINT; CodeSigningAccountName = $env:SIGNING_ACCOUNT; CertificateProfileName = $env:SIGNING_PROFILE } |
+            ConvertTo-Json | Set-Content $metadata
+          "DEEPSERVER_SIGN_DLIB=$($dlib.FullName)" >> $env:GITHUB_ENV
+          "DEEPSERVER_SIGN_METADATA=$metadata" >> $env:GITHUB_ENV
+      - name: Prepare signing (.pfx)
+        if: steps.sign.outputs.mode == 'pfx'
+        shell: pwsh
+        env:
+          PFX_B64: ${{ secrets.SIGNING_PFX_BASE64 }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'sign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PFX_B64))
+          "DEEPSERVER_SIGN_PFX=$pfx" >> $env:GITHUB_ENV
+      - name: Tauri signing overlay
+        if: steps.sign.outputs.mode != 'none'
+        shell: pwsh
+        run: |
+          # Tauri runs this for DeepServer.exe, the CLI, the sidecar copy and each installer it builds.
+          $script = (Resolve-Path scripts/windows/sign.ps1).Path
+          @{ bundle = @{ windows = @{ signCommand = @{ cmd = 'pwsh'; args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $script, '%1') } } } } |
+            ConvertTo-Json -Depth 6 | Set-Content (Join-Path $env:RUNNER_TEMP 'tauri.sign.conf.json')
+
+      - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm test:unit
+      - name: Build disk-usage engine
+        shell: pwsh
+        working-directory: native/diskusage
+        run: |
+          msbuild windirstat.sln /m /nologo /v:minimal /p:Configuration=Release /p:Platform=x64 "/p:ExternalCompilerOptions=/DPRODUCTION=1"
+          if ($LASTEXITCODE -ne 0) { throw 'msbuild failed' }
+      - name: Test disk-usage engine (compare, change tracking, history)
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File native/diskusage/tests/Test-ForkChanges.ps1 -ExePath native/diskusage/build/altWinDirStat_x64.exe
+          if ($LASTEXITCODE -ne 0) { throw "Engine tests failed (exit $LASTEXITCODE)" }
+      - name: Disk Usage flow against the real engine (snapshot, change, snapshot, compare)
+        shell: pwsh
+        run: |
+          $env:DISKUSAGE_ENGINE = (Resolve-Path native/diskusage/build/altWinDirStat_x64.exe).Path
+          cargo test -p diskusage-core --manifest-path src-tauri/Cargo.toml -- --ignored
+          if ($LASTEXITCODE -ne 0) { throw "diskusage-core engine test failed (exit $LASTEXITCODE)" }
+      - name: Stage engine as Tauri sidecar
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force src-tauri/binaries | Out-Null
+          $sidecar = 'src-tauri/binaries/deepserver-diskusage-x86_64-pc-windows-msvc.exe'
+          Copy-Item native/diskusage/build/altWinDirStat_x64.exe $sidecar
+          & ./scripts/windows/sign.ps1 $sidecar
+
+      - name: Build standard installer (WebView2 bootstrapper)
+        shell: pwsh
+        run: |
+          $configs = @('--config', 'src-tauri/tauri.engine.conf.json')
+          $sign = Join-Path $env:RUNNER_TEMP 'tauri.sign.conf.json'
+          if (Test-Path $sign) { $configs += @('--config', $sign) }
+          corepack pnpm tauri build @configs
+          if ($LASTEXITCODE -ne 0) { throw 'tauri build failed' }
+          New-Item -ItemType Directory -Force out | Out-Null
+          $setup = Get-ChildItem src-tauri/target/release/bundle/nsis -Filter '*-setup.exe' | Select-Object -First 1
+          Copy-Item $setup.FullName "out/DeepServer_${{ steps.version.outputs.version }}_x64-setup.exe"
+      - name: Build offline / server installer (WebView2 runtime bundled)
+        shell: pwsh
+        run: |
+          # Same binaries, re-bundled with webviewInstallMode = offlineInstaller (E19).
+          Remove-Item src-tauri/target/release/bundle/nsis -Recurse -Force
+          $configs = @('--config', 'src-tauri/tauri.offline.conf.json')
+          $sign = Join-Path $env:RUNNER_TEMP 'tauri.sign.conf.json'
+          if (Test-Path $sign) { $configs += @('--config', $sign) }
+          corepack pnpm tauri bundle --bundles nsis @configs
+          if ($LASTEXITCODE -ne 0) { throw 'tauri bundle failed' }
+          $setup = Get-ChildItem src-tauri/target/release/bundle/nsis -Filter '*-setup.exe' | Select-Object -First 1
+          Copy-Item $setup.FullName "out/DeepServer_${{ steps.version.outputs.version }}_x64-offline-setup.exe"
+      - name: Package portable zip
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/windows/package-portable.ps1 -SkipBuild
+          if ($LASTEXITCODE -ne 0) { throw 'portable packaging failed' }
+          Copy-Item src-tauri/target/release/bundle/portable/*.zip out/
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Get-ChildItem out -File | Where-Object Name -ne 'SHA256SUMS.txt' | Get-FileHash -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } | Set-Content out/SHA256SUMS.txt
+          Get-ChildItem out -File | Format-Table Name, Length -AutoSize | Out-String
+          Get-Content out/SHA256SUMS.txt
+
+      - name: Offline installer embeds the WebView2 runtime
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          $standard = (Get-Item "out/DeepServer_${v}_x64-setup.exe").Length
+          $offline = (Get-Item "out/DeepServer_${v}_x64-offline-setup.exe").Length
+          "standard: $([math]::Round($standard / 1MB, 1)) MB, offline: $([math]::Round($offline / 1MB, 1)) MB"
+          if ($offline - $standard -lt 100MB) { throw 'the offline installer is not ~100 MB+ larger; the WebView2 runtime is missing' }
+      - name: Silent install / uninstall smoke test (standard)
+        shell: pwsh
+        run: ./scripts/windows/Test-Installer.ps1 -Setup "out/DeepServer_${{ steps.version.outputs.version }}_x64-setup.exe"
+      - name: Silent install / uninstall smoke test (offline)
+        shell: pwsh
+        run: ./scripts/windows/Test-Installer.ps1 -Setup "out/DeepServer_${{ steps.version.outputs.version }}_x64-offline-setup.exe"
+
+      - name: Remove signing material
+        if: always() && steps.sign.outputs.mode == 'pfx'
+        shell: pwsh
+        run: Remove-Item (Join-Path $env:RUNNER_TEMP 'sign.pfx') -ErrorAction SilentlyContinue
+      - uses: actions/upload-artifact@v6
+        with:
+          name: DeepServer-windows
+          path: out/
+          if-no-files-found: error

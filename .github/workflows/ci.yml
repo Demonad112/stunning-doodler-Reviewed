@@ -59,3 +59,94 @@ jobs:
 
       - name: Run Rust tests
         run: cargo test --workspace --manifest-path src-tauri/Cargo.toml
+
+  # Decides which of the heavy Windows jobs a pull request needs. Pushes to main run everything.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.diff.outputs.app }}
+      engine: ${{ steps.diff.outputs.engine }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+            echo "engine=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(git diff --name-only "$BASE"...HEAD)
+          echo "$files"
+          # Anything that goes into the installer, plus the workflows and scripts that build and test it.
+          if echo "$files" | grep -qE '^(src/|src-tauri/|native/|scripts/windows/|package\.json$|pnpm-lock\.yaml$|\.github/workflows/(ci|build-windows|release)\.yml$)'; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "app=false" >> "$GITHUB_OUTPUT"
+          fi
+          if echo "$files" | grep -qE '^(native/|\.github/workflows/ci\.yml$)'; then
+            echo "engine=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "engine=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Engine build + fork tests, the real-engine diskusage-core test, both installer flavours, portable zip and the
+  # silent install/uninstall smoke test. The same workflow builds the release.
+  windows-build:
+    name: Windows build
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    uses: ./.github/workflows/build-windows.yml
+
+  # The engine's own upstream suites (need PowerShell 7.6+) and its large-scan stress test. The Ui, Settings, Mtp
+  # and Reparse suites are left out: Ui waits for windows titled "WinDirStat" (this build is "DeepServer Disk
+  # Usage"), Settings rebuilds the solution, Mtp needs a phone and Reparse formats scratch drives. Upstream skips
+  # the last three in CI too.
+  engine-upstream-tests:
+    name: Engine upstream tests (x64)
+    needs: changes
+    if: needs.changes.outputs.engine == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the engine's pre-build stamps GIT_COUNT/GIT_COMMIT from history
+      - uses: microsoft/setup-msbuild@v3
+      - name: Build disk-usage engine
+        shell: pwsh
+        working-directory: native/diskusage
+        run: |
+          msbuild windirstat.sln /m /nologo /v:minimal /p:Configuration=Release /p:Platform=x64 "/p:ExternalCompilerOptions=/DPRODUCTION=1"
+          if ($LASTEXITCODE -ne 0) { throw 'msbuild failed' }
+          New-Item -ItemType Directory -Force ([IO.Path]::Combine($env:RUNNER_TEMP, 'engine')) | Out-Null
+          Copy-Item build/altWinDirStat_x64.exe ([IO.Path]::Combine($env:RUNNER_TEMP, 'engine', 'altWinDirStat.exe'))
+      - name: Upstream test suites (Filtering, Cli, EdgeCases, Permissions, Enumeration, Unc)
+        timeout-minutes: 40
+        shell: pwsh
+        working-directory: native/diskusage
+        run: |
+          # Test-WinDirStat.ps1 requires PowerShell 7.6+; fetch the latest stable pwsh when the runner's is older.
+          $pwsh = (Get-Command pwsh).Source
+          if ($PSVersionTable.PSVersion -lt [version]'7.6') {
+            $dir = [IO.Path]::Combine($env:RUNNER_TEMP, 'pwsh-x64')
+            gh release download --repo PowerShell/PowerShell --pattern 'PowerShell-*-win-x64.zip' --dir $env:RUNNER_TEMP --clobber
+            Expand-Archive (Get-ChildItem $env:RUNNER_TEMP -Filter 'PowerShell-*-win-x64.zip' | Select-Object -First 1).FullName $dir -Force
+            $pwsh = [IO.Path]::Combine($dir, 'pwsh.exe')
+          }
+          & $pwsh -NoProfile -Command '"PowerShell $($PSVersionTable.PSVersion)"'
+          & $pwsh -NoProfile -ExecutionPolicy Bypass -File tests/Test-WinDirStat.ps1 -ExePath ([IO.Path]::Combine($env:RUNNER_TEMP, 'engine', 'altWinDirStat.exe')) -Platform x64 -Only Filtering,Cli,EdgeCases,Permissions,Enumeration,Unc
+          if ($LASTEXITCODE -ne 0) { throw "Upstream test suites failed (exit $LASTEXITCODE)" }
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Large-scan stress test
+        timeout-minutes: 45
+        shell: pwsh
+        working-directory: native/diskusage
+        run: |
+          & .github/scripts/Stress-LargeScan.ps1 -ExePath ([IO.Path]::Combine($env:RUNNER_TEMP, 'engine', 'altWinDirStat.exe'))
