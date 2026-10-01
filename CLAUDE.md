@@ -60,5 +60,8 @@ Grep for an existing mode (e.g. `version-compare`) and mirror it in:
 - `native/` and `docs/history/` are excluded from prettier, eslint and stylelint, and `native/**` is `-text` in `.gitattributes` (CRLF and BOM files).
 - Tests that re-seed module mocks per test need `vi.clearAllMocks()` in `beforeEach`, or call counts leak between tests.
 - CI (`.github/workflows/`):
-  - `ci.yml`: quality + tests
-  - `windows-installer.yml`: engine build, `Test-ForkChanges.ps1`, the real-engine `diskusage-core` test, installer + install/uninstall smoke test; job `engine-upstream-tests` runs the upstream PS 7.6 suites and the stress test
+  - `ci.yml`: quality + tests on every PR; a `changes` job gates the heavy Windows jobs by path
+  - `build-windows.yml` (reusable, called by `ci.yml` and `release.yml`): engine build, `Test-ForkChanges.ps1`, the real-engine `diskusage-core` test, the standard installer (`tauri build`) and the offline one (`tauri bundle` + `tauri.offline.conf.json`), the portable zip, `SHA256SUMS.txt`, and `scripts/windows/Test-Installer.ps1` against both installers
+  - `ci.yml` job `engine-upstream-tests` (only when `native/` changes): the upstream PS 7.6 suites and the stress test
+  - `release.yml`: `v*` tags only (or a manual run for an existing tag); see `docs/releasing.md`. Optional signing through `scripts/windows/sign.ps1`
+  - `prune-storage.yml`: manual only

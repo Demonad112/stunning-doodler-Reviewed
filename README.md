@@ -3,24 +3,27 @@
 DeepServer is one Windows app for looking after files on workstations and servers:
 
 - **Compare and merge**: text, folders, tables, hex, images, media, registry and version info.
-- **Copy and sync**: folder sync, plus a verified copy that groups any files that failed and says why (coming in v1.0).
+- **Copy and sync**: folder sync, plus a verified copy (Transfer Monitor) that groups any files that failed and says why.
 - **Disk usage**: a treemap of what fills a drive, and a "what changed since last time" view.
 
 It installs from a single `setup.exe`. Windows 10/11 and Windows Server 2016+ (Desktop Experience) are supported.
 
 ## Install
 
-Download `DeepServer_<version>_x64-setup.exe` from the [Releases](https://github.com/Demonad112/stunning-doodler-Reviewed/releases) page and run it.
+Download from the [Releases](https://github.com/Demonad112/stunning-doodler-Reviewed/releases) page:
 
-For servers and scripted rollouts:
+- `DeepServer_<version>_x64-setup.exe`: for machines with internet access
+- `DeepServer_<version>_x64-offline-setup.exe`: for offline or locked-down servers (includes the WebView2 runtime)
+- `DeepServer_<version>_windows_x64_portable.zip`: no install, no Explorer menus
+
+For servers and scripted rollouts (elevated):
 
 ```powershell
-DeepServer_1.0.0_x64-setup.exe /S
+.\DeepServer_1.0.0_x64-offline-setup.exe /S
+& "$env:ProgramFiles\DeepServer\uninstall.exe" /S
 ```
 
-Servers with no internet access need the **offline** installer, which bundles the WebView2 runtime.
-
-The builds aren't code-signed yet, so Windows SmartScreen may warn on first run.
+The builds aren't code-signed yet, so Windows SmartScreen may warn on first run. [docs/install.md](docs/install.md) covers checksums, custom install folders, Intune/SCCM detection rules and what gets installed. [docs/releasing.md](docs/releasing.md) covers how releases are made.
 
 ## Repository layout
 
@@ -41,7 +44,7 @@ corepack pnpm test:unit     # frontend tests
 cargo test --workspace --manifest-path src-tauri/Cargo.toml
 ```
 
-Release builds come from GitHub Actions.
+Release builds come from GitHub Actions: push a `v*` tag (see [docs/releasing.md](docs/releasing.md)).
 
 ## Licenses
 
