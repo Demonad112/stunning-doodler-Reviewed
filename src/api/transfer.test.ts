@@ -9,6 +9,7 @@ import {
   listTransferRuns,
   loadTransferRun,
   prepareTransfer,
+  pruneTransferRuns,
   retryTransfer,
   startTransfer,
   startWatch,
@@ -44,6 +45,7 @@ describe('transfer api', () => {
     await listTransferRuns()
     await loadTransferRun('run-1')
     await exportTransferReport('run-1', 'html', true)
+    await pruneTransferRuns('run-1')
 
     expect(vi.mocked(invoke).mock.calls).toEqual([
       ['transfer_prepare', { requestId: 'req-1', settings }],
@@ -59,6 +61,7 @@ describe('transfer api', () => {
       ['transfer_list_runs'],
       ['transfer_load_run', { runId: 'run-1' }],
       ['transfer_export_report', { runId: 'run-1', format: 'html', choosePath: true }],
+      ['transfer_prune_runs', { keep: 'run-1' }],
     ])
   })
 

@@ -1307,9 +1307,58 @@ pub fn scan_local_folder_with_options(
         options.show_hidden_files,
         options.exclude_junction_points,
         &mut visiting,
+        &mut None,
     )
 }
 
+/// A file or folder [`scan_local_folder_collecting`] could not read. Relative paths use `/`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnreadableEntry {
+    pub relative_path: String,
+    pub message: String,
+}
+
+/// Like [`scan_local_folder_with_options`], but an unreadable entry below the root (for example
+/// `System Volume Information`) doesn't stop the scan: a folder that can't be listed becomes a
+/// childless node with status [`FolderCompareStatus::Error`], an entry that can't be read at all is
+/// left out, and both are returned in the list.
+///
+/// For read-only views (Folder Compare, reports) only. Sync and merge keep the strict scan: a
+/// half-read tree would make the other side's files look like extras to delete.
+pub fn scan_local_folder_collecting(
+    root: impl AsRef<Path>,
+    cancel_token: &job_core::CancellationToken,
+    options: &FolderCompareOptions,
+) -> Result<(FolderScanNode, Vec<UnreadableEntry>), FolderScanError> {
+    let root = root.as_ref();
+    let mut visiting = HashSet::new();
+    if let Ok(canonical) = fs::canonicalize(root) {
+        visiting.insert(canonical);
+    }
+    let mut unreadable = Some(Vec::new());
+    let tree = scan_resolved_path(
+        root,
+        root,
+        cancel_token,
+        options.follow_symlinks,
+        options.show_hidden_files,
+        options.exclude_junction_points,
+        &mut visiting,
+        &mut unreadable,
+    )?;
+    Ok((tree, unreadable.unwrap_or_default()))
+}
+
+/// True when `relative_path` is `folder` or inside it (paths use `/`).
+pub fn is_at_or_under(relative_path: &str, folder: &str) -> bool {
+    relative_path == folder
+        || relative_path
+            .strip_prefix(folder)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
+
+#[allow(clippy::too_many_arguments)]
 fn scan_path_entry(
     root: &Path,
     path: &Path,
@@ -1318,6 +1367,7 @@ fn scan_path_entry(
     show_hidden_files: bool,
     exclude_junction_points: bool,
     visiting: &mut HashSet<PathBuf>,
+    unreadable: &mut Option<Vec<UnreadableEntry>>,
 ) -> Result<FolderScanNode, FolderScanError> {
     if cancel_token.is_cancelled() {
         return Err(FolderScanError::Cancelled);
@@ -1346,6 +1396,7 @@ fn scan_path_entry(
             show_hidden_files,
             exclude_junction_points,
             visiting,
+            unreadable,
         );
         visiting.remove(&canonical);
         return scanned;
@@ -1359,9 +1410,13 @@ fn scan_path_entry(
         show_hidden_files,
         exclude_junction_points,
         visiting,
+        unreadable,
     )
 }
 
+/// `unreadable` is `Some` for [`scan_local_folder_collecting`]: errors below the root are
+/// collected there instead of ending the scan.
+#[allow(clippy::too_many_arguments)]
 fn scan_resolved_path(
     root: &Path,
     path: &Path,
@@ -1370,6 +1425,7 @@ fn scan_resolved_path(
     show_hidden_files: bool,
     exclude_junction_points: bool,
     visiting: &mut HashSet<PathBuf>,
+    unreadable: &mut Option<Vec<UnreadableEntry>>,
 ) -> Result<FolderScanNode, FolderScanError> {
     if cancel_token.is_cancelled() {
         return Err(FolderScanError::Cancelled);
@@ -1380,12 +1436,36 @@ fn scan_resolved_path(
         return Ok(folder_node_from_fs_meta(root, path, &metadata, true));
     }
 
-    let mut children = fs::read_dir(path)
-        .map_err(|error| FolderScanError::Vfs(error.to_string()))?
+    let listing = match fs::read_dir(path) {
+        Ok(listing) => listing,
+        Err(error) => match unreadable.as_mut() {
+            Some(list) if path != root => {
+                list.push(UnreadableEntry {
+                    relative_path: relative_path(root, path),
+                    message: error.to_string(),
+                });
+                return Ok(with_status(
+                    folder_node_from_fs_meta(root, path, &metadata, false),
+                    FolderCompareStatus::Error,
+                ));
+            }
+            _ => return Err(FolderScanError::Vfs(error.to_string())),
+        },
+    };
+    let mut children = listing
         .filter_map(|entry| {
             let entry = match entry {
                 Ok(entry) => entry,
-                Err(error) => return Some(Err(FolderScanError::Vfs(error.to_string()))),
+                Err(error) => {
+                    if let Some(list) = unreadable.as_mut() {
+                        list.push(UnreadableEntry {
+                            relative_path: relative_path(root, path),
+                            message: error.to_string(),
+                        });
+                        return None;
+                    }
+                    return Some(Err(FolderScanError::Vfs(error.to_string())));
+                }
             };
             let name = entry.file_name();
             let name = name.to_string_lossy();
@@ -1400,7 +1480,7 @@ fn scan_resolved_path(
                     }
                 }
             }
-            Some(scan_path_entry(
+            match scan_path_entry(
                 root,
                 &entry_path,
                 cancel_token,
@@ -1408,7 +1488,19 @@ fn scan_resolved_path(
                 show_hidden_files,
                 exclude_junction_points,
                 visiting,
-            ))
+                unreadable,
+            ) {
+                Err(FolderScanError::Vfs(message)) if unreadable.is_some() => {
+                    if let Some(list) = unreadable.as_mut() {
+                        list.push(UnreadableEntry {
+                            relative_path: relative_path(root, &entry_path),
+                            message,
+                        });
+                    }
+                    None
+                }
+                result => Some(result),
+            }
         })
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -1969,6 +2061,53 @@ mod tests {
             .output();
         let _ = fs::remove_dir_all(&root);
         assert_eq!(names, vec!["D locked", "F open.txt 1", "E locked"]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn collecting_scan_keeps_going_past_an_unreadable_folder() {
+        let root = unique_temp_dir("folder-scan-denied");
+        fs::create_dir_all(root.join("locked")).expect("folder should be created");
+        fs::write(root.join("locked/secret.txt"), "s").expect("file should be written");
+        fs::write(root.join("open.txt"), "o").expect("file should be written");
+        let locked = root.join("locked");
+        let deny = std::process::Command::new("icacls")
+            .arg(&locked)
+            .args(["/deny", "*S-1-1-0:(RD)"])
+            .output()
+            .expect("icacls should run");
+        assert!(deny.status.success(), "icacls /deny failed");
+
+        let token = CancellationToken::default();
+        let options = FolderCompareOptions::default();
+        let strict = scan_local_folder_with_options(&root, &token, &options);
+        let lenient = scan_local_folder_collecting(&root, &token, &options);
+
+        let _ = std::process::Command::new("icacls")
+            .arg(&locked)
+            .args(["/remove:d", "*S-1-1-0"])
+            .output();
+        let _ = fs::remove_dir_all(&root);
+        assert!(strict.is_err(), "the strict scan still stops");
+        let (tree, unreadable) = lenient.expect("the collecting scan should succeed");
+        assert_eq!(unreadable.len(), 1);
+        assert_eq!(unreadable[0].relative_path, "locked");
+        let locked_node = tree
+            .children
+            .iter()
+            .find(|node| node.name == "locked")
+            .expect("the unreadable folder is still listed");
+        assert_eq!(locked_node.status, FolderCompareStatus::Error);
+        assert!(locked_node.children.is_empty());
+        assert!(tree.children.iter().any(|node| node.name == "open.txt"));
+    }
+
+    #[test]
+    fn at_or_under_matches_whole_path_segments() {
+        assert!(is_at_or_under("a/b", "a/b"));
+        assert!(is_at_or_under("a/b/c.txt", "a/b"));
+        assert!(!is_at_or_under("a/bc", "a/b"));
+        assert!(!is_at_or_under("a", "a/b"));
     }
 
     #[test]

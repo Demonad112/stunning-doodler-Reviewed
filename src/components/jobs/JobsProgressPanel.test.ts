@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { defineComponent, h } from 'vue'
 import JobsProgressPanel from './JobsProgressPanel.vue'
 
 describe('JobsProgressPanel', () => {
@@ -35,5 +36,34 @@ describe('JobsProgressPanel', () => {
     })
 
     expect(wrapper.text()).toContain('No running jobs')
+  })
+
+  it('does not pass the Cancel click on to a click handler around the panel', async () => {
+    const onPanelClick = vi.fn()
+    const onCancel = vi.fn()
+    const Host = defineComponent({
+      setup() {
+        return (): ReturnType<typeof h> =>
+          h(JobsProgressPanel, {
+            jobs: [
+              {
+                id: 'copy-1',
+                title: 'Copy',
+                status: 'running',
+                progress: { current: 1, total: 2, message: '' },
+                cancellable: true,
+              },
+            ],
+            onClick: onPanelClick,
+            onCancel,
+          })
+      },
+    })
+    const wrapper = mount(Host)
+
+    await wrapper.find('[data-testid="cancel-job-copy-1"]').trigger('click')
+
+    expect(onCancel).toHaveBeenCalledWith('copy-1')
+    expect(onPanelClick).not.toHaveBeenCalled()
   })
 })

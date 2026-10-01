@@ -1508,6 +1508,14 @@ export const esES: LanguagePack = {
       'DeepServer no hizo esta copia, así que el motivo es una estimación.',
     'ui.transferRetryGroup': 'Reintentar grupo',
     'ui.transferRecoverGroup': 'Copiar grupo a la carpeta de recuperación',
+    'ui.transferRecovering': 'Copiando {done} de {total} archivos a la carpeta de recuperación…',
+    'ui.transferRecoveringStart': 'Copiando a la carpeta de recuperación…',
+    'ui.transferRunsKept':
+      'Las ejecuciones de más de 90 días, y todas salvo las 200 más recientes, se eliminan al iniciar DeepServer.',
+    'ui.transferPruneRuns': 'Limpiar ahora',
+    'ui.transferPruned': '{count} ejecuciones antiguas eliminadas ({size} liberados).',
+    'ui.folderUnreadable':
+      'No se pudieron leer {count} carpetas, así que no se muestra su contenido.',
     'ui.transferRecoverUnavailable':
       'No se pudo leer el origen de estos archivos; no hay nada que copiar.',
     'ui.transferCopyList': 'Copiar lista',

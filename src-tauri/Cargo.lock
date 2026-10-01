@@ -4991,6 +4991,7 @@ name = "transfer-core"
 version = "1.0.0"
 dependencies = [
  "blake3",
+ "chrono",
  "file-core",
  "folder-core",
  "job-core",

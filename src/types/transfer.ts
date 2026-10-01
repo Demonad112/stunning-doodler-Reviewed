@@ -173,6 +173,18 @@ export interface ItemsEvent {
   items: ItemResult[]
 }
 
+/** `transfer://recovery`: files copied to the recovery folder so far. */
+export interface RecoveryEvent {
+  runId: string
+  done: number
+  total: number
+}
+
+export interface PruneResult {
+  removed: number
+  freedBytes: number
+}
+
 export interface FinishedEvent {
   runId: string
   summary: RunSummary | null

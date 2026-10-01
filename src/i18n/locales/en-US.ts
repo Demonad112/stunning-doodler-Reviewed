@@ -1482,6 +1482,14 @@ export const enUS: LanguagePack = {
     'ui.transferInferredHint': 'DeepServer did not do this copy, so the reason is its best guess.',
     'ui.transferRetryGroup': 'Retry group',
     'ui.transferRecoverGroup': 'Copy group to recovery folder',
+    'ui.transferRecovering': 'Copying {done} of {total} files to the recovery folder…',
+    'ui.transferRecoveringStart': 'Copying to the recovery folder…',
+    'ui.transferRunsKept':
+      'Runs older than 90 days, and all but the newest 200, are removed when DeepServer starts.',
+    'ui.transferPruneRuns': 'Clean up now',
+    'ui.transferPruned': '{count} old runs removed ({size} freed).',
+    'ui.folderUnreadable':
+      '{count} folders could not be read, so what is inside them is not shown.',
     'ui.transferRecoverUnavailable':
       'The source of these files could not be read, so there is nothing to copy.',
     'ui.transferCopyList': 'Copy list',

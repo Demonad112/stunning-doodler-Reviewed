@@ -5,6 +5,7 @@
 //! - `transfer://progress`: [`TransferProgress`], at most every 100 ms
 //! - `transfer://items`: `{ runId, items }`, item outcomes batched every 100 ms
 //! - `transfer://finished`: `{ runId, summary, error }` when the job ends
+//! - `transfer://recovery`: `{ runId, done, total }` while not-copied files go to a recovery folder
 
 use serde::{Deserialize, Serialize};
 use shared_types::{AppErrorCode, AppErrorPayload};
@@ -26,6 +27,7 @@ use transfer_core::{
 const PROGRESS_EVENT: &str = "transfer://progress";
 const ITEMS_EVENT: &str = "transfer://items";
 const FINISHED_EVENT: &str = "transfer://finished";
+const RECOVERY_EVENT: &str = "transfer://recovery";
 const EMIT_EVERY: Duration = Duration::from_millis(100);
 /// Copied files sent with a loaded run for the live feed.
 const RECENT_ITEMS: usize = 200;
@@ -61,6 +63,15 @@ impl TransferJobs {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .get(key)
             .cloned()
+    }
+
+    fn active_keys(&self) -> Vec<String> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .keys()
+            .cloned()
+            .collect()
     }
 
     fn running(&self, key: &str) -> bool {
@@ -112,6 +123,14 @@ struct EventSink {
 struct ItemsPayload<'a> {
     run_id: &'a str,
     items: &'a [ItemResult],
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecoveryPayload<'a> {
+    run_id: &'a str,
+    done: usize,
+    total: usize,
 }
 
 #[derive(Clone, Serialize)]
@@ -309,8 +328,11 @@ pub fn transfer_retry(
 }
 
 /// Copies the selected not-copied files to a recovery folder (default: beside the destination).
+/// Registered as a job under the run id, so `transfer_cancel` stops it; progress arrives as
+/// `transfer://recovery`.
 #[tauri::command]
 pub async fn transfer_copy_to_recovery(
+    app: AppHandle,
     jobs: State<'_, TransferJobs>,
     run_id: String,
     selection: Selection,
@@ -319,20 +341,67 @@ pub async fn transfer_copy_to_recovery(
     if jobs.running(&run_id) {
         return Err(error("Wait until the transfer has finished."));
     }
-    run_blocking(move || {
+    let control = jobs.begin(&run_id)?;
+    let key = run_id.clone();
+    let result = run_blocking(move || {
         let chosen = folder
             .filter(|folder| !folder.trim().is_empty())
             .map(PathBuf::from);
+        let mut sent = Instant::now()
+            .checked_sub(EMIT_EVERY)
+            .unwrap_or_else(Instant::now);
         transfer_core::recovery::copy_to_recovery(
             &root(),
-            &run_id,
+            &key,
             &selection,
             chosen.as_deref(),
-            &job_core::CancellationToken::default(),
+            &control.cancel,
+            &mut |done, total| {
+                if done == total || sent.elapsed() >= EMIT_EVERY {
+                    sent = Instant::now();
+                    let _ = app.emit(
+                        RECOVERY_EVENT,
+                        RecoveryPayload {
+                            run_id: &key,
+                            done,
+                            total,
+                        },
+                    );
+                }
+            },
         )
         .map_err(map_error)
     })
-    .await
+    .await;
+    jobs.end(&run_id);
+    result
+}
+
+/// Removes old runs (see [`transfer_core::store::prune_runs`]). Running ones and `keep` (the run
+/// open in the window) are kept.
+#[tauri::command]
+pub async fn transfer_prune_runs(
+    jobs: State<'_, TransferJobs>,
+    keep: Option<String>,
+) -> Result<transfer_core::store::PruneResult, AppErrorPayload> {
+    let mut active = jobs.active_keys();
+    active.extend(keep);
+    run_blocking(move || Ok(prune_old_runs(&active))).await
+}
+
+/// Startup clean-up of the runs folder, on a background thread.
+pub fn prune_runs_in_background() {
+    std::thread::spawn(|| prune_old_runs(&[]));
+}
+
+fn prune_old_runs(active: &[String]) -> transfer_core::store::PruneResult {
+    transfer_core::store::prune_runs(
+        &root(),
+        transfer_core::store::KEEP_RUNS_DAYS,
+        transfer_core::store::KEEP_RUNS_MAX,
+        transfer_core::now_ms(),
+        &|id| active.iter().any(|key| key == id),
+    )
 }
 
 /// Stored runs, newest first.

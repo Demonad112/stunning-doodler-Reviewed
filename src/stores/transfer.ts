@@ -9,6 +9,7 @@ import {
   listTransferRuns,
   loadTransferRun,
   prepareTransfer,
+  pruneTransferRuns,
   retryTransfer,
   startTransfer,
   startWatch,
@@ -28,6 +29,8 @@ import type {
   ItemResult,
   ItemsEvent,
   PreflightReport,
+  PruneResult,
+  RecoveryEvent,
   RecoveryResult,
   ReportExport,
   RunDetails,
@@ -76,6 +79,9 @@ export const useTransferStore = defineStore('transfer', () => {
   const errorMessage = ref('')
   const busyAction = ref<'recovery' | 'report' | null>(null)
   const lastRecovery = ref<RecoveryResult | null>(null)
+  /** Files copied to the recovery folder so far, while that copy runs. */
+  const recoveryProgress = ref<{ done: number; total: number } | null>(null)
+  const lastPrune = ref<PruneResult | null>(null)
   const lastReport = ref<ReportExport | null>(null)
   const bytesPerSecond = ref<number | null>(null)
   // A plain Map (can hold 100k rows); `notCopiedRevision` tells computeds it changed.
@@ -112,11 +118,18 @@ export const useTransferStore = defineStore('transfer', () => {
       finished: (event) => {
         void onFinished(event)
       },
+      recovery: onRecovery,
     }).catch(() => () => undefined)
   }
 
   function isOurs(eventRunId: string): boolean {
     return eventRunId === runId.value || eventRunId === requestId.value
+  }
+
+  function onRecovery(event: RecoveryEvent): void {
+    if (busyAction.value === 'recovery' && isOurs(event.runId)) {
+      recoveryProgress.value = { done: event.done, total: event.total }
+    }
   }
 
   function onProgress(event: TransferProgress): void {
@@ -336,6 +349,7 @@ export const useTransferStore = defineStore('transfer', () => {
     }
 
     busyAction.value = 'recovery'
+    recoveryProgress.value = { done: 0, total: 0 }
     errorMessage.value = ''
 
     try {
@@ -348,7 +362,27 @@ export const useTransferStore = defineStore('transfer', () => {
       errorMessage.value = errorText(error)
     } finally {
       busyAction.value = null
+      recoveryProgress.value = null
     }
+  }
+
+  /** Stops a running copy to the recovery folder; files copied so far stay there. */
+  async function cancelRecovery(): Promise<void> {
+    const id = runId.value
+
+    if (id && busyAction.value === 'recovery') {
+      await cancelTransfer(id)
+    }
+  }
+
+  /** Deletes old stored runs (see `pruneTransferRuns`) and reloads the list. */
+  async function pruneRuns(): Promise<void> {
+    try {
+      lastPrune.value = await pruneTransferRuns(runId.value)
+    } catch (error) {
+      errorMessage.value = errorText(error)
+    }
+    await refreshRuns()
   }
 
   async function exportReport(format: TransferReportFormat): Promise<void> {
@@ -443,6 +477,8 @@ export const useTransferStore = defineStore('transfer', () => {
     runs,
     errorMessage,
     busyAction,
+    recoveryProgress,
+    lastPrune,
     lastRecovery,
     lastReport,
     bytesPerSecond,
@@ -460,6 +496,8 @@ export const useTransferStore = defineStore('transfer', () => {
     finish,
     retry,
     recover,
+    cancelRecovery,
+    pruneRuns,
     exportReport,
     loadRun,
     refreshRuns,

@@ -4,6 +4,8 @@ import type {
   FinishedEvent,
   ItemsEvent,
   PrepareResponse,
+  PruneResult,
+  RecoveryEvent,
   RecoveryResult,
   ReportExport,
   RunDetails,
@@ -19,6 +21,7 @@ export const transferEvents = {
   progress: 'transfer://progress',
   items: 'transfer://items',
   finished: 'transfer://finished',
+  recovery: 'transfer://recovery',
 } as const
 
 /** Lists the source and runs the pre-flight check. Cancel it with `cancelTransfer(requestId)`. */
@@ -60,6 +63,14 @@ export function copyToRecovery(
   return invoke<RecoveryResult>('transfer_copy_to_recovery', { runId, selection, folder })
 }
 
+/**
+ * Removes runs older than 90 days and all but the newest 200. Running ones and `keep` (the run
+ * shown in the window) are kept.
+ */
+export function pruneTransferRuns(keep: string | null): Promise<PruneResult> {
+  return invoke<PruneResult>('transfer_prune_runs', { keep })
+}
+
 export function listTransferRuns(): Promise<RunSummary[]> {
   return invoke<RunSummary[]>('transfer_list_runs')
 }
@@ -81,6 +92,7 @@ export interface TransferEventHandlers {
   progress: (progress: TransferProgress) => void
   items: (event: ItemsEvent) => void
   finished: (event: FinishedEvent) => void
+  recovery?: (event: RecoveryEvent) => void
 }
 
 /** Subscribes to the transfer events; resolves to a function that unsubscribes. */
@@ -99,6 +111,9 @@ export async function listenTransferEvents(handlers: TransferEventHandlers): Pro
     }),
     listen<FinishedEvent>(transferEvents.finished, (event) => {
       handlers.finished(event.payload)
+    }),
+    listen<RecoveryEvent>(transferEvents.recovery, (event) => {
+      handlers.recovery?.(event.payload)
     }),
   ])
 

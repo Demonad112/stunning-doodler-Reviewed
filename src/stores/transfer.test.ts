@@ -14,6 +14,7 @@ vi.mock('@/api/transfer', () => ({
   listTransferRuns: vi.fn().mockResolvedValue([]),
   loadTransferRun: vi.fn(),
   prepareTransfer: vi.fn(),
+  pruneTransferRuns: vi.fn().mockResolvedValue({ removed: 3, freedBytes: 2048 }),
   retryTransfer: vi.fn().mockResolvedValue(undefined),
   startTransfer: vi.fn().mockResolvedValue(undefined),
   startWatch: vi.fn().mockResolvedValue(undefined),
@@ -230,5 +231,45 @@ describe('transfer store', () => {
     await store.retry({ reason: 'fileLocked' })
     expect(api.retryTransfer).toHaveBeenCalledWith('run-1', { reason: 'fileLocked' })
     expect(store.stage).toBe('running')
+  })
+
+  it('shows recovery progress from events and cancels the recovery copy', async () => {
+    vi.mocked(api.loadTransferRun).mockResolvedValue(details('completed'))
+    let resolveRecovery: (value: Awaited<ReturnType<typeof api.copyToRecovery>>) => void = () =>
+      undefined
+
+    vi.mocked(api.copyToRecovery).mockReturnValue(
+      new Promise((resolve) => {
+        resolveRecovery = resolve
+      }),
+    )
+    const store = useTransferStore()
+
+    await store.loadRun('run-1')
+    const handlers = vi.mocked(api.listenTransferEvents).mock.calls[0][0]
+    const recovering = store.recover({})
+
+    expect(store.recoveryProgress).toEqual({ done: 0, total: 0 })
+    handlers.recovery?.({ runId: 'other', done: 9, total: 9 })
+    handlers.recovery?.({ runId: 'run-1', done: 2, total: 5 })
+    expect(store.recoveryProgress).toEqual({ done: 2, total: 5 })
+
+    await store.cancelRecovery()
+    expect(api.cancelTransfer).toHaveBeenCalledWith('run-1')
+
+    resolveRecovery({ folder: 'E:\\Backup_NotCopied', listFile: '', copied: 2, skipped: [] })
+    await recovering
+    expect(store.recoveryProgress).toBeNull()
+    expect(store.busyAction).toBeNull()
+  })
+
+  it('cleans up old runs and reloads the list', async () => {
+    const store = useTransferStore()
+
+    await store.pruneRuns()
+
+    expect(api.pruneTransferRuns).toHaveBeenCalledWith(null)
+    expect(api.listTransferRuns).toHaveBeenCalled()
+    expect(store.lastPrune).toEqual({ removed: 3, freedBytes: 2048 })
   })
 })

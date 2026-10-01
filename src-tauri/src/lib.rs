@@ -12,6 +12,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(transfer::TransferJobs::default())
         .setup(|_app| {
+            transfer::prune_runs_in_background();
             #[cfg(target_os = "linux")]
             {
                 use tauri::Manager;
@@ -96,6 +97,7 @@ pub fn run() {
             transfer::transfer_copy_to_recovery,
             transfer::transfer_export_report,
             transfer::transfer_list_runs,
+            transfer::transfer_prune_runs,
             transfer::transfer_load_run,
             transfer::transfer_prepare,
             transfer::transfer_retry,

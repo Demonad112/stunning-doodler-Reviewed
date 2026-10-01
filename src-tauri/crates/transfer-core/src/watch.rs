@@ -176,11 +176,17 @@ pub fn watch(
                 Err(_) => polling = true,
             }
         }
-        let interval = if polling {
-            options.poll_every
-        } else {
-            options.reconcile_every
-        };
+        let interval = scaled_interval(
+            if polling {
+                options.poll_every
+            } else {
+                options.reconcile_every
+            },
+            files
+                .iter()
+                .filter(|file| file.track != Track::Arrived)
+                .count(),
+        );
         if check_all || last_full_check.elapsed() >= interval {
             last_full_check = Instant::now();
             dirty.extend(
@@ -396,13 +402,31 @@ impl CheckContext<'_> {
     }
 }
 
-/// True when nobody else has the file open (the copying program is done with it).
+/// Pending files above which full re-checks slow down: stat-ing 100k files every few seconds
+/// on a network share is heavier than the copy being watched.
+const LARGE_WATCH: usize = 20_000;
+const LARGE_WATCH_INTERVAL: Duration = Duration::from_secs(120);
+
+fn scaled_interval(interval: Duration, pending: usize) -> Duration {
+    if pending > LARGE_WATCH {
+        interval.max(LARGE_WATCH_INTERVAL)
+    } else {
+        interval
+    }
+}
+
+/// True when nobody has the file open for writing (the copying program is done with it).
+///
+/// Sharing read and delete, but not write, makes the open fail while a writer holds the file,
+/// without blocking other readers or a rename/delete by the copying program during the probe.
 #[cfg(windows)]
 fn open_exclusively(path: &Path) -> bool {
     use std::os::windows::fs::OpenOptionsExt;
+    const FILE_SHARE_READ: u32 = 0x1;
+    const FILE_SHARE_DELETE: u32 = 0x4;
     fs::OpenOptions::new()
         .read(true)
-        .share_mode(0)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_DELETE)
         .open(path)
         .is_ok()
 }
@@ -418,6 +442,17 @@ mod tests {
     use crate::prepare::prepare;
     use crate::test_support::TempDir;
     use crate::{ConflictPolicy, NullSink, TransferSettings};
+
+    #[test]
+    fn large_watches_recheck_less_often() {
+        let five = Duration::from_secs(5);
+        assert_eq!(scaled_interval(five, 10), five);
+        assert_eq!(scaled_interval(five, LARGE_WATCH + 1), LARGE_WATCH_INTERVAL);
+        assert_eq!(
+            scaled_interval(Duration::from_secs(600), LARGE_WATCH + 1),
+            Duration::from_secs(600)
+        );
+    }
 
     fn watch_run(dir: &TempDir, verify: VerifyLevel) -> String {
         let settings = TransferSettings {

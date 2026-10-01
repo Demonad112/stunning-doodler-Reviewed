@@ -1410,6 +1410,13 @@ export const zhTW: LanguagePack = {
     'ui.transferInferredHint': '此複製不是由 DeepServer 完成，因此原因為推斷。',
     'ui.transferRetryGroup': '重試此群組',
     'ui.transferRecoverGroup': '將此群組複製到復原資料夾',
+    'ui.transferRecovering': '正在複製到復原資料夾：{done} / {total} 個檔案…',
+    'ui.transferRecoveringStart': '正在複製到復原資料夾…',
+    'ui.transferRunsKept':
+      '超過 90 天的執行記錄，以及最新 200 筆以外的記錄，會在 DeepServer 啟動時刪除。',
+    'ui.transferPruneRuns': '立即清理',
+    'ui.transferPruned': '已刪除 {count} 筆舊執行記錄（釋放 {size}）。',
+    'ui.folderUnreadable': '有 {count} 個資料夾無法讀取，因此未顯示其中的內容。',
     'ui.transferRecoverUnavailable': '這些檔案的來源無法讀取，沒有可複製的內容。',
     'ui.transferCopyList': '複製清單',
     'ui.transferListCopied': '清單已複製',

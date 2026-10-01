@@ -82,6 +82,8 @@ This removes the program files and the Explorer menus (for all users and the cur
 | Transfer Monitor runs and reports | `%LOCALAPPDATA%\DeepServer\Transfers`      |
 | App settings (WebView2 data)      | `%LOCALAPPDATA%\com.demonad112.deepserver` |
 
+Transfer Monitor runs older than 90 days, and all but the newest 200, are removed automatically when DeepServer starts (**Previous runs → Clean up now** does it on demand). Recovery folders (`<destination>_NotCopied`) are never removed automatically.
+
 ## What gets installed
 
 - `DeepServer.exe`: the app (compare and merge, sync, Transfer Monitor, Disk Usage views)

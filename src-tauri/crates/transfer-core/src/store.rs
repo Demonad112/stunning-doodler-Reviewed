@@ -187,6 +187,61 @@ pub fn list_runs(root: &Path) -> Vec<RunSummary> {
     runs
 }
 
+/// What [`prune_runs`] removed.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PruneResult {
+    pub removed: usize,
+    pub freed_bytes: u64,
+}
+
+/// Runs older than this are removed by [`prune_runs`].
+pub const KEEP_RUNS_DAYS: u64 = 90;
+/// At most this many runs are kept.
+pub const KEEP_RUNS_MAX: usize = 200;
+
+/// Deletes run folders older than `keep_days` and all but the newest `keep_max`, so the runs
+/// folder doesn't grow forever. Runs for which `active` returns true are always kept. Folders
+/// without a readable `run.json` are left alone: they may not be ours.
+pub fn prune_runs(
+    root: &Path,
+    keep_days: u64,
+    keep_max: usize,
+    now: u64,
+    active: &dyn Fn(&str) -> bool,
+) -> PruneResult {
+    let cutoff = now.saturating_sub(keep_days.saturating_mul(86_400_000));
+    let mut result = PruneResult::default();
+    for (position, run) in list_runs(root).iter().enumerate() {
+        if active(&run.id) || (position < keep_max && run.created_at_ms >= cutoff) {
+            continue;
+        }
+        let Ok(store) = RunStore::open(root, &run.id) else {
+            continue;
+        };
+        let bytes = folder_size(store.dir());
+        if fs::remove_dir_all(store.dir()).is_ok() {
+            result.removed += 1;
+            result.freed_bytes += bytes;
+        }
+    }
+    result
+}
+
+fn folder_size(path: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(path) else {
+        return 0;
+    };
+    entries
+        .filter_map(|entry| entry.ok())
+        .map(|entry| match entry.metadata() {
+            Ok(meta) if meta.is_dir() => folder_size(&entry.path()),
+            Ok(meta) => meta.len(),
+            Err(_) => 0,
+        })
+        .sum()
+}
+
 fn run_id_for(ms: u64) -> String {
     // "2026-09-30 06:15:02 UTC" → "20260930-061502-123"
     let text = crate::format_utc(ms);
@@ -267,6 +322,56 @@ mod tests {
         let first = RunStore::create(&dir.path("runs")).unwrap();
         let second = RunStore::create(&dir.path("runs")).unwrap();
         assert_ne!(first.id(), second.id());
+    }
+
+    fn stored_run(root: &Path, created_at_ms: u64) -> String {
+        let store = RunStore::create(root).unwrap();
+        let summary = RunSummary {
+            id: store.id(),
+            settings: crate::TransferSettings {
+                source: "C:\\src".to_owned(),
+                destination: "D:\\dst".to_owned(),
+                mode: crate::TransferMode::Copy,
+                include: Vec::new(),
+                exclude: Vec::new(),
+                verify: crate::VerifyLevel::SizeAndTime,
+                conflict: crate::ConflictPolicy::Skip,
+                include_hidden: false,
+            },
+            state: crate::RunState::Completed,
+            created_at_ms,
+            started_at_ms: None,
+            finished_at_ms: None,
+            machine: String::new(),
+            user: String::new(),
+            totals: RunTotals::default(),
+            error: None,
+        };
+        store.save_summary(&summary).unwrap();
+        store.id()
+    }
+
+    #[test]
+    fn prune_removes_old_and_surplus_runs_but_keeps_active_ones() {
+        let dir = TempDir::new("store-prune");
+        let root = dir.path("runs");
+        let day = 86_400_000;
+        let now = 1_000 * day;
+        let old = stored_run(&root, now - 100 * day);
+        let old_active = stored_run(&root, now - 120 * day);
+        let recent: Vec<String> = (0..3).map(|n| stored_run(&root, now - n * day)).collect();
+        fs::create_dir_all(root.join("not-a-run")).unwrap();
+
+        let result = prune_runs(&root, 90, 2, now, &|id| id == old_active);
+
+        assert_eq!(result.removed, 2);
+        assert!(result.freed_bytes > 0);
+        assert!(!root.join(&old).exists());
+        assert!(root.join(&old_active).exists());
+        assert!(root.join(&recent[0]).exists());
+        assert!(root.join(&recent[1]).exists());
+        assert!(!root.join(&recent[2]).exists(), "beyond the newest 2");
+        assert!(root.join("not-a-run").exists());
     }
 
     #[test]
