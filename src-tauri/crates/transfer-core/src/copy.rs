@@ -303,6 +303,10 @@ fn write_part(
             .set_modified(time)
             .map_err(|error| CopyFailure::io(&error, Side::Destination))?;
     }
+    // Flush to the device before the rename: a USB stick pulled after "Copied" keeps the file.
+    output
+        .sync_all()
+        .map_err(|error| CopyFailure::io(&error, Side::Destination))?;
     Ok((
         total,
         hasher.map(|hasher| hasher.finalize().to_hex().to_string()),

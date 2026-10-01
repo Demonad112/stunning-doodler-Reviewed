@@ -29,6 +29,8 @@ const {
   runs,
   errorMessage,
   busyAction,
+  recoveryProgress,
+  lastPrune,
   lastRecovery,
   lastReport,
   bytesPerSecond,
@@ -550,7 +552,7 @@ onMounted(async () => {
               v-if="notCopiedCount > 0"
               type="button"
               data-testid="transfer-retry-all"
-              :disabled="working"
+              :disabled="working || busyAction === 'recovery'"
               @click="transfer.retry({})"
             >
               {{ $t('ui.transferRetryAll') }}
@@ -587,6 +589,28 @@ onMounted(async () => {
             </button>
           </p>
           <p
+            v-if="recoveryProgress"
+            class="transfer-note"
+            role="status"
+            data-testid="transfer-recovery-progress"
+          >
+            {{
+              recoveryProgress.total > 0
+                ? $t('ui.transferRecovering', {
+                    done: recoveryProgress.done,
+                    total: recoveryProgress.total,
+                  })
+                : $t('ui.transferRecoveringStart')
+            }}
+            <button
+              type="button"
+              data-testid="transfer-cancel-recovery"
+              @click="transfer.cancelRecovery()"
+            >
+              {{ $t('ui.cancel') }}
+            </button>
+          </p>
+          <p
             v-if="lastRecovery"
             class="transfer-note"
             role="status"
@@ -612,7 +636,7 @@ onMounted(async () => {
             :groups="groups"
             :source="source"
             :destination="destination"
-            :busy="working"
+            :busy="working || busyAction !== null"
             @retry="transfer.retry"
             @recover="transfer.recover"
             @reveal="reveal"
@@ -632,6 +656,29 @@ onMounted(async () => {
         data-testid="transfer-runs"
       >
         <summary>{{ $t('ui.transferPreviousRuns') }} ({{ runs.length }})</summary>
+        <p class="transfer-note">
+          {{ $t('ui.transferRunsKept') }}
+          <button
+            type="button"
+            data-testid="transfer-prune-runs"
+            :disabled="working"
+            @click="transfer.pruneRuns()"
+          >
+            {{ $t('ui.transferPruneRuns') }}
+          </button>
+          <span
+            v-if="lastPrune"
+            role="status"
+            data-testid="transfer-prune-result"
+          >
+            {{
+              $t('ui.transferPruned', {
+                count: lastPrune.removed,
+                size: formatBytes(lastPrune.freedBytes),
+              })
+            }}
+          </span>
+        </p>
         <p
           v-if="runs.length === 0"
           class="transfer-note"

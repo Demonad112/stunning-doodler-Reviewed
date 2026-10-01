@@ -75,6 +75,32 @@ pub fn scan_compare_source_with_options(
     }
 }
 
+/// [`scan_compare_source_with_options`] for read-only views: unreadable folders below the root
+/// are returned instead of failing the scan (see `folder_core::scan_local_folder_collecting`).
+pub fn scan_compare_source_collecting(
+    source: &CompareSource,
+    follow_symlinks: bool,
+    show_hidden_files: bool,
+) -> Result<(FolderScanNode, Vec<folder_core::UnreadableEntry>), String> {
+    match source {
+        CompareSource::Local(path) => {
+            let options = folder_core::FolderCompareOptions {
+                follow_symlinks,
+                show_hidden_files,
+                ..folder_core::FolderCompareOptions::default()
+            };
+            folder_core::scan_local_folder_collecting(
+                path,
+                &job_core::CancellationToken::default(),
+                &options,
+            )
+            .map_err(|error| format!("{error:?}"))
+        }
+        _ => scan_compare_source_with_options(source, follow_symlinks, show_hidden_files)
+            .map(|tree| (tree, Vec::new())),
+    }
+}
+
 pub fn read_compare_file(source: &CompareSource, relative_path: &str) -> Result<Vec<u8>, String> {
     match source {
         CompareSource::Local(root) => {

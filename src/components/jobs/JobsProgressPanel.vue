@@ -62,7 +62,7 @@ function progressPercent(job: AppJob): string {
             v-if="job.cancellable"
             type="button"
             :data-testid="`cancel-job-${job.id}`"
-            @click="$emit('cancel', job.id)"
+            @click.stop="$emit('cancel', job.id)"
           >
             {{ $t('ui.cancel') }}
           </button>

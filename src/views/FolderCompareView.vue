@@ -133,6 +133,7 @@ import type {
   FolderCompareResponse,
   FolderCompareRow as FolderCompareResponseRow,
   FolderCompareSideEntry,
+  UnreadableFolder,
 } from '@/types/diff'
 import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { FOLDER_WATCH_REFRESH_MS } from '@/app/diskChangeReload'
@@ -303,6 +304,7 @@ const reportStatus = ref('')
 const { t } = useI18n()
 const folderCompareLoading = ref(false)
 const folderCompareError = ref<string>()
+const unreadableFolders = ref<UnreadableFolder[]>([])
 const initialDisplayFilters = loadFolderDisplayFilters()
 const visibleStatuses = ref<Set<FolderStatus>>(new Set(initialDisplayFilters.statuses))
 const showSuppressedFilters = ref(initialDisplayFilters.showSuppressed)
@@ -1651,6 +1653,7 @@ function cancelFolderCompare(): void {
 }
 
 function applyFolderCompareResponse(response: FolderCompareResponse): void {
+  unreadableFolders.value = response.unreadable ?? []
   const nextRows = response.rows.map(folderCompareResponseRowToTreeRow)
   const rowIds = new Set(nextRows.map((row) => row.id))
   const normalized = nextRows.map((row) =>
@@ -3875,6 +3878,24 @@ onUnmounted(() => {
         {{ folderCompareError }}
       </section>
 
+      <details
+        v-if="unreadableFolders.length > 0"
+        class="folder-action-status"
+        role="status"
+        data-testid="folder-compare-unreadable"
+      >
+        <summary>{{ $t('ui.folderUnreadable', { count: unreadableFolders.length }) }}</summary>
+        <ul class="folder-unreadable-list">
+          <li
+            v-for="folder in unreadableFolders"
+            :key="`${folder.side}:${folder.relativePath}`"
+          >
+            {{ folder.side === 'left' ? $t('ui.left') : $t('ui.right') }}:
+            {{ folder.relativePath }} ({{ folder.message }})
+          </li>
+        </ul>
+      </details>
+
       <FolderStatusLegend
         v-if="settings.showFolderLegend"
         class="folder-status-legend-slot"
@@ -5414,6 +5435,11 @@ onUnmounted(() => {
 .folder-summary span {
   color: var(--app-text-muted);
   font-size: 11px;
+}
+
+.folder-unreadable-list {
+  margin: 2px 0 0;
+  padding-left: 16px;
 }
 
 .folder-action-status {

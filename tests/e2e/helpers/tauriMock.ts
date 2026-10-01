@@ -554,6 +554,9 @@ export async function installTauriInvokeMock(page: Page): Promise<void> {
         if (command === 'transfer_list_runs') {
           return Promise.resolve([])
         }
+        if (command === 'transfer_prune_runs') {
+          return Promise.resolve({ removed: 0, freedBytes: 0 })
+        }
         if (command === 'diskusage_compare') {
           return Promise.resolve({ rows: [], warning: null })
         }

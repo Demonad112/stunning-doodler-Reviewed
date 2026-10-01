@@ -1475,6 +1475,14 @@ export const jaJP: LanguagePack = {
     'ui.transferInferredHint': 'このコピーは DeepServer が行ったものではないため、理由は推定です。',
     'ui.transferRetryGroup': 'グループを再試行',
     'ui.transferRecoverGroup': 'グループを回収フォルダーにコピー',
+    'ui.transferRecovering': '回収フォルダーにコピー中: {total} 件中 {done} 件…',
+    'ui.transferRecoveringStart': '回収フォルダーにコピー中…',
+    'ui.transferRunsKept':
+      '90 日より古い実行記録と、新しい 200 件以外の記録は DeepServer の起動時に削除されます。',
+    'ui.transferPruneRuns': '今すぐ整理',
+    'ui.transferPruned': '古い実行記録を {count} 件削除しました ({size} 解放)。',
+    'ui.folderUnreadable':
+      '{count} 個のフォルダーを読み取れなかったため、その中身は表示されていません。',
     'ui.transferRecoverUnavailable':
       'これらのファイルのコピー元を読み取れなかったため、コピーできるものがありません。',
     'ui.transferCopyList': '一覧をコピー',

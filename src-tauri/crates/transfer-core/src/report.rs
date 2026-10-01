@@ -3,7 +3,7 @@
 use crate::prepare::destination_path;
 use crate::store::RunStore;
 use crate::{
-    format_utc, now_ms, FailureReason, ItemStatus, Result, RunState, TransferMode, VerifyLevel,
+    format_local, now_ms, FailureReason, ItemStatus, Result, RunState, TransferMode, VerifyLevel,
 };
 use report_core::{
     format_bytes, ReportField, TransferReport, TransferReportGroup, TransferReportRow,
@@ -54,7 +54,7 @@ pub fn build_report(root: &Path, run_id: &str) -> Result<TransferReport> {
     groups.sort_by_key(|group| std::cmp::Reverse(group.rows.len()));
 
     let totals = &summary.totals;
-    let time = |ms: Option<u64>| ms.map(format_utc).unwrap_or_else(|| "—".to_owned());
+    let time = |ms: Option<u64>| ms.map(format_local).unwrap_or_else(|| "—".to_owned());
     let mut fields = vec![
         field("Source", &summary.settings.source),
         field("Destination", &summary.settings.destination),
@@ -120,7 +120,7 @@ pub fn build_report(root: &Path, run_id: &str) -> Result<TransferReport> {
 
     Ok(TransferReport {
         title: "DeepServer transfer report".to_owned(),
-        generated_at: format_utc(now_ms()),
+        generated_at: format_local(now_ms()),
         source: summary.settings.source.clone(),
         destination: summary.settings.destination.clone(),
         fields,

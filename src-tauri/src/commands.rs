@@ -341,6 +341,44 @@ pub struct FolderCompareResponse {
     pub right_root: String,
     pub rows: Vec<FolderCompareRow>,
     pub summary: FolderCompareSummary,
+    /// Folders that couldn't be read (for example `System Volume Information`). Rows below them
+    /// are left out, so the other side's files there don't show up as one-sided.
+    #[serde(default)]
+    pub unreadable: Vec<UnreadableFolder>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UnreadableFolder {
+    /// `left` or `right`.
+    pub side: String,
+    pub relative_path: String,
+    pub message: String,
+}
+
+fn unreadable_folders(
+    left: Vec<folder_core::UnreadableEntry>,
+    right: Vec<folder_core::UnreadableEntry>,
+) -> Vec<UnreadableFolder> {
+    let tag = |side: &str, entries: Vec<folder_core::UnreadableEntry>| {
+        entries.into_iter().map({
+            let side = side.to_owned();
+            move |entry| UnreadableFolder {
+                side: side.clone(),
+                relative_path: entry.relative_path,
+                message: entry.message,
+            }
+        })
+    };
+    tag("left", left).chain(tag("right", right)).collect()
+}
+
+/// True when `relative_path` is strictly inside one of the unreadable folders.
+fn is_below_unreadable(relative_path: &str, unreadable: &[UnreadableFolder]) -> bool {
+    unreadable.iter().any(|folder| {
+        relative_path != folder.relative_path
+            && folder_core::is_at_or_under(relative_path, &folder.relative_path)
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -836,20 +874,23 @@ pub fn compare_folder_paths(
         .map_err(|error| compare_source_error(&left_root, error))?;
     let right_source = crate::sources::load_compare_source(&right_root, extensions)
         .map_err(|error| compare_source_error(&right_root, error))?;
-    let left_tree = crate::sources::scan_compare_source_with_options(
+    // Read-only view: keep going past unreadable folders (E11). Sync and merge scan strictly.
+    let (left_tree, left_unreadable) = crate::sources::scan_compare_source_collecting(
         &left_source,
         options.follow_symlinks,
         options.show_hidden_files,
     )
     .map_err(|error| compare_source_error(&left_root, error))?;
-    let right_tree = crate::sources::scan_compare_source_with_options(
+    let (right_tree, right_unreadable) = crate::sources::scan_compare_source_collecting(
         &right_source,
         options.follow_symlinks,
         options.show_hidden_files,
     )
     .map_err(|error| compare_source_error(&right_root, error))?;
-    let alignment_rows =
+    let unreadable = unreadable_folders(left_unreadable, right_unreadable);
+    let mut alignment_rows =
         folder_core::align_folder_trees_with_options(&left_tree, &right_tree, &options);
+    alignment_rows.retain(|row| !is_below_unreadable(&row.relative_path, &unreadable));
     let alignment_rows =
         folder_core::filter_hidden_alignment_rows(alignment_rows, options.show_hidden_files);
     let alignment_rows = if name_filters.is_active() {
@@ -884,6 +925,7 @@ pub fn compare_folder_paths(
         right_root,
         rows,
         summary,
+        unreadable,
     })
 }
 
@@ -1843,11 +1885,16 @@ pub fn export_folder_compare_report(
     include_unimportant: Option<bool>,
 ) -> Result<ExportReportResponse, AppErrorPayload> {
     let cancellation_token = job_core::CancellationToken::default();
-    let left_tree = folder_core::scan_local_folder(&left_root, &cancellation_token)
-        .map_err(|error| folder_scan_error(&left_root, error))?;
-    let right_tree = folder_core::scan_local_folder(&right_root, &cancellation_token)
-        .map_err(|error| folder_scan_error(&right_root, error))?;
-    let alignment_rows = folder_core::align_folder_trees(&left_tree, &right_tree);
+    let scan_options = folder_core::FolderCompareOptions::default();
+    let (left_tree, left_unreadable) =
+        folder_core::scan_local_folder_collecting(&left_root, &cancellation_token, &scan_options)
+            .map_err(|error| folder_scan_error(&left_root, error))?;
+    let (right_tree, right_unreadable) =
+        folder_core::scan_local_folder_collecting(&right_root, &cancellation_token, &scan_options)
+            .map_err(|error| folder_scan_error(&right_root, error))?;
+    let unreadable = unreadable_folders(left_unreadable, right_unreadable);
+    let mut alignment_rows = folder_core::align_folder_trees(&left_tree, &right_tree);
+    alignment_rows.retain(|row| !is_below_unreadable(&row.relative_path, &unreadable));
     let mut model = folder_core::build_folder_report_model(
         &alignment_rows,
         &folder_core::FolderCompareOptions::default(),
@@ -3948,6 +3995,8 @@ fn delete_sync_target(target_path: &str) -> std::io::Result<()> {
     }
 }
 
+/// Strict on purpose: sync and merge must not plan over a half-read tree, where the other side's
+/// files under an unreadable folder would look like extras to delete (E11 applies to compare only).
 fn scan_folder_root_with_archive_extensions(
     root: &str,
     archive_extensions: Option<&[String]>,
@@ -5667,6 +5716,30 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn rows_below_an_unreadable_folder_are_hidden_but_the_folder_row_stays() {
+        let unreadable = unreadable_folders(
+            vec![folder_core::UnreadableEntry {
+                relative_path: "System Volume Information".to_owned(),
+                message: "Access is denied.".to_owned(),
+            }],
+            Vec::new(),
+        );
+        assert_eq!(unreadable[0].side, "left");
+        assert!(!is_below_unreadable(
+            "System Volume Information",
+            &unreadable
+        ));
+        assert!(is_below_unreadable(
+            "System Volume Information/tracking.log",
+            &unreadable
+        ));
+        assert!(!is_below_unreadable(
+            "System Volume Information2/a",
+            &unreadable
+        ));
+    }
 
     #[test]
     fn finds_vscode_in_the_user_install_before_path() {

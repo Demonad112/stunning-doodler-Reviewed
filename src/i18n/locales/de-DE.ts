@@ -1509,6 +1509,15 @@ export const deDE: LanguagePack = {
       'DeepServer hat diese Kopie nicht selbst ausgeführt; der Grund ist eine Vermutung.',
     'ui.transferRetryGroup': 'Gruppe wiederholen',
     'ui.transferRecoverGroup': 'Gruppe in den Wiederherstellungsordner kopieren',
+    'ui.transferRecovering':
+      '{done} von {total} Dateien werden in den Wiederherstellungsordner kopiert…',
+    'ui.transferRecoveringStart': 'Kopieren in den Wiederherstellungsordner…',
+    'ui.transferRunsKept':
+      'Läufe, die älter als 90 Tage sind, und alle außer den neuesten 200 werden beim Start von DeepServer entfernt.',
+    'ui.transferPruneRuns': 'Jetzt aufräumen',
+    'ui.transferPruned': '{count} alte Läufe entfernt ({size} freigegeben).',
+    'ui.folderUnreadable':
+      '{count} Ordner konnten nicht gelesen werden; ihr Inhalt wird nicht angezeigt.',
     'ui.transferRecoverUnavailable':
       'Die Quelle dieser Dateien war nicht lesbar, es gibt nichts zu kopieren.',
     'ui.transferCopyList': 'Liste kopieren',

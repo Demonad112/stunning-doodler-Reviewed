@@ -1408,6 +1408,13 @@ export const zhCN: LanguagePack = {
     'ui.transferInferredHint': '此复制不是由 DeepServer 完成的，因此原因为推断。',
     'ui.transferRetryGroup': '重试该组',
     'ui.transferRecoverGroup': '将该组复制到恢复文件夹',
+    'ui.transferRecovering': '正在复制到恢复文件夹：{done} / {total} 个文件…',
+    'ui.transferRecoveringStart': '正在复制到恢复文件夹…',
+    'ui.transferRunsKept':
+      '超过 90 天的运行记录，以及最新 200 条之外的记录，会在 DeepServer 启动时删除。',
+    'ui.transferPruneRuns': '立即清理',
+    'ui.transferPruned': '已删除 {count} 条旧运行记录（释放 {size}）。',
+    'ui.folderUnreadable': '有 {count} 个文件夹无法读取，因此未显示其中的内容。',
     'ui.transferRecoverUnavailable': '这些文件的源无法读取，没有可复制的内容。',
     'ui.transferCopyList': '复制列表',
     'ui.transferListCopied': '列表已复制',

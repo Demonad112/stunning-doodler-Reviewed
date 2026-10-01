@@ -68,6 +68,7 @@ pub fn copy_to_recovery(
     selection: &Selection,
     chosen: Option<&Path>,
     cancel: &CancellationToken,
+    on_progress: &mut dyn FnMut(usize, usize),
 ) -> Result<RecoveryResult> {
     let store = RunStore::open(root, run_id)?;
     let summary = store.summary()?;
@@ -94,7 +95,8 @@ pub fn copy_to_recovery(
         skipped: Vec::new(),
     };
     let mut recovered = Vec::with_capacity(selected.len());
-    for item in &selected {
+    on_progress(0, selected.len());
+    for (done, item) in selected.iter().enumerate() {
         let skip = if !item.recoverable {
             Some("The source could not be read, so there is nothing to copy.".to_owned())
         } else if item.reason == Some(FailureReason::DiskFull) && same_volume {
@@ -127,6 +129,7 @@ pub fn copy_to_recovery(
                 recovered.push(false);
             }
         }
+        on_progress(done + 1, selected.len());
     }
 
     fs::write(
@@ -245,16 +248,19 @@ mod tests {
         let (summary, _) = prepare(&dir.path("runs"), settings, &token, &mut NullSink).unwrap();
         run_copy(&dir.path("runs"), &summary.id, None, &token, &mut NullSink).unwrap();
 
+        let mut progress = Vec::new();
         let result = copy_to_recovery(
             &dir.path("runs"),
             &summary.id,
             &Selection::default(),
             None,
             &token,
+            &mut |done, total| progress.push((done, total)),
         )
         .unwrap();
 
         assert_eq!(result.copied, 1);
+        assert_eq!(progress, vec![(0, 1), (1, 1)]);
         let folder = dir.path("dst_NotCopied").join(&summary.id);
         assert_eq!(
             fs::read(folder.join("docs/report, final.txt")).unwrap(),

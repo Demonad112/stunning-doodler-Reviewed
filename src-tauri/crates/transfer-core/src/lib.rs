@@ -304,6 +304,29 @@ pub fn format_utc(ms: u64) -> String {
     format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC")
 }
 
+/// `2026-10-01 16:24:00 (UTC-06:00)`: the machine's local time, for reports read by people.
+pub fn format_local(ms: u64) -> String {
+    use chrono::{Local, TimeZone};
+    let offset = Local
+        .timestamp_millis_opt(ms as i64)
+        .single()
+        .map(|time| time.offset().local_minus_utc())
+        .unwrap_or_default();
+    format_with_offset(ms, offset)
+}
+
+/// [`format_local`] with an explicit UTC offset in seconds.
+pub fn format_with_offset(ms: u64, offset_secs: i32) -> String {
+    let shifted = (ms as i64)
+        .saturating_add(i64::from(offset_secs) * 1000)
+        .max(0) as u64;
+    let text = format_utc(shifted);
+    let local = text.trim_end_matches(" UTC");
+    let sign = if offset_secs < 0 { '-' } else { '+' };
+    let minutes = offset_secs.unsigned_abs() / 60;
+    format!("{local} (UTC{sign}{:02}:{:02})", minutes / 60, minutes % 60)
+}
+
 fn env_or(names: &[&str], fallback: &str) -> String {
     names
         .iter()
@@ -394,6 +417,15 @@ mod tests {
         assert_eq!(format_utc(0), "1970-01-01 00:00:00 UTC");
         assert_eq!(format_utc(951_782_400_000), "2000-02-29 00:00:00 UTC");
         assert_eq!(format_utc(1_790_000_000_123), "2026-09-21 14:13:20 UTC");
+        assert_eq!(
+            format_with_offset(1_790_000_000_123, -6 * 3600),
+            "2026-09-21 08:13:20 (UTC-06:00)"
+        );
+        assert_eq!(
+            format_with_offset(1_790_000_000_123, 5 * 3600 + 1800),
+            "2026-09-21 19:43:20 (UTC+05:30)"
+        );
+        assert!(format_local(1_790_000_000_123).starts_with("2026-09-2"));
     }
 
     #[test]

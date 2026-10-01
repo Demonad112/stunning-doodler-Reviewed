@@ -1457,6 +1457,13 @@ export const koKR: LanguagePack = {
     'ui.transferInferredHint': 'DeepServer가 직접 복사하지 않았으므로 이유는 추정입니다.',
     'ui.transferRetryGroup': '그룹 다시 시도',
     'ui.transferRecoverGroup': '그룹을 복구 폴더로 복사',
+    'ui.transferRecovering': '복구 폴더로 복사 중: {total}개 중 {done}개…',
+    'ui.transferRecoveringStart': '복구 폴더로 복사 중…',
+    'ui.transferRunsKept':
+      '90일이 지난 실행 기록과 최신 200개를 제외한 기록은 DeepServer 시작 시 삭제됩니다.',
+    'ui.transferPruneRuns': '지금 정리',
+    'ui.transferPruned': '오래된 실행 기록 {count}개 삭제 ({size} 확보).',
+    'ui.folderUnreadable': '폴더 {count}개를 읽을 수 없어 그 안의 내용은 표시되지 않습니다.',
     'ui.transferRecoverUnavailable': '이 파일들의 원본을 읽을 수 없어 복사할 것이 없습니다.',
     'ui.transferCopyList': '목록 복사',
     'ui.transferListCopied': '목록 복사됨',

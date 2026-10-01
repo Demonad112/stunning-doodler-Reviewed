@@ -1,36 +1,30 @@
 name: Prune Actions storage
 
+# Manual only (E21): it needs actions: write, so it never runs on pull requests or pushes.
+
 on:
   workflow_dispatch:
     inputs:
       tenant_snapshot_retention_days:
-        description: 租户构建快照保留期（天）
+        description: Keep build snapshot artifacts for this many days
         required: false
         default: '1'
         type: string
       installer_artifact_retention_days:
-        description: 三端安装包 Artifact 保留期（天）
+        description: Keep installer artifacts for this many days
         required: false
         default: '1'
         type: string
       initial_evidence_retention_days:
-        description: 初始发布证据保留期（天）
+        description: Keep initial release evidence artifacts for this many days
         required: false
         default: '1'
         type: string
       keep_final_evidence:
-        description: 保持最终证据（GitHub Release 安装包，勿删）
+        description: Keep the final evidence (GitHub Release installers; never deleted)
         required: false
         type: boolean
         default: true
-  pull_request:
-    paths:
-      - '.github/workflows/prune-storage.yml'
-  push:
-    branches:
-      - master
-    paths:
-      - '.github/workflows/prune-storage.yml'
 
 permissions:
   contents: read

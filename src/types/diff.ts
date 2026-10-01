@@ -233,11 +233,20 @@ export interface FolderCompareSummary {
   rightOnly: number
 }
 
+/** A folder Folder Compare couldn't read (for example `System Volume Information`). */
+export interface UnreadableFolder {
+  side: 'left' | 'right'
+  relativePath: string
+  message: string
+}
+
 export interface FolderCompareResponse {
   leftRoot: string
   rightRoot: string
   rows: FolderCompareRow[]
   summary: FolderCompareSummary
+  /** Rows below these folders are left out. Absent from older backends. */
+  unreadable?: UnreadableFolder[]
 }
 
 export type FolderCopyDirection = 'toLeft' | 'toRight'
