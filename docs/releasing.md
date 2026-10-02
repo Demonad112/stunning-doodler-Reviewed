@@ -22,7 +22,9 @@ git push origin v1.0.0-rc1
 
 The tag without its `v` and its `-suffix` must match the version above, or the workflow stops at **Verify tag and version**.
 
-To re-run a release for an existing tag, use **Actions → Release → Run workflow** and enter the tag. A run without an existing tag is rejected.
+To re-run a release for an existing tag, use **Actions → Release → Run workflow** and enter the tag.
+
+Without a local clone, the same form can create the tag: tick **create_tag** and optionally set **target** (a branch or commit, default `main`). The run checks the version on that commit first, creates the tag only if the check passes, and builds it in the same run. Claude can start this run through the GitHub connector, so "release v1.0.0-rc2" is enough. Without **create_tag**, a missing tag is rejected.
 
 ## 3. What the workflow does
 
@@ -50,7 +52,7 @@ Follow `docs/install.md` on a clean machine:
 
 The release workflow had never run before 1.0.0-rc1. The tag check and the release notes were dry-run locally, and actionlint is clean. Anything that only happens on GitHub (the hand-off between jobs, the artifact download, `gh release`) first runs for real here.
 
-1. Push the tag from a clone with push rights, on the `main` commit you want to ship. Use the steps in section 2. Don't create the release in the GitHub UI first: the workflow would then only upload assets, and it would keep the UI's draft and pre-release settings.
+1. Push the tag from a clone with push rights, on the `main` commit you want to ship. Use the steps in section 2. It's best not to create the release in the GitHub UI first. If one exists, the workflow uploads the assets, marks it pre-release for `-alpha/-beta/-rc` tags and fills in empty notes, but it never changes the draft state of a final release.
 2. **Verify tag and version** should log `Releasing v1.0.0-rc1 (version 1.0.0)`.
 3. **Build** takes about 25 minutes. Without signing secrets it logs a notice that signing is off. Both `Test-Installer.ps1` steps must pass.
 4. **Publish GitHub Release** lists `out/` and passes `sha256sum -c`. It then creates a **pre-release** with four assets and a notes table that names the same files.
