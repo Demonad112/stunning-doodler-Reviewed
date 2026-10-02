@@ -19,6 +19,8 @@ const props = withDefaults(
     formatOptions?: PathMetaChipOption[] | string[]
     encodingOptions?: PathMetaChipOption[] | string[]
     showMilliseconds?: boolean
+    /** Folders report 0 bytes, so folder views hide the size. */
+    hideSize?: boolean
     muted?: boolean
     testId?: string
   }>(),
@@ -30,6 +32,7 @@ const props = withDefaults(
     formatOptions: undefined,
     encodingOptions: undefined,
     showMilliseconds: false,
+    hideSize: false,
     muted: false,
     testId: undefined,
   },
@@ -141,7 +144,11 @@ onBeforeUnmount(() => {
         class="path-meta-modified"
         >{{ meta.modified }}</span
       >
-      <span class="path-meta-size">{{ meta.sizeLabel }}</span>
+      <span
+        v-if="!hideSize"
+        class="path-meta-size"
+        >{{ meta.sizeLabel }}</span
+      >
       <div
         v-if="meta.formatLabel"
         class="path-meta-chip-wrap"

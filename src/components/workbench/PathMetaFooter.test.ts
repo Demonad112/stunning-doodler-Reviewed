@@ -72,3 +72,10 @@ describe('PathMetaFooter chip menus', () => {
     wrapper.unmount()
   })
 })
+
+describe('PathMetaFooter size', () => {
+  it('shows the size unless hideSize is set', () => {
+    expect(mountFooter().find('.path-meta-size').text()).toBe('42 bytes')
+    expect(mountFooter({ hideSize: true }).find('.path-meta-size').exists()).toBe(false)
+  })
+})

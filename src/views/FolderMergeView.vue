@@ -2011,6 +2011,7 @@ watch(
             />
           </div>
           <PathMetaFooter
+            hide-size
             :stamp="leftFileStamp"
             test-id="folder-merge-left-path-footer"
           />
@@ -2036,6 +2037,7 @@ watch(
             />
           </div>
           <PathMetaFooter
+            hide-size
             :stamp="baseFileStamp"
             test-id="folder-merge-base-path-footer"
           />
@@ -2058,6 +2060,7 @@ watch(
             />
           </div>
           <PathMetaFooter
+            hide-size
             :stamp="rightFileStamp"
             test-id="folder-merge-right-path-footer"
           />
@@ -2112,6 +2115,7 @@ watch(
           />
         </div>
         <PathMetaFooter
+          hide-size
           :stamp="outputFileStamp"
           test-id="folder-merge-output-path-footer"
         />

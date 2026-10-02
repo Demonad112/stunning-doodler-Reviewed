@@ -3368,6 +3368,7 @@ onUnmounted(() => {
               >
             </div>
             <PathMetaFooter
+              hide-size
               :stamp="leftFileStamp"
               test-id="folder-left-path-footer"
             />
@@ -3416,6 +3417,7 @@ onUnmounted(() => {
               >
             </div>
             <PathMetaFooter
+              hide-size
               :stamp="rightFileStamp"
               test-id="folder-right-path-footer"
             />
