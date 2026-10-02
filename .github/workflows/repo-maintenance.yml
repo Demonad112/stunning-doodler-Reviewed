@@ -1,0 +1,73 @@
+name: Repo maintenance
+
+# Manual only. Does what cloud sessions can't (their git proxy rejects ref
+# deletes and the GitHub connector has no delete-branch/tag tools):
+# - deletes branches whose PR was merged at the branch's current commit
+# - optionally deletes one tag and/or its release
+# dry_run defaults to true: the log lists what would go, nothing is touched.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: List only, delete nothing
+        type: boolean
+        default: true
+      merged_branches:
+        description: Delete branches whose merged PR head equals the branch tip
+        type: boolean
+        default: true
+      tag:
+        description: 'Optional: tag to delete (its release too), e.g. v1.0.0-rc1'
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: repo-maintenance
+  cancel-in-progress: false
+
+jobs:
+  maintain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      TAG: ${{ inputs.tag }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Merged branches
+        if: inputs.merged_branches
+        run: |
+          set -euo pipefail
+          merged=$(gh api "repos/$GH_REPO/pulls?state=closed&per_page=100" --paginate \
+            --jq '.[] | select(.merged_at) | select(.head.repo.full_name == env.GH_REPO) | "\(.head.ref) \(.head.sha) \(.number)"')
+          gh api "repos/$GH_REPO/branches?per_page=100" --paginate \
+            --jq '.[] | select(.protected | not) | "\(.name) \(.commit.sha)"' |
+          while read -r name sha; do
+            [ "$name" = "$DEFAULT_BRANCH" ] && continue
+            pr=$(awk -v b="$name" -v s="$sha" '$1==b && $2==s {print $3; exit}' <<<"$merged")
+            [ -n "$pr" ] || continue
+            if [ "$DRY_RUN" = true ]; then
+              echo "would delete $name (PR #$pr)"
+            else
+              gh api -X DELETE "repos/$GH_REPO/git/refs/heads/$name" && echo "deleted $name (PR #$pr)"
+            fi
+          done
+      - name: Tag and release
+        if: inputs.tag != ''
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9A-Za-z.+-]+$ ]] || { echo "::error::refusing tag '$TAG'"; exit 1; }
+          rel=$(gh api "repos/$GH_REPO/releases/tags/$TAG" --jq '.id' 2>/dev/null || true)
+          if [ "$DRY_RUN" = true ]; then
+            echo "would delete tag $TAG${rel:+ and release $rel}"
+            exit 0
+          fi
+          [ -n "$rel" ] && gh api -X DELETE "repos/$GH_REPO/releases/$rel" && echo "deleted release $rel"
+          gh api -X DELETE "repos/$GH_REPO/git/refs/tags/$TAG" && echo "deleted tag $TAG"
