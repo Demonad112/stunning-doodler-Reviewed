@@ -7,6 +7,8 @@ disable-model-invocation: true
 
 Test release `$ARGUMENTS` (default: newest pre-release from `gh release list --limit 3`). Low effort; give the owner PowerShell blocks and let them run them (elevated). Don't load the root-level `*-reference.md` files.
 
+Cheapest first: spawn the `laptop-check` agent (Haiku) with the tag for the scriptable checks and a ready report skeleton, then do only its MANUAL list.
+
 ## 1. Download, verify, install (PowerShell, elevated)
 
 ```powershell
