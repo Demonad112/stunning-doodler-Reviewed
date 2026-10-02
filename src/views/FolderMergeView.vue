@@ -976,7 +976,6 @@ function saveSessionLog(): void {
 async function buildFolderMergePlan(): Promise<void> {
   const startedAt = performance.now()
 
-  appendSessionLog(`${t('ui.username')}:`)
   if (leftPath.value && rightPath.value) {
     appendSessionLog(
       `Load comparison: ${leftPath.value} <-> ${rightPath.value}${

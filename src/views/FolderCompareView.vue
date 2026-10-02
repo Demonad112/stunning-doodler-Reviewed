@@ -155,6 +155,7 @@ import { useSettingsStore } from '@/stores/settings'
 import FolderStatusLegend from '@/components/workbench/FolderStatusLegend.vue'
 import { useTabsStore } from '@/stores/tabs'
 import type { FolderSyncOverrideAction } from '@/types/sync'
+import { isPathUnderRoot } from '@/app/pathUnderRoot'
 
 type FolderSide = 'left' | 'right'
 type FolderStatus = 'Same' | 'Different' | 'Left only' | 'Right only'
@@ -1599,7 +1600,6 @@ async function runFolderCompare(): Promise<void> {
 
   folderCompareLoading.value = true
   folderCompareError.value = undefined
-  appendSessionLog(`${t('ui.username')}:`)
   if (leftRoot.value) {
     appendSessionLog(`Load ${leftRoot.value}`)
   }
@@ -2889,13 +2889,9 @@ function syncOverrideAction(item: SyncPreviewItem): FolderSyncOverrideAction {
     return 'leave'
   }
 
-  const source = item.sourcePath ?? ''
-
-  if (rightRoot.value && source.startsWith(rightRoot.value)) {
-    return 'copyRightToLeft'
-  }
-
-  return 'copyLeftToRight'
+  return isPathUnderRoot(item.sourcePath ?? '', rightRoot.value)
+    ? 'copyRightToLeft'
+    : 'copyLeftToRight'
 }
 
 async function executeSyncPreview(): Promise<void> {

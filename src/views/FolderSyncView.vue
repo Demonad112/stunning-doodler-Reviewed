@@ -59,6 +59,7 @@ import PathMetaFooter from '@/components/workbench/PathMetaFooter.vue'
 import { createChildCompareLaunch } from '@/app/childSession'
 import { openPathExternal, revealPathInOs } from '@/api/integration'
 import { explorerRevealPath, explorerSelectTargetPath } from '@/app/folderCompareExtraActions'
+import { isPathUnderRoot } from '@/app/pathUnderRoot'
 
 interface SyncStrategyOption {
   value: FolderSyncStrategy
@@ -767,7 +768,6 @@ function saveSessionLog(): void {
 async function previewSync(options?: { keepRunStatus?: boolean }): Promise<void> {
   previewLoading.value = true
   previewError.value = undefined
-  appendSessionLog(`${t('ui.username')}:`)
   if (leftPath.value && rightPath.value) {
     appendSessionLog(`Load comparison: ${leftPath.value} <-> ${rightPath.value}`)
   }
@@ -923,16 +923,10 @@ function plannedOverride(
   rightRoot: string,
 ): FolderSyncOverrideAction {
   if (row.action === 'Delete') {
-    const target = (row.targetPath ?? '').replaceAll('\\', '/')
-    const normalizedLeft = leftRoot.replaceAll('\\', '/')
-    const normalizedRight = rightRoot.replaceAll('\\', '/')
+    const target = row.targetPath ?? ''
 
-    if (leftRoot && target.startsWith(normalizedLeft)) {
+    if (isPathUnderRoot(target, leftRoot)) {
       return 'deleteLeft'
-    }
-
-    if (rightRoot && target.startsWith(normalizedRight)) {
-      return 'deleteRight'
     }
 
     return 'deleteRight'
@@ -942,17 +936,7 @@ function plannedOverride(
     return 'leave'
   }
 
-  const source = row.sourcePath ?? ''
-
-  if (source.startsWith(rightRoot)) {
-    return 'copyRightToLeft'
-  }
-
-  if (source.startsWith(leftRoot)) {
-    return 'copyLeftToRight'
-  }
-
-  return 'copyLeftToRight'
+  return isPathUnderRoot(row.sourcePath ?? '', rightRoot) ? 'copyRightToLeft' : 'copyLeftToRight'
 }
 
 function folderSyncActionLabel(action: FolderSyncPreviewAction): string {
@@ -2046,7 +2030,7 @@ watch(
                 {{ $t('ui.reset') }}
               </button>
             </label>
-            <span>{{ row.sourcePath ?? '--' }}</span>
+            <span>{{ row.sourcePath ?? row.relativePath }}</span>
             <span>{{ row.targetPath ?? '--' }}</span>
             <span>{{ row.detail }}</span>
             <span :data-testid="`sync-row-status-${row.id}`">{{
