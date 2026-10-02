@@ -68,6 +68,10 @@
 
   ; Stale per-user entries left by OpenDiff's in-app registration point at a removed exe.
   !insertmacro DS_DELETE_USER_MENU "OpenDiff"
+
+  ; 1.0.0-rc1/rc2 shipped the CLI as open-diff-cli.exe. Tauri's upgrade path doesn't run the old
+  ; uninstaller for /S or same-version installs, and the new uninstaller only knows deepserver-cli.exe.
+  Delete "$INSTDIR\open-diff-cli.exe"
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
