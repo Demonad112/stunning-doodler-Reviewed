@@ -85,3 +85,15 @@ Grep for an existing mode (e.g. `version-compare`) and mirror it in:
 | Delete branch / edit release (no connector tool) | Repo maintenance workflow; owner via GitHub UI                   |
 | `rm` with a relative glob after `cd`             | absolute paths, or `git rm` / `git clean -n` first               |
 | Editing `.github/workflows/*` in auto mode       | allowed in `.claude/settings.json`; if still refused, ask once   |
+
+## Local setup and plan (Windows laptop)
+
+- `main` tracks `origin/main`; run `git fetch` and fast-forward before relying on `.claude/`, `scripts/` or `docs/HANDOFF.md`. Fork-branch tooling (`ci-watch`, `/release-rc`, `/handoff`) is already in the repo.
+- Locally `gh` is authenticated (`Demonad112`), so use `scripts/gh-status.sh` or `gh` through Bash instead of the GitHub connector (it fails here: bad auth header). The `settings.json` allow-list still names cloud-only `mcp__github__*` tools.
+- Analysis passes: low effort, `git` + `gh` only; don't load the root-level `*-reference.md` handoff files unless needed. Archive them under `~/.claude/handoffs/`.
+- Don't search `src-tauri/target/`, `node_modules/`, `native/diskusage/build/` or `docs/history/opendiff/`.
+- Plan, in checkpoints (end each with `/handoff`, start the next in a new chat):
+  1. Automation setup (hooks, `/laptop-test`, cheap `repo-state` agent, worktree/branch cleanup). No app code.
+  2. Laptop test of the newest rc; report as needs fixing / look into / improvements.
+  3. Fixes from the report, one PR each, then the next rc.
+  4. Final `v1.0.0`: delete rc1/rc2, decide the Docs/Support links, publish the draft.
