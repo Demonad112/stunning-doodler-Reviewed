@@ -63,7 +63,7 @@ describe('registry compare chrome density', () => {
       /\.registry-compare-view \.registry-input-panel textarea\s*\{[\s\S]*?min-height:\s*64px/,
     )
     expect(css).toMatch(
-      /\.registry-compare-view \.registry-report-panel\s*\{[\s\S]*?border:\s*1px solid #a0a0a0/,
+      /\.registry-compare-view \.registry-report-panel\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
     )
 
     expect(registryView).toMatch(/data-registry-chrome-density="capture-1to1"/)
@@ -93,7 +93,9 @@ describe('registry secondary strip density', () => {
     expect(registryView).toMatch(/data-secondary-density="capture-1to1"/)
     expect(registryView).toMatch(/registry-secondary-strip/)
     expect(registryView).toMatch(/\.registry-secondary-strip\s*\{[\s\S]*?min-height:\s*18px/)
-    expect(registryView).toMatch(/\.registry-secondary-strip\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(registryView).toMatch(
+      /\.registry-secondary-strip\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+    )
     expect(registryView).toMatch(
       /\.registry-secondary-strip :deep\(\.path-meta-footer\)\s*\{[\s\S]*?gap:\s*6px/,
     )
@@ -101,7 +103,7 @@ describe('registry secondary strip density', () => {
       /\.registry-compare-view \.registry-secondary-strip\s*\{[\s\S]*?min-height:\s*18px/,
     )
     expect(css).toMatch(
-      /\.registry-compare-view \.registry-secondary-strip\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.registry-compare-view \.registry-secondary-strip\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
     expect(css).toMatch(/\.registry-compare-view \.path-side-footer\s*\{[\s\S]*?min-height:\s*18px/)
     expect(registryView).not.toMatch(/min-height:\s*6px/)
@@ -115,7 +117,7 @@ describe('registry workspace residual', () => {
       /data-registry-workspace='capture-1to1-residual'\] \.registry-key-row[\s\S]*?min-height:\s*16px/,
     )
     expect(css).toMatch(
-      /data-registry-workspace='capture-1to1-residual'\] \.registry-filter-bar[\s\S]*?background:\s*#f0f0f0/,
+      /data-registry-workspace='capture-1to1-residual'\] \.registry-filter-bar[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
   })
 })
@@ -123,7 +125,7 @@ describe('registry workspace residual', () => {
 describe('registry secondary strip border', () => {
   it('matches capture path-meta border #c0c0c0', () => {
     expect(css).toMatch(
-      /\.registry-compare-view \.registry-secondary-strip[\s\S]*?border:\s*1px solid #c0c0c0/,
+      /\.registry-compare-view \.registry-secondary-strip[\s\S]*?border:\s*1px solid var\(--ds-line-c0c0c0\)/,
     )
   })
 })

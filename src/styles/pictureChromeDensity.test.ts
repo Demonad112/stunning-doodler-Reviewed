@@ -43,7 +43,7 @@ describe('picture compare chrome density', () => {
       /\.picture-compare-view \.picture-options-panel,\s*\.picture-compare-view \.picture-blend-panel,\s*\.picture-compare-view \.picture-metadata-panel[\s\S]*?padding:\s*4px 6px/,
     )
     expect(css).toMatch(
-      /\.picture-compare-view \.picture-options-panel,\s*\.picture-compare-view \.picture-blend-panel,\s*\.picture-compare-view \.picture-metadata-panel[\s\S]*?border:\s*1px solid #a0a0a0/,
+      /\.picture-compare-view \.picture-options-panel,\s*\.picture-compare-view \.picture-blend-panel,\s*\.picture-compare-view \.picture-metadata-panel[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
     )
     expect(css).toMatch(
       /\.picture-compare-view \.picture-options-panel header[\s\S]*?min-height:\s*20px/,
@@ -59,7 +59,9 @@ describe('picture compare chrome density', () => {
     expect(pictureView).toMatch(/data-picture-panel-density="capture-1to1"/)
     expect(pictureView).toMatch(/\.picture-options-panel\s*\{[\s\S]*?padding:\s*4px 6px/)
     expect(pictureView).toMatch(/\.picture-options-panel header\s*\{[\s\S]*?min-height:\s*20px/)
-    expect(pictureView).toMatch(/\.picture-blend-panel\s*\{[\s\S]*?border:\s*1px solid #a0a0a0/)
+    expect(pictureView).toMatch(
+      /\.picture-blend-panel\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
+    )
     expect(pictureView).toMatch(/\.picture-metadata-panel\s*\{[\s\S]*?padding:\s*4px 6px/)
     expect(pictureView).toMatch(/\.metadata-cell\s*\{[\s\S]*?padding:\s*2px 6px/)
     expect(pictureView).toMatch(/\.picture-panel-title\s*\{[\s\S]*?font-size:\s*12px/)
@@ -158,7 +160,7 @@ describe('picture stage residual band', () => {
 describe('picture path footers strip', () => {
   it('matches capture path-meta strip fill #f0f0f0', () => {
     expect(css).toMatch(
-      /\.picture-compare-view \.bc-path-footers\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.picture-compare-view \.bc-path-footers\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
   })
 })
@@ -170,7 +172,9 @@ describe('picture zoom fit chrome', () => {
     expect(pictureView).toMatch(/data-testid="picture-tolerance-caption"/)
     expect(pictureView).toMatch(/picture-fit-glyph/)
     expect(pictureView).toMatch(/\.picture-zoom-mode-btn\s*\{[\s\S]*?width:\s*28px/)
-    expect(pictureView).toMatch(/\.picture-zoom-mode-btn-active\s*\{[\s\S]*?background:\s*#cce4f7/)
+    expect(pictureView).toMatch(
+      /\.picture-zoom-mode-btn-active\s*\{[\s\S]*?background:\s*var\(--ds-fill-cce4f7\)/,
+    )
     expect(css).toMatch(/\.picture-compare-view \.picture-zoom-mode-btn\s*\{[\s\S]*?width:\s*28px/)
     expect(css).toMatch(/\.picture-compare-view \.picture-fit-glyph\s*\{[\s\S]*?width:\s*12px/)
   })

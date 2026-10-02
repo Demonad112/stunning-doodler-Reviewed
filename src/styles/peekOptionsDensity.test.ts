@@ -63,7 +63,9 @@ describe('peek panel densify', () => {
 describe('options dialog densify', () => {
   it('keeps Options tree/content chrome at capture CSS scale and wired section ids', () => {
     expect(css).toMatch(/\.settings-view\s*\{[\s\S]*?padding:\s*4px 6px/)
-    expect(css).toMatch(/\.settings-view \.options-section-nav[\s\S]*?border:\s*1px solid #a0a0a0/)
+    expect(css).toMatch(
+      /\.settings-view \.options-section-nav[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
+    )
     expect(css).toMatch(/\.settings-view \.options-section-button[\s\S]*?min-height:\s*18px/)
     expect(css).toMatch(/\.settings-view \.options-tree-group-label[\s\S]*?font-size:\s*11px/)
     expect(css).toMatch(/\.settings-view \.n-card-header[\s\S]*?min-height:\s*20px/)
@@ -80,7 +82,7 @@ describe('options dialog densify', () => {
       /\.stack-row input,\s*\.stack-row select\s*\{[\s\S]*?height:\s*20px/,
     )
     expect(settingsView).toMatch(
-      /\.stack-row input,\s*\.stack-row select\s*\{[\s\S]*?border:\s*1px solid #a0a0a0/,
+      /\.stack-row input,\s*\.stack-row select\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
     )
     expect(settingsView).toMatch(/:deep\(\.n-card-header\)\s*\{[\s\S]*?min-height:\s*20px/)
     expect(settingsView).not.toMatch(/font-size:\s*9px/)
@@ -173,7 +175,7 @@ describe('options tree depth residual', () => {
       /\.settings-view \.options-section-button\[data-tree-depth='1'\]\s*\{[\s\S]*?padding-left:\s*14px/,
     )
     expect(css).toMatch(
-      /\.settings-view \.options-tree-group\s*\{[\s\S]*?border-bottom:\s*1px solid #e0e0e0/,
+      /\.settings-view \.options-tree-group\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--ds-line-e0e0e0\)/,
     )
     expect(settingsView).not.toMatch(/min-height:\s*6px/)
   })
@@ -185,7 +187,9 @@ describe('folder merge Same OK / Peek residual', () => {
     expect(mergeView).toMatch(/data-peek-residual="capture-1to1"/)
     expect(mergeView).toMatch(/folder-merge-same-ok[\s\S]*?height:\s*37\.5px/)
     expect(css).toMatch(/folder-merge-same-ok[\s\S]*?height:\s*37\.5px/)
-    expect(css).toMatch(/\.folder-merge-peek-panel[\s\S]*?border:\s*1px solid #a0a0a0/)
+    expect(css).toMatch(
+      /\.folder-merge-peek-panel[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
+    )
   })
 })
 
@@ -193,33 +197,35 @@ describe('folder peek residual', () => {
   it('keeps Folder Peek panel residual chrome toward capture', () => {
     expect(folderView).toMatch(/data-peek-residual="capture-1to1"/)
     expect(folderView).toMatch(/\.folder-peek-panel\[data-peek-residual='capture-1to1'\]/)
-    expect(css).toMatch(/\.folder-peek-panel[\s\S]*?border:\s*1px solid #a0a0a0/)
+    expect(css).toMatch(/\.folder-peek-panel[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/)
   })
 })
 
 describe('peek-tab fill', () => {
   it('matches capture peek-tab fill #f0f0f0', () => {
-    expect(css).toMatch(/\.peek-tab\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(css).toMatch(/\.peek-tab\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
   })
 })
 
 describe('folder peek-column base fill', () => {
   it('matches capture peek-column base fill #f0f0f0 in session views', () => {
-    expect(folderView).toMatch(/\.peek-column\s*\{[\s\S]*?background:\s*#f0f0f0/)
-    expect(syncView).toMatch(/\.peek-column\s*\{[\s\S]*?background:\s*#f0f0f0/)
-    expect(mergeView).toMatch(/\.peek-column\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(folderView).toMatch(/\.peek-column\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
+    expect(syncView).toMatch(/\.peek-column\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
+    expect(mergeView).toMatch(/\.peek-column\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
   })
 })
 
 describe('peek-column fill', () => {
   it('matches capture peek-column fill #f0f0f0', () => {
-    expect(css).toMatch(/\.peek-column\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(css).toMatch(/\.peek-column\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
   })
 })
 
 describe('peek button fill', () => {
   it('matches capture peek button fill #f0f0f0', () => {
-    expect(css).toMatch(/\.folder-peek-panel header button,[\s\S]*?background:\s*#f0f0f0/)
+    expect(css).toMatch(
+      /\.folder-peek-panel header button,[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+    )
   })
 })
 

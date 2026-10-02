@@ -44,10 +44,10 @@ import { folderStatusLegendItems } from '@/app/folderStatusLegend'
   gap: 4px 8px;
   min-height: 20px;
   padding: 2px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #f0f0f0;
-  color: #111111;
+  background: var(--ds-fill-f0f0f0);
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
 }

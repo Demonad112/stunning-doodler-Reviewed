@@ -1167,7 +1167,7 @@ describe('AppLayout command palette', () => {
     expect(source).toContain('grid-template-rows: 48px minmax(0, 1fr) 24px')
     expect(source).toContain('grid-template-rows: 24px 24px')
     expect(source).toContain('data-menu-density="capture-1to1"')
-    expect(source).toMatch(/\.menu-bar\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(source).toMatch(/\.menu-bar\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
     expect(menusButton?.[0]).toContain('height: 21.5px')
     expect(menusButton?.[0]).toContain('font-size: 12px')
     expect(menusButton?.[0]).not.toContain('height: 15px')

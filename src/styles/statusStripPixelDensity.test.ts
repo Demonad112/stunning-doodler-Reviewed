@@ -17,9 +17,11 @@ describe('status strip pixel density', () => {
     expect(layout).toMatch(
       /\.status-bar\[data-chrome-kind='folder-pair'\] \.status-bar-pane\s*\{[\s\S]*?padding:\s*0 4px/,
     )
-    expect(layout).toMatch(/\.status-bar-pane\s*\{[\s\S]*?border-right:\s*1px solid #c0c0c0/)
     expect(layout).toMatch(
-      /data-pane-count='7'\] \.status-bar-pane:nth-child\(3\)[\s\S]*?border-right-color:\s*#8e8e8e/,
+      /\.status-bar-pane\s*\{[\s\S]*?border-right:\s*1px solid var\(--ds-line-c0c0c0\)/,
+    )
+    expect(layout).toMatch(
+      /data-pane-count='7'\] \.status-bar-pane:nth-child\(3\)[\s\S]*?border-right-color:\s*var\(--ds-line-8e8e8e\)/,
     )
     expect(layout).toMatch(/const statusBarGridStyle = computed/)
     expect(layout).toMatch(
@@ -39,8 +41,8 @@ describe('status strip pixel density', () => {
   })
 
   it('keeps session status bars at 19.5px with shared typography', () => {
-    expect(layout).toMatch(/\.status-bar\s*\{[\s\S]*?background:\s*#f0f0f0/)
-    expect(layout).toMatch(/\.status-bar\s*\{[\s\S]*?color:\s*#000000/)
+    expect(layout).toMatch(/\.status-bar\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
+    expect(layout).toMatch(/\.status-bar\s*\{[\s\S]*?color:\s*var\(--ds-text-000000\)/)
     expect(layout).toMatch(/\.status-bar\s*\{[\s\S]*?font-size:\s*11px/)
     expect(layout).toMatch(
       /\.status-bar\[data-chrome-kind='text-session'\][\s\S]*?height:\s*19\.5px/,
@@ -84,7 +86,9 @@ describe('status strip pixel density', () => {
 describe('status strip band residual', () => {
   it('keeps 19.5px band content chrome residual toward capture', () => {
     expect(layout).toMatch(/data-status-band="capture-1to1-residual"/)
-    expect(layout).toMatch(/\.status-bar\s*\{[\s\S]*?border-top:\s*1px solid #a0a0a0/)
+    expect(layout).toMatch(
+      /\.status-bar\s*\{[\s\S]*?border-top:\s*1px solid var\(--ds-line-a0a0a0\)/,
+    )
     expect(layout).toMatch(/\.status-bar\s*\{[\s\S]*?height:\s*19\.5px/)
     expect(layout).toMatch(
       /\.status-bar\[data-status-band='capture-1to1-residual'\] \.status-bar-pane\s*\{[\s\S]*?text-overflow:\s*ellipsis/,

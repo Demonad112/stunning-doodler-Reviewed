@@ -15,7 +15,7 @@ describe('clipboard compare chrome density', () => {
       /\.clipboard-compare-view \.clipboard-toolbar\s*\{[\s\S]*?min-height:\s*22px/,
     )
     expect(css).toMatch(
-      /\.clipboard-compare-view \.clipboard-toolbar\s*\{[\s\S]*?border:\s*1px solid #a0a0a0/,
+      /\.clipboard-compare-view \.clipboard-toolbar\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
     )
     expect(css).toMatch(
       /\.clipboard-compare-view \.clipboard-toolbar \.n-button[\s\S]*?height:\s*18px/,
@@ -45,7 +45,7 @@ describe('clipboard compare chrome density', () => {
     )
     expect(css).toMatch(/\.clipboard-compare-view \.history-entry\s*\{[\s\S]*?min-height:\s*18px/)
     expect(css).toMatch(
-      /\.clipboard-compare-view \.history-entry\s*\{[\s\S]*?border:\s*1px solid #a0a0a0/,
+      /\.clipboard-compare-view \.history-entry\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
     )
 
     expect(clipboardView).toMatch(/data-clipboard-rows-density="capture-1to1"/)

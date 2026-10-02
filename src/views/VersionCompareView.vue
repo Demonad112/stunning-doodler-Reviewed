@@ -922,7 +922,7 @@ h1 {
   min-width: 180px;
   min-height: 20px;
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
   color: var(--app-text-muted);
@@ -938,7 +938,7 @@ h1 {
   gap: 4px 6px;
   min-height: 20px;
   padding: 2px 4px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
 }
@@ -972,7 +972,7 @@ h1 {
   height: 16.5px;
   min-height: 16.5px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   color: var(--app-text);
@@ -985,10 +985,10 @@ h1 {
   height: 20px;
   min-height: 20px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #ffffff;
-  color: #111111;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-111111);
   font: inherit;
   font-size: 11px;
   line-height: 16px;
@@ -1035,7 +1035,7 @@ h1 {
   gap: 4px 6px;
   min-height: 20px;
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
 }
@@ -1071,7 +1071,7 @@ h1 {
   min-height: 18px;
   margin-left: auto;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   font-size: 11px;
   line-height: 16px;
@@ -1090,7 +1090,7 @@ h1 {
   min-width: 0;
   min-height: 18px;
   padding: 2px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
 }
@@ -1115,7 +1115,7 @@ h1 {
 .version-report-table {
   display: grid;
   overflow: auto;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
 }
@@ -1127,7 +1127,7 @@ h1 {
     98px 98px;
   min-width: 820px;
   min-height: 16px;
-  border-bottom: 1px solid #a0a0a0;
+  border-bottom: 1px solid var(--ds-line-a0a0a0);
   font-size: 11px;
 }
 
@@ -1140,7 +1140,7 @@ h1 {
   gap: 4px 6px;
   min-height: 20px;
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
 }
@@ -1159,7 +1159,7 @@ h1 {
   min-height: 18px;
   margin-left: auto;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   font-size: 11px;
   line-height: 16px;
@@ -1202,7 +1202,7 @@ h1 {
   margin: 0;
   padding: 2px 6px;
   overflow: hidden;
-  border-right: 1px solid #a0a0a0;
+  border-right: 1px solid var(--ds-line-a0a0a0);
   font-style: normal;
   line-height: 16px;
   text-overflow: ellipsis;
@@ -1299,15 +1299,15 @@ h1 {
 .version-secondary-strip {
   min-height: 18px;
   padding: 1px 4px;
-  border: 1px solid #c0c0c0;
+  border: 1px solid var(--ds-line-c0c0c0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .version-secondary-strip :deep(.path-meta-footer) {
   gap: 6px;
   min-height: 18px;
-  color: #111111;
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
 }
@@ -1321,7 +1321,7 @@ h1 {
   min-height: 18px;
   margin-top: 0;
   overflow: hidden;
-  color: #111111;
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
   text-overflow: ellipsis;
@@ -1329,6 +1329,6 @@ h1 {
 }
 
 .path-side-footer-muted {
-  color: #9ca3af;
+  color: var(--ds-text-9ca3af);
 }
 </style>

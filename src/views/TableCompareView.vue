@@ -1457,7 +1457,7 @@ h2 {
   display: grid;
   min-width: 132px;
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
   text-align: right;
@@ -1489,7 +1489,7 @@ h2 {
   height: 18px;
   min-height: 18px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   font-size: 11px;
   line-height: 16px;
@@ -1562,7 +1562,7 @@ h2 {
   height: 18px;
   min-height: 18px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   color: var(--app-text);
@@ -1582,7 +1582,7 @@ h2 {
   display: grid;
   gap: 4px 6px;
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
 }
@@ -1597,7 +1597,7 @@ h2 {
 
 .column-source-grid li {
   padding: 2px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   font-size: 11px;
@@ -1630,7 +1630,7 @@ h2 {
   gap: 4px 6px;
   min-height: 22px;
   padding: 2px 4px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
 }
@@ -1652,7 +1652,7 @@ h2 {
   height: 18px;
   min-height: 18px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   color: var(--app-text);
@@ -1664,10 +1664,10 @@ h2 {
   height: 18px;
   min-height: 18px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #ffffff;
-  color: #111111;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
 }
@@ -1676,7 +1676,7 @@ h2 {
   min-width: 72px;
   min-height: 18px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   font-size: 11px;
@@ -1699,7 +1699,7 @@ h2 {
   min-width: 128px;
   min-height: 18px;
   padding: 2px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   font-size: 11px;
@@ -1763,7 +1763,7 @@ h2 {
   display: grid;
   grid-template-columns: repeat(var(--visible-columns), minmax(132px, 1fr));
   min-height: 16px;
-  border-bottom: 1px solid #c0c0c0;
+  border-bottom: 1px solid var(--ds-line-c0c0c0);
 }
 
 .table-grid-row:last-child {
@@ -1774,7 +1774,7 @@ h2 {
   min-width: 0;
   padding: 1px 4px;
   overflow: hidden;
-  border-right: 1px solid #d0d0d0;
+  border-right: 1px solid var(--ds-line-d0d0d0);
   font-size: 11px;
   line-height: 14px;
   text-overflow: ellipsis;
@@ -1809,7 +1809,7 @@ h2 {
   min-width: 0;
   padding: 2px 6px;
   overflow: hidden;
-  border-right: 1px solid #a0a0a0;
+  border-right: 1px solid var(--ds-line-a0a0a0);
   font-size: 11px;
   line-height: 16px;
   text-overflow: ellipsis;
@@ -1865,15 +1865,15 @@ h2 {
 .table-secondary-strip {
   min-height: 18px;
   padding: 1px 4px;
-  border: 1px solid #c0c0c0;
+  border: 1px solid var(--ds-line-c0c0c0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .table-secondary-strip :deep(.path-meta-footer) {
   gap: 6px;
   min-height: 18px;
-  color: #111111;
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
 }
@@ -1887,7 +1887,7 @@ h2 {
   min-height: 18px;
   margin-top: 0;
   overflow: hidden;
-  color: #111111;
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
   text-overflow: ellipsis;
@@ -1895,6 +1895,6 @@ h2 {
 }
 
 .path-side-footer-muted {
-  color: #9ca3af;
+  color: var(--ds-text-9ca3af);
 }
 </style>

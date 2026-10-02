@@ -84,7 +84,7 @@ it('surfaces Filters/Peek strip at capture CSS scale', () => {
   expect(css).toMatch(/\.folder-filter-strip-btn\s*\{[\s\S]*?width:\s*59px/)
   expect(css).toMatch(/\.folder-filter-strip-btn\s*\{[\s\S]*?height:\s*37\.5px/)
   expect(folderView).toMatch(/\.folder-filter-chrome\s*\{[\s\S]*?min-height:\s*43\.5px/)
-  expect(folderView).toMatch(/background:\s*#ffffff/)
+  expect(folderView).toMatch(/background:\s*var\(--ds-fill-ffffff\)/)
   expect(folderView).toMatch(/\.folder-filter-strip-btn\s*\{[\s\S]*?height:\s*37\.5px/)
   expect(folderView).toMatch(/\.folder-filter-pattern\s*\{[\s\S]*?height:\s*16\.5px/)
   expect(folderView).toMatch(/\.folder-filter-pattern\s*\{[\s\S]*?border-radius:\s*0/)
@@ -97,7 +97,9 @@ it('surfaces Filters/Peek strip at capture CSS scale', () => {
   expect(syncView).toMatch(/data-testid="folder-sync-filter-pattern"/)
   expect(syncView).toMatch(/data-filters-density="capture-1to1"/)
   expect(syncView).toMatch(/\.folder-filter-chrome\s*\{[\s\S]*?min-height:\s*37\.5px/)
-  expect(syncView).toMatch(/\.folder-filter-chrome\s*\{[\s\S]*?background:\s*#f0f0f0/)
+  expect(syncView).toMatch(
+    /\.folder-filter-chrome\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+  )
   expect(syncView).toMatch(/\.folder-filter-strip-btn\s*\{[\s\S]*?height:\s*37\.5px/)
   expect(syncView).toMatch(
     /\.sync-filter-pattern-field \.folder-filter-pattern\s*\{[\s\S]*?height:\s*16\.5px/,
@@ -119,7 +121,7 @@ describe('folder compare tree chrome density', () => {
     expect(css).toMatch(/\.folder-compare-view \.tree-row\s*\{[\s\S]*?min-height:\s*16px/)
     expect(css).toMatch(/\.folder-compare-view \.tree-head\s*\{[\s\S]*?font-weight:\s*400/)
     expect(css).toMatch(
-      /\.folder-compare-view \.tree-row\.selected\s*\{[\s\S]*?background:\s*#a8cdf1/,
+      /\.folder-compare-view \.tree-row\.selected\s*\{[\s\S]*?background:\s*var\(--ds-fill-a8cdf1\)/,
     )
     expect(css).toMatch(/\.folder-compare-view \.tree-head span,[\s\S]*?padding:\s*1px 6px/)
     expect(css).toMatch(/\.folder-compare-view \.tree-head span,[\s\S]*?font-size:\s*11px/)
@@ -156,10 +158,10 @@ describe('folder compare session log chrome density', () => {
     expect(folderView).toMatch(/case 'toggle-log':/)
     expect(css).toMatch(/\.folder-compare-view \.folder-session-log\s*\{[\s\S]*?height:\s*98px/)
     expect(css).toMatch(
-      /\.folder-compare-view \.folder-session-log\s*\{[\s\S]*?background:\s*#e3e7ed/,
+      /\.folder-compare-view \.folder-session-log\s*\{[\s\S]*?background:\s*var\(--ds-fill-e3e7ed\)/,
     )
     expect(css).toMatch(
-      /\.folder-compare-view \.folder-session-log-gutter\s*\{[\s\S]*?background:\s*#e3e7ed/,
+      /\.folder-compare-view \.folder-session-log-gutter\s*\{[\s\S]*?background:\s*var\(--ds-fill-e3e7ed\)/,
     )
     expect(css).toMatch(
       /\.folder-compare-view \.folder-session-log-body\s*\{[\s\S]*?font-size:\s*11px/,
@@ -172,10 +174,12 @@ describe('folder compare session log chrome density', () => {
 describe('folder column header legend residual', () => {
   it('keeps tree-head and legend residual chrome toward capture', () => {
     expect(folderView).toMatch(/data-column-legend="capture-1to1-residual"/)
-    expect(folderView).toMatch(/\.tree-head\s*\{[\s\S]*?border-bottom:\s*1px solid #a0a0a0/)
+    expect(folderView).toMatch(
+      /\.tree-head\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--ds-line-a0a0a0\)/,
+    )
     expect(folderLegend).toMatch(/data-legend-chrome="capture-1to1-residual"/)
     expect(css).toMatch(
-      /\.folder-status-legend\[data-legend-chrome='capture-1to1-residual'\][\s\S]*?background:\s*#f0f0f0/,
+      /\.folder-status-legend\[data-legend-chrome='capture-1to1-residual'\][\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
   })
 })
@@ -183,7 +187,7 @@ describe('folder column header legend residual', () => {
 describe('folder MainBar Filters row residual', () => {
   it('keeps Filters strip as MainBar second row toward folder-compare capture (~83px)', () => {
     expect(css).toMatch(
-      /\.folder-filter-chrome\[data-mainbar-row2='capture-1to1-residual'\][\s\S]*?background:\s*#ffffff/,
+      /\.folder-filter-chrome\[data-mainbar-row2='capture-1to1-residual'\][\s\S]*?background:\s*var\(--ds-fill-ffffff\)/,
     )
     expect(css).toMatch(
       /\.workbench-toolbar-stack:has\(\.folder-filter-chrome\[data-mainbar-row2='capture-1to1-residual'\]\)\s*\{[\s\S]*?min-height:\s*83px/,
@@ -197,7 +201,7 @@ describe('folder sync Filters/Peek placement residual', () => {
   it('keeps Peek on MainBar and pattern near Accept/Cancel with separate #f0f0f0 Filters strip', () => {
     expect(syncView).toMatch(/buildFolderSyncToolbar/)
     expect(css).toMatch(
-      /\.folder-sync-view \.folder-filter-chrome\[data-sync-filters-place='capture-1to1-residual'\][\s\S]*?background:\s*#f0f0f0/,
+      /\.folder-sync-view \.folder-filter-chrome\[data-sync-filters-place='capture-1to1-residual'\][\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
     expect(css).toMatch(
       /\.folder-filter-pattern\[data-sync-pattern-place='capture-1to1-residual'\][\s\S]*?height:\s*16\.5px/,
@@ -237,6 +241,6 @@ describe('folder path meta residual', () => {
 
 describe('dense cell border', () => {
   it('matches capture dense cell border #c0c0c0', () => {
-    expect(css).toMatch(/\.dense-data-table td,[\s\S]*?border-color:\s*#c0c0c0/)
+    expect(css).toMatch(/\.dense-data-table td,[\s\S]*?border-color:\s*var\(--ds-line-c0c0c0\)/)
   })
 })

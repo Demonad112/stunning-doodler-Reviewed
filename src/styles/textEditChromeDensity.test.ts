@@ -57,10 +57,14 @@ describe('text edit path toolbar residual', () => {
     expect(editView).toMatch(/data-path-density="capture-1to1"/)
     expect(editView).toMatch(/data-secondary-density="capture-1to1"/)
     expect(editView).toMatch(/text-edit-path-meta-strip/)
-    expect(editView).toMatch(/\.text-edit-path-meta-strip\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(editView).toMatch(
+      /\.text-edit-path-meta-strip\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+    )
     expect(editView).toMatch(/\.toolbar-button\s*\{[\s\S]*?border-radius:\s*0/)
     expect(css).toMatch(/\.text-edit-view \.path-toolbar[\s\S]*?min-height:\s*22px/)
-    expect(css).toMatch(/\.text-edit-view \.text-edit-path-meta-strip[\s\S]*?background:\s*#f0f0f0/)
+    expect(css).toMatch(
+      /\.text-edit-view \.text-edit-path-meta-strip[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+    )
     expect(editView).not.toMatch(/min-height:\s*6px/)
   })
 })
@@ -68,7 +72,7 @@ describe('text edit path toolbar residual', () => {
 describe('text-edit path-meta border', () => {
   it('matches capture path-meta border #c0c0c0', () => {
     expect(css).toMatch(
-      /\.text-edit-view \.text-edit-path-meta-strip[\s\S]*?border:\s*1px solid #c0c0c0/,
+      /\.text-edit-view \.text-edit-path-meta-strip[\s\S]*?border:\s*1px solid var\(--ds-line-c0c0c0\)/,
     )
   })
 })

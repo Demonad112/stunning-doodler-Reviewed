@@ -125,7 +125,7 @@ const { t } = useI18n()
   border: 1px solid transparent;
   border-radius: 0;
   background: transparent;
-  color: #333333;
+  color: var(--ds-text-333333);
   cursor: default;
 }
 
@@ -135,8 +135,8 @@ const { t } = useI18n()
 }
 
 .bc-path-action:hover:not(:disabled) {
-  border-color: #a0a0a0;
-  background: #f0f0f0;
+  border-color: var(--ds-line-a0a0a0);
+  background: var(--ds-fill-f0f0f0);
 }
 
 .bc-path-action:disabled {
@@ -144,7 +144,7 @@ const { t } = useI18n()
 }
 
 .bc-path-action:focus-visible {
-  outline: 2px solid var(--app-primary, #4aa3ff);
+  outline: 2px solid var(--app-primary, var(--ds-line-4aa3ff));
   outline-offset: 1px;
 }
 </style>

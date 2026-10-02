@@ -856,9 +856,9 @@ function applySettings(): void {
   gap: 4px;
   width: min(520px, 100%);
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: var(--app-surface, #ffffff);
+  background: var(--app-surface, var(--ds-fill-ffffff));
   font-size: 11px;
   line-height: 16px;
 }
@@ -874,16 +874,16 @@ footer {
 
 header {
   padding-bottom: 2px;
-  border-bottom: 1px solid #c0c0c0;
+  border-bottom: 1px solid var(--ds-line-c0c0c0);
 }
 
 header button {
   height: 18px;
   min-height: 18px;
   padding: 0 8px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #ffffff;
+  background: var(--ds-fill-ffffff);
   font-size: 11px;
   line-height: 16px;
 }
@@ -900,32 +900,32 @@ h2 {
   gap: 4px;
   min-height: 20px;
   padding: 2px 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .settings-tabs button {
   height: 18px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   font-size: 11px;
   line-height: 16px;
 }
 
 .settings-tabs button.active {
-  border-color: #89bdea;
-  background: #c8e4ff;
-  color: #1a1a1a;
-  box-shadow: inset 0 0 0 1px #89bdea;
+  border-color: var(--ds-line-89bdea);
+  background: var(--ds-fill-c8e4ff);
+  color: var(--ds-text-1a1a1a);
+  box-shadow: inset 0 0 0 1px var(--ds-line-89bdea);
 }
 
 .settings-body {
   display: grid;
   gap: 4px;
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: var(--app-surface-low, #ffffff);
+  background: var(--app-surface-low, var(--ds-fill-ffffff));
 }
 
 .settings-body label {
@@ -947,7 +947,7 @@ h2 {
   height: 20px;
   min-height: 20px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   font-size: 11px;
   line-height: 16px;
@@ -957,9 +957,9 @@ h2 {
   width: 100%;
   min-height: 64px;
   padding: 2px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: var(--app-surface-low, #ffffff);
+  background: var(--app-surface-low, var(--ds-fill-ffffff));
   color: var(--app-text);
   font: inherit;
   font-size: 11px;
@@ -971,7 +971,7 @@ footer {
   justify-content: flex-end;
   gap: 6px;
   padding-top: 2px;
-  border-top: 1px solid #c0c0c0;
+  border-top: 1px solid var(--ds-line-c0c0c0);
 }
 
 footer button {
@@ -979,10 +979,10 @@ footer button {
   height: 18px;
   min-height: 18px;
   padding: 0 10px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #ffffff;
-  color: #111111;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
   cursor: default;

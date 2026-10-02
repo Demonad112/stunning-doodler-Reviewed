@@ -79,10 +79,12 @@ describe('text path and editor grid chrome density', () => {
     )
     expect(textView).toMatch(/\.text-path-chrome\s*\{[\s\S]*?min-height:\s*22px/)
     expect(textView).toMatch(/\.text-path-meta-strip\s*\{[\s\S]*?min-height:\s*18px/)
-    expect(textView).toMatch(/\.text-path-meta-strip\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(textView).toMatch(
+      /\.text-path-meta-strip\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+    )
     expect(css).toMatch(/\.text-compare-view \.text-path-chrome\s*\{[\s\S]*?min-height:\s*22px/)
     expect(css).toMatch(
-      /\.text-compare-view \.text-path-meta-strip\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.text-compare-view \.text-path-meta-strip\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
     expect(css).toMatch(/\.text-compare-view \.diff-row\s*\{[\s\S]*?28px minmax\(0, 1fr\) 28px/)
     expect(css).toMatch(/\.text-compare-view \.diff-header\s*\{[\s\S]*?height:\s*18px/)
@@ -98,7 +100,7 @@ describe('text compare toolbar strip residual', () => {
     expect(css).toMatch(/\.bc-toolbar-command\s*\{[\s\S]*?height:\s*37\.5px/)
     expect(css).toMatch(/\.bc-toolbar-command-group-start\s*\{[\s\S]*?margin-left:\s*6px/)
     expect(css).toMatch(
-      /\.bc-toolbar-command-group-start\s*\{[\s\S]*?border-left:\s*1px solid #9a9a9a/,
+      /\.bc-toolbar-command-group-start\s*\{[\s\S]*?border-left:\s*1px solid var\(--ds-line-9a9a9a\)/,
     )
     expect(css).not.toMatch(/\.bc-toolbar-command-group-start\s*\{[\s\S]*?margin-left:\s*12px/)
   })
@@ -150,28 +152,32 @@ describe('mainbar command width residual', () => {
 describe('text path-meta strip border', () => {
   it('matches capture path-meta border #c0c0c0', () => {
     expect(css).toMatch(
-      /\.text-compare-view \.text-path-meta-strip\s*\{[\s\S]*?border:\s*1px solid #c0c0c0/,
+      /\.text-compare-view \.text-path-meta-strip\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-c0c0c0\)/,
     )
   })
 })
 
 describe('text diff-header fill', () => {
   it('matches capture diff-header fill #f0f0f0', () => {
-    expect(css).toMatch(/\.text-compare-view \.diff-header\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(css).toMatch(
+      /\.text-compare-view \.diff-header\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+    )
   })
 })
 
 describe('text diff-header border', () => {
   it('matches capture diff-header border #c0c0c0', () => {
     expect(css).toMatch(
-      /\.text-compare-view \.diff-header\s*\{[\s\S]*?border-bottom:\s*1px solid #c0c0c0/,
+      /\.text-compare-view \.diff-header\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--ds-line-c0c0c0\)/,
     )
   })
 })
 
 describe('diff-header base chrome', () => {
   it('matches capture diff-header base fill and border', () => {
-    expect(diffPanel).toMatch(/\.diff-header\s*\{[\s\S]*?border-bottom:\s*1px solid #c0c0c0/)
-    expect(diffPanel).toMatch(/\.diff-header\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(diffPanel).toMatch(
+      /\.diff-header\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--ds-line-c0c0c0\)/,
+    )
+    expect(diffPanel).toMatch(/\.diff-header\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
   })
 })

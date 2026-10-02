@@ -2319,7 +2319,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   grid-template-rows: 48px minmax(0, 1fr) 24px;
   height: 100vh;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--ds-fill-ffffff);
   color: var(--app-text);
 }
 
@@ -2334,10 +2334,10 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   min-width: 0;
   padding: 0;
   overflow: visible;
-  border-bottom: 1px solid #a0a0a0;
+  border-bottom: 1px solid var(--ds-line-a0a0a0);
 
   /* Capture title band ~#f0f0f0; menu row paints white over row 2. */
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .menu-panel {
@@ -2350,7 +2350,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   max-height: calc(100vh - 72px);
   padding: 2px;
   overflow: auto;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-canvas);
   box-shadow: 0 4px 12px rgb(25 28 30 / 0.16);
@@ -2369,7 +2369,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #000000;
+  color: var(--ds-text-000000);
   font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
   font-size: 12px;
   line-height: 20px;
@@ -2399,7 +2399,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
 .menu-panel button:disabled,
 .menu-panel .menu-command[data-enabled='false'] {
   background: transparent;
-  color: #808080;
+  color: var(--ds-text-808080);
   cursor: default;
   opacity: 1;
 }
@@ -2408,25 +2408,25 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   height: 1px;
   margin: 2px 4px;
   border: 0;
-  background: #c0c0c0;
+  background: var(--ds-fill-c0c0c0);
 }
 
 .menu-bar[data-menu-chrome='capture-1to1-residual'] .menus button {
   height: 21.5px;
-  color: #000000;
+  color: var(--ds-text-000000);
   font-size: 12px;
   font-weight: 400;
 }
 
 .menu-bar[data-menu-chrome='capture-1to1-residual'] .menus button.active {
-  background: #c8e4ff;
-  color: #000000;
-  box-shadow: inset 0 0 0 1px #89bdea;
+  background: var(--ds-fill-c8e4ff);
+  color: var(--ds-text-000000);
+  box-shadow: inset 0 0 0 1px var(--ds-line-89bdea);
 }
 
 .menu-bar[data-menu-sep='capture-1to1-residual'] .menu-separator {
   margin: 2px 4px;
-  background: #c0c0c0;
+  background: var(--ds-fill-c0c0c0);
 }
 
 .menu-bar[data-menu-chrome='capture-1to1-residual'] .menus button[data-menu-id='session'] {
@@ -2498,7 +2498,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   overflow: hidden;
   border: 0;
   background: transparent;
-  color: #000000;
+  color: var(--ds-text-000000);
   font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
   font-size: 12px;
   font-weight: 400;
@@ -2518,8 +2518,8 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   height: 24px;
   padding: 0 2px;
   overflow: visible;
-  border-top: 1px solid #d0d0d0;
-  background: #ffffff;
+  border-top: 1px solid var(--ds-line-d0d0d0);
+  background: var(--ds-fill-ffffff);
 }
 
 .menu-group {
@@ -2539,7 +2539,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #000000;
+  color: var(--ds-text-000000);
   cursor: pointer;
 }
 
@@ -2557,7 +2557,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
 .menus button:hover,
 .menus button.active,
 .chrome-button:hover {
-  background: #eef4ff;
+  background: var(--ds-fill-eef4ff);
 }
 
 .top-actions {
@@ -2757,22 +2757,22 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   min-height: 22px;
   padding: 0;
   overflow: auto hidden;
-  border-bottom: 1px solid #a0a0a0;
+  border-bottom: 1px solid var(--ds-line-a0a0a0);
   background: var(--app-panel, var(--app-canvas));
 }
 
 .tab-strip[data-tab-strip-density='capture-1to1-residual'] {
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .tab-strip[data-tab-strip-density='capture-1to1-residual'] .tab-chip {
-  border-right: 1px solid #d0d0d0;
+  border-right: 1px solid var(--ds-line-d0d0d0);
 }
 
 .tab-strip[data-tab-strip-density='capture-1to1-residual'] .tab-chip.active {
-  border-bottom: 1px solid #ffffff;
-  background: #ffffff;
-  box-shadow: inset 0 -1px 0 #ffffff;
+  border-bottom: 1px solid var(--ds-line-ffffff);
+  background: var(--ds-fill-ffffff);
+  box-shadow: inset 0 -1px 0 var(--ds-line-ffffff);
 }
 
 .tab-context-menu {
@@ -2782,7 +2782,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   flex-direction: column;
   min-width: 148px;
   padding: 2px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-canvas);
   box-shadow: 0 4px 12px rgb(0 0 0 / 0.16);
@@ -2814,7 +2814,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   align-items: stretch;
   min-width: 0;
   min-height: 22px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-bottom: 0;
   border-radius: 0;
   background: var(--app-canvas);
@@ -2934,7 +2934,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   flex: 1 1 auto;
   height: 100%;
   border-top: 0;
-  background: #ffffff;
+  background: var(--ds-fill-ffffff);
 }
 
 .status-bar {
@@ -2945,9 +2945,9 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   height: 19.5px;
   min-height: 19.5px;
   padding: 0;
-  border-top: 1px solid #a0a0a0;
-  background: #f0f0f0;
-  color: #000000;
+  border-top: 1px solid var(--ds-line-a0a0a0);
+  background: var(--ds-fill-f0f0f0);
+  color: var(--ds-text-000000);
   font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
   font-size: 11px;
   line-height: 18px;
@@ -2981,7 +2981,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
 
 /* Capture folder-pair strip: stronger divider before center micro spacer */
 .status-bar[data-chrome-kind='folder-pair'][data-pane-count='7'] .status-bar-pane:nth-child(3) {
-  border-right-color: #8e8e8e;
+  border-right-color: var(--ds-line-8e8e8e);
 }
 
 .status-bar[data-chrome-kind='folder-sync'] {
@@ -3003,7 +3003,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
 }
 
 .status-bar[data-chrome-kind='folder-sync'][data-pane-count='5'] .status-bar-pane:nth-child(2) {
-  border-right-color: #8e8e8e;
+  border-right-color: var(--ds-line-8e8e8e);
 }
 
 .status-bar[data-chrome-kind='folder-merge'] {
@@ -3029,7 +3029,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
 /* Capture folder-merge strip: stronger dividers between left/center/right groups */
 .status-bar[data-chrome-kind='folder-merge'][data-pane-count='12'] .status-bar-pane:nth-child(4),
 .status-bar[data-chrome-kind='folder-merge'][data-pane-count='12'] .status-bar-pane:nth-child(8) {
-  border-right-color: #8e8e8e;
+  border-right-color: var(--ds-line-8e8e8e);
 }
 
 .status-bar[data-chrome-kind='text-session'],
@@ -3122,7 +3122,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   min-width: 0;
   padding: 0 4px;
   overflow: hidden;
-  border-right: 1px solid #c0c0c0;
+  border-right: 1px solid var(--ds-line-c0c0c0);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3132,7 +3132,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
 }
 
 .status-bar-pane-muted {
-  color: #808080;
+  color: var(--ds-text-808080);
 }
 
 .command-backdrop {
@@ -3256,9 +3256,9 @@ html[data-show-sidebar='1'] .sidebar {
   gap: 4px;
   width: min(360px, 100%);
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .about-dialog {
@@ -3266,10 +3266,10 @@ html[data-show-sidebar='1'] .sidebar {
   gap: 4px;
   min-width: min(360px, 92vw);
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: var(--panel, #ffffff);
-  color: var(--text, #0f172a);
+  background: var(--panel, var(--ds-fill-ffffff));
+  color: var(--text, var(--ds-text-0f172a));
 }
 
 .about-dialog header,
@@ -3296,7 +3296,7 @@ html[data-show-sidebar='1'] .sidebar {
 .about-dialog button {
   height: 18px;
   padding: 0 8px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
 }
 
@@ -3310,7 +3310,7 @@ html[data-show-sidebar='1'] .sidebar {
   padding: 2px 4px;
   border: 1px solid var(--app-border);
   border-radius: 0;
-  background: var(--panel, #ffffff);
+  background: var(--panel, var(--ds-fill-ffffff));
   font-size: 11px;
 }
 
@@ -3336,7 +3336,7 @@ html[data-show-sidebar='1'] .sidebar {
 
 .app-shell-dense-chrome .menu-bar {
   grid-template-rows: 23.5px;
-  background: #ffffff;
+  background: var(--ds-fill-ffffff);
 }
 
 .app-shell-dense-chrome .brand {
@@ -3350,7 +3350,7 @@ html[data-show-sidebar='1'] .sidebar {
   height: 23.5px;
   padding: 0 2px;
   border-top: 0;
-  background: #ffffff;
+  background: var(--ds-fill-ffffff);
 }
 
 .app-shell-dense-chrome .menus button {

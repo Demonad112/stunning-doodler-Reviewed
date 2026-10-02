@@ -41,7 +41,7 @@ describe('version compare chrome density', () => {
     expect(css).toMatch(/\.version-compare-view \.version-report-panel[\s\S]*?padding:\s*4px 6px/)
     expect(css).toMatch(/\.version-compare-view \.version-rules-panel[\s\S]*?padding:\s*4px 6px/)
     expect(css).toMatch(
-      /\.version-compare-view \.version-report-panel[\s\S]*?border:\s*1px solid #a0a0a0/,
+      /\.version-compare-view \.version-report-panel[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
     )
     expect(css).toMatch(/\.version-compare-view \.version-field-row\s*\{[\s\S]*?min-height:\s*16px/)
     expect(css).toMatch(
@@ -74,7 +74,9 @@ describe('version secondary strip density', () => {
     expect(versionView).toMatch(/data-secondary-density="capture-1to1"/)
     expect(versionView).toMatch(/version-secondary-strip/)
     expect(versionView).toMatch(/\.version-secondary-strip\s*\{[\s\S]*?min-height:\s*18px/)
-    expect(versionView).toMatch(/\.version-secondary-strip\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(versionView).toMatch(
+      /\.version-secondary-strip\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+    )
     expect(versionView).toMatch(
       /\.version-secondary-strip :deep\(\.path-meta-footer\)\s*\{[\s\S]*?gap:\s*6px/,
     )
@@ -82,7 +84,7 @@ describe('version secondary strip density', () => {
       /\.version-compare-view \.version-secondary-strip\s*\{[\s\S]*?min-height:\s*18px/,
     )
     expect(css).toMatch(
-      /\.version-compare-view \.version-secondary-strip\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.version-compare-view \.version-secondary-strip\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
     expect(css).toMatch(/\.version-compare-view \.path-side-footer\s*\{[\s\S]*?min-height:\s*18px/)
     expect(versionView).not.toMatch(/min-height:\s*6px/)
@@ -101,7 +103,7 @@ describe('version residual', () => {
 describe('version secondary strip border', () => {
   it('matches capture path-meta border #c0c0c0', () => {
     expect(css).toMatch(
-      /\.version-compare-view \.version-secondary-strip[\s\S]*?border:\s*1px solid #c0c0c0/,
+      /\.version-compare-view \.version-secondary-strip[\s\S]*?border:\s*1px solid var\(--ds-line-c0c0c0\)/,
     )
   })
 })
@@ -109,7 +111,7 @@ describe('version secondary strip border', () => {
 describe('version-side header fill', () => {
   it('matches capture version side header fill #f0f0f0', () => {
     expect(css).toMatch(
-      /data-version-chrome='capture-1to1-residual'\] \.version-side header[\s\S]*?background:\s*#f0f0f0/,
+      /data-version-chrome='capture-1to1-residual'\] \.version-side header[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
   })
 })

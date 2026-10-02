@@ -411,7 +411,7 @@ watch(
   gap: 4px 6px;
   min-height: 22px;
   padding: 2px 4px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
 }
@@ -446,7 +446,7 @@ watch(
 .diff-pane {
   min-width: 0;
   min-height: 0;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
 }
@@ -485,7 +485,7 @@ watch(
   gap: 0 6px;
   min-height: 18px;
   padding: 2px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   color: var(--app-text);

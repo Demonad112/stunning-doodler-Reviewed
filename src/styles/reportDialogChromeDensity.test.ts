@@ -62,38 +62,48 @@ describe('report dialog chrome density', () => {
 
 describe('report-scope fill', () => {
   it('matches capture report-scope fill #f0f0f0', () => {
-    expect(css).toMatch(/\.file-compare-report-scope\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(css).toMatch(
+      /\.file-compare-report-scope\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+    )
   })
 })
 
 describe('report-scope border', () => {
   it('matches capture report-scope border #c0c0c0', () => {
-    expect(css).toMatch(/\.file-compare-report-scope\s*\{[\s\S]*?border:\s*1px solid #c0c0c0/)
+    expect(css).toMatch(
+      /\.file-compare-report-scope\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-c0c0c0\)/,
+    )
   })
 })
 
 describe('report-panel border', () => {
   it('matches capture report-panel border #c0c0c0', () => {
-    expect(css).toMatch(/\.file-compare-report-panel\s*\{[\s\S]*?border:\s*1px solid #c0c0c0/)
+    expect(css).toMatch(
+      /\.file-compare-report-panel\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-c0c0c0\)/,
+    )
   })
 })
 
 describe('report-header border', () => {
   it('matches capture report-header border #c0c0c0', () => {
     expect(css).toMatch(
-      /\.file-compare-report-header\s*\{[\s\S]*?border-bottom:\s*1px solid #c0c0c0/,
+      /\.file-compare-report-header\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--ds-line-c0c0c0\)/,
     )
   })
 })
 
 describe('report-footer border', () => {
   it('matches capture report-footer border #c0c0c0', () => {
-    expect(css).toMatch(/\.file-compare-report-footer\s*\{[\s\S]*?border-top:\s*1px solid #c0c0c0/)
+    expect(css).toMatch(
+      /\.file-compare-report-footer\s*\{[\s\S]*?border-top:\s*1px solid var\(--ds-line-c0c0c0\)/,
+    )
   })
 })
 
 describe('report-row select border', () => {
   it('matches capture report-row select border #c0c0c0', () => {
-    expect(css).toMatch(/\.file-compare-report-row select\s*\{[\s\S]*?border:\s*1px solid #c0c0c0/)
+    expect(css).toMatch(
+      /\.file-compare-report-row select\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-c0c0c0\)/,
+    )
   })
 })
