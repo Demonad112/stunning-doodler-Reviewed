@@ -1,0 +1,29 @@
+[workspace]
+members = ["."]
+resolver = "2"
+
+[package]
+name = "deepserver"
+version = "2.0.0-alpha.0"
+edition = "2021"
+authors = ["Demonad112"]
+license = "Apache-2.0"
+default-run = "deepserver"
+
+[lib]
+name = "deepserver_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "deepserver"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+tauri = { version = "2.11.3", features = [] }
+
+[target.'cfg(windows)'.dependencies]
+windows-version = "0.1"
