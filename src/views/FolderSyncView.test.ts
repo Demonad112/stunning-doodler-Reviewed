@@ -250,6 +250,38 @@ describe('FolderSyncView', () => {
     ).toBe('mirrorLeft')
   })
 
+  it('plans a right-to-left copy when the roots use backslashes', async () => {
+    // The backend reports paths with forward slashes; Windows roots typed or picked use backslashes.
+    vi.mocked(previewFolderSync).mockResolvedValueOnce({
+      name: 'Update Both',
+      leftRoot: 'C:/data/left',
+      rightRoot: 'C:/data/right',
+      strategy: 'updateBoth',
+      rows: [
+        {
+          id: 'newer-right',
+          relativePath: 't.csv',
+          action: 'Copy',
+          sourcePath: 'C:/data/right/t.csv',
+          targetPath: 'C:/data/left/t.csv',
+          detail: 'Right item is newer',
+        },
+      ],
+      summary: { total: 1, copy: 1, delete: 0, leave: 0, conflict: 0 },
+    })
+    const wrapper = mount(FolderSyncView)
+
+    await wrapper.find('[data-testid="folder-sync-left-path"]').setValue('C:\\data\\left')
+    await wrapper.find('[data-testid="folder-sync-right-path"]').setValue('C:\\Data\\Right\\')
+    await wrapper.find('[data-testid="folder-sync-preview"]').trigger('click')
+    await flushPromises()
+
+    expect(
+      (wrapper.find('[data-testid="sync-override-newer-right"]').element as HTMLSelectElement)
+        .value,
+    ).toBe('copyRightToLeft')
+  })
+
   it('cancels overrides to leave and resets a single row', async () => {
     const wrapper = mount(FolderSyncView, {
       global: {
