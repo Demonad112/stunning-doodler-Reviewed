@@ -59,6 +59,9 @@ Grep for an existing mode (e.g. `version-compare`) and mirror it in:
   - `consistent-type-imports` (no `import()` types in `vi.mock`)
 - `native/` and `docs/history/` are excluded from prettier, eslint and stylelint, and `native/**` is `-text` in `.gitattributes` (CRLF and BOM files).
 - Tests that re-seed module mocks per test need `vi.clearAllMocks()` in `beforeEach`, or call counts leak between tests.
+- Colours: chrome colours are `--ds-<role>-<hex>` / `--app-*` tokens (top of `src/styles/main.css`, light + `html[data-theme='dark']`). Don't add raw hex in styles; dark mode won't remap it. `src/styles/*Density.test.ts` assert on CSS source, so update them with a style change.
+- Bash tool: heredocs halve backslashes; write files containing backslashes with Write/Edit. Git Bash rewrites `origin/main:path`; prefix `MSYS_NO_PATHCONV=1`.
+- Full `pnpm test:unit` takes >10 min locally; run it in the background or scope to the touched files.
 - CI (`.github/workflows/`):
   - `ci.yml`: quality + tests on every PR; a `changes` job gates the heavy Windows jobs by path
   - `build-windows.yml` (reusable, called by `ci.yml` and `release.yml`): engine build, `Test-ForkChanges.ps1`, the real-engine `diskusage-core` test, the standard installer (`tauri build`) and the offline one (`tauri bundle` + `tauri.offline.conf.json`), the portable zip, `SHA256SUMS.txt`, and `scripts/windows/Test-Installer.ps1` against both installers
@@ -69,7 +72,7 @@ Grep for an existing mode (e.g. `version-compare`) and mirror it in:
 
 ## Session workflow (saves tokens)
 
-- **Start** by reading `docs/HANDOFF.md`. **End** each work block with `/handoff`. Reference notes go in the repo (`docs/`), never only in the scratchpad: containers restart.
+- **Start** by reading `docs/HANDOFF.md`. **End** each work block with `/handoff` (local edit; don't open a PR or branch just for it). Reference notes go in the repo (`docs/`), never only in the scratchpad: containers restart.
 - **GitHub status**: `scripts/gh-status.sh release <tag> | run <id>|latest [wf] | runs [wf] | pr <n> | branches`. Prefer it over connector reads (releases, jobs, logs return 5–15k tokens).
 - **Waiting on CI**: spawn the `ci-watch` agent (Haiku) in the background with `pr <n>` or `run <id>`. Don't poll from the main context.
 - **PR watching**: the owner opts out. Don't call `subscribe_pr_activity` after creating a PR; use `ci-watch` instead.
@@ -92,8 +95,5 @@ Grep for an existing mode (e.g. `version-compare`) and mirror it in:
 - Locally `gh` is authenticated (`Demonad112`), so use `scripts/gh-status.sh` or `gh` through Bash instead of the GitHub connector (it fails here: bad auth header). The `settings.json` allow-list still names cloud-only `mcp__github__*` tools.
 - Analysis passes: low effort, `git` + `gh` only; don't load the root-level `*-reference.md` handoff files unless needed. Archive them under `~/.claude/handoffs/`.
 - Don't search `src-tauri/target/`, `node_modules/`, `native/diskusage/build/` or `docs/history/opendiff/`.
-- Plan, in checkpoints (end each with `/handoff`, start the next in a new chat):
-  1. Automation setup (hooks, `/laptop-test`, cheap `repo-state` agent, worktree/branch cleanup). No app code.
-  2. Laptop test of the newest rc; report as needs fixing / look into / improvements.
-  3. Fixes from the report, one PR each, then the next rc.
-  4. Final `v1.0.0`: delete rc1/rc2, decide the Docs/Support links, publish the draft.
+- Release testing: `laptop-check` agent (scripted half), then the owner's manual pass; plan in `testing-plan.md`, current step in `docs/HANDOFF.md`.
+- Laptop runs at 175% scaling. Computer-use can't see WebView2 `<select>` popups or type in folder pickers; type paths into the app's path fields.

@@ -4,41 +4,48 @@ Session state for the next Claude session. Update with `/handoff`; keep it short
 
 ## Goal
 
-Ship DeepServer 1.0.0: hands-on laptop test of rc4, fix what it finds, then tag `v1.0.0`.
+Ship DeepServer 1.0.0: fix what the rc4 laptop test found, cut rc5, owner re-checks, then tag `v1.0.0`.
 
 ## State
 
-- `main` at `84631c6` (Merge #25). No open PRs besides the handoff PR for this file.
-- **v1.0.0-rc4** (`da507d2`): pre-release, 4 assets; both installers ship `DeepServer.exe`, `deepserver-diskusage.exe`, `deepserver-cli.exe` (offline adds WebView2). Release run 36993574542.
-  - `DeepServer_1.0.0_x64-setup.exe` SHA-256 `68c5404e94cf846513a2567e44875082c8f16e25b66bf8579e73a26793e4052a`
-  - `DeepServer_1.0.0_x64-offline-setup.exe` SHA-256 `a5d31e518cea178609a38278622dc058756ba0d060c8a633e9b2ba7e82e7b1ac`
-- rc1–rc3 are older pre-releases (rc1/rc2 ship the old `open-diff-cli.exe` name).
-- Last CI on `main` was cancelled runs (likely concurrency); no green run confirmed at the head commit yet.
+- `main` at `86e0673` (Merge #29). Latest release: **v1.0.0-rc4** (pre-release, `da507d2`), installed on the laptop.
+- Open PRs from the rc4 test (CI was running at handoff; merge when green, then `/release-rc v1.0.0-rc5`):
+  - #30 `fix/sync-direction`: Folder Sync planned right-newer files as Copy Left to Right (wrong-direction overwrite); `src/app/pathUnderRoot.ts` shared with Folder Compare; Leave rows show the path; empty "Username:" log line removed.
+  - #31 `fix/menu-width`: menu-bar panels sized to content (were fixed 240px, labels cut at 175% scaling); sidebar New list adds Transfer Monitor and Disk Usage.
+  - #32 `fix/dark-mode`: ~750 hard-coded light colours → 88 `--ds-<role>-<hex>` tokens (light value unchanged, dark value by role); style tests point at the tokens.
+- #30–#32 are unit-tested only; the owner verifies them in the installed rc5.
+- #30 and #32 touch the same folder views; #31 and #32 touch `AppLayout.vue` / `HomeView.vue`. Merge #32 last; if it conflicts, merge `main` into it (no rebase).
 
-## Done (this session: Checkpoint 1, automation setup)
+## Done (this session: rc4 laptop test)
 
-- #25: `.claude/hooks/session-start.sh` (SessionStart: HEAD vs origin, open PRs, latest release), `repo-state` agent (Haiku, read-only), user-only `/laptop-test <tag>` skill, `Read` deny rules for `src-tauri/target`, `node_modules`, `native/diskusage/build`, `docs/history/opendiff`, `gh` read-only allow entries replacing `mcp__github__*`, `CLAUDE.md` "Local setup and plan".
-- Moved the 7 root `*-reference.md` files to `~/.claude/handoffs/`.
+- #29 merged: `deepserver-cli compare-folders` now compares contents of same-size files (they counted as "same").
+- Scripted checks on installed rc4 passed: files, Uninstall entry 1.0.0, 8 HKLM Explorer keys, CLI exit codes (0/1/4), engine `/saveto /noelevate` ledger.
+- Main CI "cancelled with 0 jobs" runs were transient; rerun 37012692838 green.
+- Full report and root causes: `2026-10-02-deepserver-rc4-test-reference.md` (repo root, untracked).
 
 ## Next
 
-1. Checkpoint 2: owner runs `/laptop-test v1.0.0-rc4` in a new chat (install, upgrade rc2 to rc4, full app test); report as needs fixing / look into further / improvements.
-2. Fix findings, one PR each with green CI; cut rc5 via `/release-rc`.
-3. `v1.0.0`: delete rc1/rc2, decide Docs/Support links, publish the draft.
+1. Merge #30, #31, #32 when green; `/release-rc v1.0.0-rc5`.
+2. Owner checks rc5: dark mode, menus, Folder Sync direction, sidebar.
+3. Owner's "squished dropdown" picture: if it's the native `<select>` popup (not the menu bar), still open.
+4. Look into: Sync "Update Both" decides by mtime only; mirror `row_is_same` ignores size (`sync-core`); Text Compare single pick fills both sides; Folder Sync shows "0 bytes" for folders and a large empty area.
+5. Untested on the laptop: Explorer right-click menus, Transfer Monitor (incl. hardware cases), Disk Usage scans/snapshots, other compare modes, locales.
+6. Before `v1.0.0`: `CHANGELOG.md` is still OpenDiff's (no 1.0.0 entry, kygo8 links); Docs/Support links (`src/app/appMeta.ts`); delete rc1/rc2.
 
 ## Blocked / needs the owner
 
-- Remove stale worktrees (git hit "Filename too long", auto mode blocked the delete): from PowerShell, `Remove-Item -LiteralPath '\?\C:\Users\Addy7\Projects\Work\DeepServerV1.0\.claude\worktrees\batch-4-unified-ui' -Recurse -Force`, then `git worktree remove --force .claude/worktrees/batch-5-transfer-monitor`, `git worktree prune`, `git branch -d batch-4-wrapup batch-5-transfer-monitor`.
-- Delete remote branches `claude/friendly-archimedes-x6dyyw`, `claude/funny-carson-d84a60`, `claude/automation-setup`, `claude/handoff-checkpoint-1` after merge: **Actions → Repo maintenance** (`dry_run: true` first).
-- Delete rc1/rc2 if wanted: same workflow, one tag + release per run.
-- Untracked in the repo root, not mine: `DeepServer-windows.zip`, `DeepServer-windows/`, two `Recording *.mp4`; delete or move them.
-- The failing `plugin:github` MCP is a user-level plugin; disable it in the Claude app if the error noise bothers you.
+- Remove stale worktrees: from PowerShell, `Remove-Item -LiteralPath '\\?\C:\Users\Addy7\Projects\Work\DeepServerV1.0\.claude\worktrees\batch-4-unified-ui' -Recurse -Force`, then `git worktree remove --force .claude/worktrees/batch-5-transfer-monitor`, `git worktree prune`. After #30–#32 merge, also remove `fix-*` worktrees and branches.
+- Delete merged remote branches: **Actions → Repo maintenance** (`dry_run: true` first).
+- Delete rc1/rc2: same workflow, one tag + release per run.
+- Archive `open-diff` and `altWinDirStat` (original plan says ask the owner first).
+- Silent-install the offline installer on a Windows Server VM/Sandbox (never done outside CI).
+- Delete test fixtures: `C:\Users\Addy7\DSTest`, `%TEMP%\ds-cli-test`, `%TEMP%\dsc`.
 
 ## Notes
 
-- Run `git push` as its own Bash call: the pre-push hook fires on the whole command text, so chaining prettier/amend before it fails and skips the earlier steps.
-- Open decisions: in-app Docs/Support links point at the private repo (`src/app/appMeta.ts`); `%USERPROFILE%\.config\open-diff` keeps its OpenDiff name (renaming needs a migration).
-- Every build reports version `1.0.0`, so rcs can't be told apart in Programs; a file a future build stops shipping is left behind (rc1/rc2's CLI is handled by #21).
-- Laptop checks CI doesn't cover: settings and history survive an upgrade; uninstall while the app or engine runs; Transfer Monitor hardware cases (USB pull, SMB, 50k files, Watch).
-- Waiting on a run: use the `ci-watch` agent; `gh-status.sh run <id>` prints per-job `success` lines mid-run.
-- Builds are unsigned: SmartScreen / Smart App Control may block them.
+- The laptop runs at 175% scaling (AppliedDPI 168); check layout bugs at that scale.
+- Computer-use can't see WebView2 `<select>` popups (masked) or type in the folder picker; type paths into the app's own path fields instead. Explorer is click-only (no right-click).
+- `deepserver-cli open --session folder-sync L R` reported success but the running app didn't pick up the paths (not investigated).
+- Dark mode: `localStorage['open-diff-theme']`; tokens live in the `:root` / `html[data-theme='dark']` blocks at the top of `src/styles/main.css`. New chrome colours should use a token, not a hex.
+- Playwright Chromium is installed locally; `tests/e2e/helpers/tauriMock.ts` fakes `diff_text`, so dark-mode screenshots with real diff rows are possible without Tauri.
+- Handoff and notes files stay local (no PR for them).

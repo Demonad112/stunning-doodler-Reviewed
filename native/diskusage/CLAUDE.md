@@ -15,7 +15,7 @@
 msbuild windirstat.sln /m /p:Configuration=Release /p:Platform=x64 "/p:ExternalCompilerOptions=/DPRODUCTION=1"
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\Test-ForkChanges.ps1 -ExePath build\altWinDirStat_x64.exe   # -SkipGui for headless only
 ```
-- The output is still `build\altWinDirStat_<arch>.exe`. DeepServer CI (`.github/workflows/windows-installer.yml` at the repo root) copies it to `src-tauri/binaries/deepserver-diskusage-x86_64-pc-windows-msvc.exe`.
+- The output is still `build\altWinDirStat_<arch>.exe`. DeepServer CI (`.github/workflows/build-windows.yml`) copies it to `src-tauri/binaries/deepserver-diskusage-x86_64-pc-windows-msvc.exe`.
 - The toolset defaults to v143 (VS2022) and switches to v145 under VS2026.
 - DeepServer's end-to-end check against this exe runs from the repo root: `DISKUSAGE_ENGINE=<exe> cargo test -p diskusage-core --manifest-path src-tauri/Cargo.toml -- --ignored`. It covers snapshot → change → snapshot → compare.
 - The upstream suites and the stress test need pwsh 7.6+, so they run in CI (`engine-upstream-tests` job). The `Ui` suite is left out because it waits for windows titled "WinDirStat", and this build's title is "DeepServer Disk Usage".
@@ -31,5 +31,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\Test-ForkChanges.ps1 -
 - **Headless runs DeepServer starts pass `/noelevate`.** `/compare` writes `<out>.err` on failure and `<out>.warn` when the filters differ.
 - **Versions:**
   - the version is `ALT_VER_*` at the end of `windirstat/Version.h` (default 1.0.0)
-  - releases come from DeepServer's workflows (Batch 6), not engine tags
+  - releases come from DeepServer's `release.yml`, not engine tags
   - the 2014–2016 legacy code exists only at the old repo's tags
