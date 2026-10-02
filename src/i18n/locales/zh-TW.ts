@@ -691,6 +691,7 @@ export const zhTW: LanguagePack = {
     'ui.font': '字型',
     'ui.dragFoldersOrFilesOntoSessionIcon': '把兩個檔案或資料夾拖到這裡',
     'ui.minor': '次要',
+    'ui.unreadable': '無法讀取',
     'ui.unimportantDifferences': '次要差異',
     'ui.orClickSessionIconToBegin': '或點下面的卡片。',
     'ui.paste': '貼上',

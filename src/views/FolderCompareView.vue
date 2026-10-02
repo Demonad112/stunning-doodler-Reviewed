@@ -181,6 +181,7 @@ interface FolderTreeRow {
   status: FolderStatus
   kind: 'file' | 'directory'
   unimportant?: boolean
+  unreadable?: boolean
   manualAlignment?: boolean
   alignedLeftRelativePath?: string
   alignedRightRelativePath?: string
@@ -682,6 +683,10 @@ function rowLooksUnimportant(row: FolderTreeRow): boolean {
 }
 
 function folderRowStatusLabel(row: FolderTreeRow): string {
+  if (row.unreadable === true) {
+    return t('ui.unreadable')
+  }
+
   if (rowLooksUnimportant(row) && row.status === 'Different') {
     return t('ui.minor')
   }
@@ -1756,6 +1761,7 @@ function folderCompareResponseRowToTreeRow(row: FolderCompareResponseRow): Folde
     status: row.status,
     kind: row.left?.kind ?? row.right?.kind ?? 'file',
     unimportant: row.unimportant === true,
+    unreadable: row.unreadable === true,
   }
 }
 
@@ -4682,9 +4688,11 @@ onUnmounted(() => {
                   checked: isRowChecked(row.id),
                   suppressed: isSuppressed(row),
                   'status-unimportant': rowLooksUnimportant(row),
+                  'status-unreadable': row.unreadable === true,
                 },
               ]"
               :data-unimportant="rowLooksUnimportant(row) ? 'true' : undefined"
+              :data-unreadable="row.unreadable === true ? 'true' : undefined"
               :style="{ gridTemplateColumns }"
               :data-row-id="row.id"
               data-testid="folder-row"
@@ -5787,6 +5795,11 @@ onUnmounted(() => {
   color: var(--diff-modified-fg);
   font-style: italic;
   opacity: 0.85;
+}
+
+.status-unreadable strong {
+  color: var(--diff-deleted-fg);
+  font-style: italic;
 }
 
 .status-left-only strong,

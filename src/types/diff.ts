@@ -221,6 +221,8 @@ export interface FolderCompareRow {
   status: FolderCompareStatus
   /** Timestamp/attribute/size-only difference — Folder Compare Minor filter. */
   unimportant?: boolean
+  /** A folder that couldn't be read (E11); its contents weren't compared. */
+  unreadable?: boolean
   left?: FolderCompareSideEntry
   right?: FolderCompareSideEntry
 }

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const budgetPath = resolve(process.cwd(), 'docs/性能预算.md')
+const budgetPath = resolve(process.cwd(), 'docs/history/opendiff/性能预算.md')
 
 describe('performance budget documentation', () => {
   it('defines measurable budgets for large files, scanning, scrolling, and report generation', () => {

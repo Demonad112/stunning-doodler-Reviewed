@@ -389,19 +389,33 @@ pub async fn transfer_prune_runs(
     run_blocking(move || Ok(prune_old_runs(&active))).await
 }
 
-/// Startup clean-up of the runs folder, on a background thread.
+/// Startup clean-up of the runs folder, on a background thread, at most once a day: Explorer
+/// "Copy with verification" launches start the app often.
 pub fn prune_runs_in_background() {
-    std::thread::spawn(|| prune_old_runs(&[]));
+    std::thread::spawn(|| {
+        let due = transfer_core::store::prune_due(
+            &root(),
+            transfer_core::now_ms(),
+            transfer_core::store::STARTUP_PRUNE_EVERY_MS,
+        );
+        if due {
+            prune_old_runs(&[]);
+        }
+    });
 }
 
 fn prune_old_runs(active: &[String]) -> transfer_core::store::PruneResult {
-    transfer_core::store::prune_runs(
-        &root(),
+    let root = root();
+    let now = transfer_core::now_ms();
+    let result = transfer_core::store::prune_runs(
+        &root,
         transfer_core::store::KEEP_RUNS_DAYS,
         transfer_core::store::KEEP_RUNS_MAX,
-        transfer_core::now_ms(),
+        now,
         &|id| active.iter().any(|key| key == id),
-    )
+    );
+    transfer_core::store::mark_pruned(&root, now);
+    result
 }
 
 /// Stored runs, newest first.

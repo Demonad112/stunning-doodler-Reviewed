@@ -296,6 +296,7 @@ export const enUS: LanguagePack = {
     'ui.metadata': 'Metadata',
     'ui.missing': 'Missing',
     'ui.minor': 'Minor',
+    'ui.unreadable': 'Unreadable',
     'ui.unimportantDifferences': 'Unimportant differences',
     'ui.modified': 'Modified',
     'ui.move': 'Move',

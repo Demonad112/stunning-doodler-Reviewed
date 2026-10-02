@@ -295,6 +295,7 @@ export const jaJP: LanguagePack = {
     'ui.metadata': 'Metadata',
     'ui.missing': 'Missing',
     'ui.minor': 'Minor',
+    'ui.unreadable': '読み取り不可',
     'ui.unimportantDifferences': '重要でない差分',
     'ui.modified': 'Modified',
     'ui.move': 'Move',

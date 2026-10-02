@@ -1337,6 +1337,60 @@ describe('FolderCompareView', () => {
     expect(stored.ignoreDaylightSavingHourOffset).toBe(true)
   })
 
+  it('labels an unreadable folder row and lists it in the banner (E11)', async () => {
+    vi.mocked(compareFolderPaths).mockResolvedValue({
+      leftRoot: 'C:/',
+      rightRoot: 'D:/',
+      rows: [
+        {
+          relativePath: 'System Volume Information',
+          depth: 0,
+          status: 'Different',
+          unreadable: true,
+          left: {
+            name: 'System Volume Information',
+            kind: 'directory',
+            size: 0,
+            path: 'C:/System Volume Information',
+          },
+          right: {
+            name: 'System Volume Information',
+            kind: 'directory',
+            size: 0,
+            path: 'D:/System Volume Information',
+          },
+        },
+      ],
+      summary: {
+        total: 1,
+        same: 0,
+        different: 1,
+        leftOnly: 0,
+        rightOnly: 0,
+      },
+      unreadable: [
+        {
+          side: 'left',
+          relativePath: 'System Volume Information',
+          message: 'Access is denied.',
+        },
+      ],
+    })
+
+    const wrapper = mountFolderCompareView()
+
+    await runCompare(wrapper)
+
+    const row = wrapper.find('[data-unreadable="true"]')
+
+    expect(row.exists()).toBe(true)
+    expect(row.classes()).toContain('status-unreadable')
+    expect(row.text()).toContain('Unreadable')
+    expect(wrapper.find('[data-testid="folder-compare-unreadable"]').text()).toContain(
+      'System Volume Information',
+    )
+  })
+
   it('persists Compare attributes and filters attribute-only Minor rows', async () => {
     vi.mocked(compareFolderPaths).mockResolvedValue({
       leftRoot: 'D:/left',

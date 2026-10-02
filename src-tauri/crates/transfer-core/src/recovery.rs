@@ -194,13 +194,27 @@ mod tests {
 
     #[test]
     fn recovery_folder_sits_beside_the_destination() {
+        let client = Path::new("Client");
+        assert_eq!(
+            recovery_folder(&client.join("Data"), None, "r1"),
+            client.join("Data_NotCopied").join("r1")
+        );
+        assert_eq!(
+            recovery_folder(&client.join("Data"), Some(Path::new("Rescue")), "r1"),
+            Path::new("Rescue").join("r1")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn recovery_folder_on_a_drive_root_gets_a_named_folder() {
         assert_eq!(
             recovery_folder(Path::new(r"E:\Client\Data"), None, "r1"),
             PathBuf::from(r"E:\Client\Data_NotCopied\r1")
         );
         assert_eq!(
-            recovery_folder(Path::new(r"E:\Data"), Some(Path::new(r"D:\Rescue")), "r1"),
-            PathBuf::from(r"D:\Rescue\r1")
+            recovery_folder(Path::new(r"E:\"), None, "r1"),
+            PathBuf::from(r"E:\DeepServer_NotCopied\r1")
         );
     }
 

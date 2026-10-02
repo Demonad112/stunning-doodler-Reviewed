@@ -498,6 +498,9 @@ pub struct FolderCompareRow {
     /// Timestamp/attribute-only (or equivalent) difference — surfaces under Folder Compare Minor.
     #[serde(default)]
     pub unimportant: bool,
+    /// A folder that couldn't be read (E11): its contents weren't compared.
+    #[serde(default)]
+    pub unreadable: bool,
     pub left: Option<FolderCompareSideEntry>,
     pub right: Option<FolderCompareSideEntry>,
 }
@@ -3615,6 +3618,7 @@ fn folder_compare_row(
         depth: row.depth,
         status: folder_status_label(&status),
         unimportant,
+        unreadable: status == FolderCompareStatus::Error,
         left: row
             .left
             .as_ref()
@@ -5567,11 +5571,9 @@ fn rgba_from_bytes(value: Option<Vec<u8>>) -> Option<[u8; 4]> {
     ])
 }
 
+/// Report time in local time with its UTC offset, like the Transfer Monitor report.
 fn current_timestamp() -> String {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_secs().to_string())
-        .unwrap_or_else(|_| "0".to_owned())
+    transfer_core::format_local(transfer_core::now_ms())
 }
 
 fn report_row(
@@ -5687,7 +5689,18 @@ fn folder_report_to_unified(
                 None,
                 report_core::ReportRowStatus::Added,
             ),
-        ],
+        ]
+        .into_iter()
+        // Folders that couldn't be read (E11); only listed when there are some.
+        .chain((model.summary.error > 0).then(|| {
+            report_row(
+                "Unreadable",
+                Some(model.summary.error.to_string()),
+                None,
+                report_core::ReportRowStatus::Different,
+            )
+        }))
+        .collect(),
     })
     .with_section(report_core::ReportSection {
         kind: report_core::ReportSectionKind::Differences,
@@ -5739,6 +5752,51 @@ mod tests {
             "System Volume Information2/a",
             &unreadable
         ));
+    }
+
+    #[test]
+    fn an_unreadable_folder_row_is_flagged() {
+        let mut locked = FolderScanNode::new_directory(
+            "locked",
+            "locked",
+            vfs_core::VfsMetadata {
+                kind: vfs_core::VfsEntryKind::Directory,
+                name: "locked".to_owned(),
+                extension: None,
+                size: 0,
+                readonly: false,
+                created_at_ms: None,
+                modified_at_ms: None,
+                accessed_at_ms: None,
+            },
+            Vec::new(),
+        );
+        let open = locked.clone();
+        locked.status = FolderCompareStatus::Error;
+        let rows = folder_core::align_folder_trees(
+            &FolderScanNode::new_directory("", "l", open.metadata.clone(), vec![locked]),
+            &FolderScanNode::new_directory("", "r", open.metadata.clone(), vec![open]),
+        );
+        let source = crate::sources::CompareSource::Local(PathBuf::from("."));
+        let row = folder_compare_row(
+            &rows[0],
+            &source,
+            &source,
+            "l",
+            "r",
+            &FolderCompareCriteria::default(),
+        )
+        .unwrap();
+
+        assert!(row.unreadable);
+        assert_eq!(row.status, "Different", "still listed under differences");
+    }
+
+    #[test]
+    fn report_times_are_readable_not_epoch_seconds() {
+        let stamp = current_timestamp();
+        assert!(stamp.contains("UTC"), "{stamp}");
+        assert!(!stamp.chars().all(|c| c.is_ascii_digit()));
     }
 
     #[test]

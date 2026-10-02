@@ -723,6 +723,7 @@ export const deDE: LanguagePack = {
     'ui.font': 'Schrift',
     'ui.dragFoldersOrFilesOntoSessionIcon': 'Drop two files or folders here',
     'ui.minor': 'Minor',
+    'ui.unreadable': 'Nicht lesbar',
     'ui.unimportantDifferences': 'Unwichtige Unterschiede',
     'ui.orClickSessionIconToBegin': 'Or click a card below. Choose paths, then Compare.',
     'ui.paste': 'Paste',

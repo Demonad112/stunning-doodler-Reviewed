@@ -11,12 +11,12 @@ on:
         default: '1'
         type: string
       installer_artifact_retention_days:
-        description: Keep installer artifacts for this many days
+        description: Keep installer artifacts (DeepServer-windows) for this many days
         required: false
         default: '1'
         type: string
       initial_evidence_retention_days:
-        description: Keep initial release evidence artifacts for this many days
+        description: Keep checksum and other leftover release artifacts for this many days
         required: false
         default: '1'
         type: string
@@ -224,8 +224,8 @@ jobs:
           }
 
           function isInstallerArtifact(name) {
-            return /\.(dmg|deb|rpm|msi|appimage|exe)$/i.test(name) ||
-              /installer|tauri-bundle|opendiff|nsis|setup-bundle|appbundle/i.test(name)
+            return /\.(msi|exe|zip)$/i.test(name) ||
+              /deepserver|installer|tauri-bundle|nsis|setup-bundle/i.test(name)
           }
 
           function isEvidenceArtifact(name) {

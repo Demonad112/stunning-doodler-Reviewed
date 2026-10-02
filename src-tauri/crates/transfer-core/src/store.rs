@@ -228,6 +228,30 @@ pub fn prune_runs(
     result
 }
 
+/// Marker in the runs folder holding when the runs were last pruned (ms since the epoch).
+const PRUNE_MARKER: &str = ".last-prune";
+/// The automatic clean-up at startup runs at most this often.
+pub const STARTUP_PRUNE_EVERY_MS: u64 = 86_400_000;
+
+/// True when the runs haven't been pruned in the last `every_ms`, or the marker is missing or
+/// unreadable, or the clock went back.
+pub fn prune_due(root: &Path, now: u64, every_ms: u64) -> bool {
+    let last = fs::read_to_string(root.join(PRUNE_MARKER))
+        .ok()
+        .and_then(|text| text.trim().parse::<u64>().ok());
+    match last {
+        Some(last) if last <= now => now - last >= every_ms,
+        _ => true,
+    }
+}
+
+/// Records that the runs were pruned at `now`, for [`prune_due`].
+pub fn mark_pruned(root: &Path, now: u64) {
+    if fs::create_dir_all(root).is_ok() {
+        let _ = fs::write(root.join(PRUNE_MARKER), now.to_string());
+    }
+}
+
 fn folder_size(path: &Path) -> u64 {
     let Ok(entries) = fs::read_dir(path) else {
         return 0;
@@ -372,6 +396,28 @@ mod tests {
         assert!(root.join(&recent[1]).exists());
         assert!(!root.join(&recent[2]).exists(), "beyond the newest 2");
         assert!(root.join("not-a-run").exists());
+    }
+
+    #[test]
+    fn startup_prune_runs_at_most_once_a_day() {
+        let dir = TempDir::new("store-prune-due");
+        let root = dir.path("runs");
+        let day = 86_400_000;
+        let now = 1_000 * day;
+        assert!(prune_due(&root, now, day), "never pruned");
+
+        mark_pruned(&root, now);
+        assert!(!prune_due(&root, now + day - 1, day));
+        assert!(prune_due(&root, now + day, day));
+        assert!(prune_due(&root, now - 1, day), "the clock went back");
+
+        fs::write(root.join(PRUNE_MARKER), "garbage").unwrap();
+        assert!(prune_due(&root, now, day), "unreadable marker");
+
+        mark_pruned(&root, now);
+        assert!(list_runs(&root).is_empty(), "the marker is not a run");
+        assert_eq!(prune_runs(&root, 90, 200, now, &|_| false).removed, 0);
+        assert!(root.join(PRUNE_MARKER).exists());
     }
 
     #[test]

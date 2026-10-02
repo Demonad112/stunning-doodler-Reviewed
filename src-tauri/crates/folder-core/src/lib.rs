@@ -445,6 +445,15 @@ pub fn classify_folder_alignment_with_options(
     right: Option<&FolderScanNode>,
     options: &FolderCompareOptions,
 ) -> FolderCompareStatus {
+    // Only collecting scans produce Error nodes (a folder that couldn't be read): keep that, or the
+    // row would claim Same or Different without its contents having been compared.
+    if [left, right]
+        .into_iter()
+        .flatten()
+        .any(|node| node.status == FolderCompareStatus::Error)
+    {
+        return FolderCompareStatus::Error;
+    }
     match (left, right) {
         (Some(_), None) => FolderCompareStatus::LeftOnly,
         (None, Some(_)) => FolderCompareStatus::RightOnly,
@@ -2108,6 +2117,52 @@ mod tests {
         assert!(is_at_or_under("a/b/c.txt", "a/b"));
         assert!(!is_at_or_under("a/bc", "a/b"));
         assert!(!is_at_or_under("a", "a/b"));
+    }
+
+    #[test]
+    fn an_unreadable_folder_stays_an_error_after_alignment() {
+        let folder = |name: &str| {
+            FolderScanNode::new_directory(
+                name,
+                name,
+                metadata(VfsEntryKind::Directory, name, None, 0),
+                Vec::new(),
+            )
+        };
+        let root = |children: Vec<FolderScanNode>| {
+            FolderScanNode::new_directory(
+                "",
+                "root",
+                metadata(VfsEntryKind::Directory, "root", None, 0),
+                children,
+            )
+        };
+        let mut locked = folder("locked");
+        locked.status = FolderCompareStatus::Error;
+        let mut locked_alone = folder("locked-alone");
+        locked_alone.status = FolderCompareStatus::Error;
+        let left = root(vec![locked, folder("open"), locked_alone]);
+        let right = root(vec![folder("locked"), folder("open")]);
+
+        let aligned = align_folder_trees(&left, &right);
+        let status = |path: &str| {
+            let row = aligned
+                .iter()
+                .find(|row| row.relative_path == path)
+                .unwrap();
+            row.left
+                .as_ref()
+                .or(row.right.as_ref())
+                .unwrap()
+                .status
+                .clone()
+        };
+
+        assert_eq!(status("locked"), FolderCompareStatus::Error);
+        assert_eq!(status("locked-alone"), FolderCompareStatus::Error);
+        assert_eq!(status("open"), FolderCompareStatus::Same);
+        let report = build_folder_report_model(&aligned, &FolderCompareOptions::default(), true);
+        assert_eq!(report.summary.error, 2);
     }
 
     #[test]

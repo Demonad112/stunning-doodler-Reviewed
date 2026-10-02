@@ -702,6 +702,7 @@ export const koKR: LanguagePack = {
     'ui.font': '글꼴',
     'ui.dragFoldersOrFilesOntoSessionIcon': 'Drop two files or folders here',
     'ui.minor': 'Minor',
+    'ui.unreadable': '읽을 수 없음',
     'ui.unimportantDifferences': '중요하지 않은 차이',
     'ui.orClickSessionIconToBegin': 'Or click a card below. Choose paths, then Compare.',
     'ui.paste': 'Paste',

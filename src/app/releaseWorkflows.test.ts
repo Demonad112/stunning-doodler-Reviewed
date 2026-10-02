@@ -58,6 +58,15 @@ describe('release workflows', () => {
     expect(on).not.toContain('push:')
   })
 
+  it('prunes the DeepServer installer artifact with the installer retention', () => {
+    const prune = readWorkflow('prune-storage.yml')
+    const build = readWorkflow('build-windows.yml')
+
+    expect(build).toContain('name: DeepServer-windows')
+    expect(prune).toMatch(/function isInstallerArtifact[\s\S]*deepserver/)
+    expect(prune).not.toContain('opendiff')
+  })
+
   it('signs only when secrets are configured', () => {
     const sign = readFileSync(resolve(process.cwd(), 'scripts/windows/sign.ps1'), 'utf8')
 
