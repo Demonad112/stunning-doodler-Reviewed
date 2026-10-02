@@ -148,6 +148,8 @@ describe('packagingConfig', () => {
       expect(hooks).toContain(`${String.raw`Software\Classes\Directory\shell`}\\${key}`)
     }
     expect(hooks).toContain('--shell-compare --select-left')
+    // rc1/rc2 shipped the CLI as open-diff-cli.exe; in-place upgrades must remove it.
+    expect(hooks).toContain(String.raw`Delete "$INSTDIR\open-diff-cli.exe"`)
     // Copy with verification opens the Transfer Monitor on a folder or a whole drive.
     for (const root of ['Directory', 'Drive']) {
       const key = `Software\\Classes\\${root}\\shell\\DeepServerCopyVerify`
