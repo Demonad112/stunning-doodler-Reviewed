@@ -8,17 +8,15 @@ Ship DeepServer 1.0.0: finish the rc fixes below, hands-on test, then tag `v1.0.
 
 ## State
 
-- `main` at `bb159cb` (PR #20 merge).
+- `main` at `8b3f777` (PR #21 merge: rc1/rc2 `open-diff-cli.exe` removed on upgrade, `docs/install.md` fixes).
 - v1.0.0-rc3 (`bc3d3e8`) published as a pre-release, 4 assets, checksums OK (`scripts/gh-status.sh release v1.0.0-rc3`).
 - Session tooling PR (gh-status, prepush, ci-watch, `/release-rc`, `/handoff`, Repo maintenance workflow) on `claude/funny-carson-d84a60`.
 
 ## Next
 
 1. Merge the tooling PR, then run **Actions → Repo maintenance** with `dry_run: true`, check the list, rerun with `dry_run: false`.
-2. Installer upgrade leftover: the old `open-diff-cli.exe` is probably not removed when upgrading from rc1/rc2. Reproduce in `Test-Installer.ps1`, fix in the NSIS hooks.
-3. `docs/install.md`: the offline installer is ~205 MB larger (213 vs 8.4 MB), not "130 MB"; private-repo downloads need a GitHub login; list `%USERPROFILE%\.config\open-diff` as a data folder.
-4. Cut rc4 with `/release-rc v1.0.0-rc4`.
-5. Owner: hands-on laptop test of the installed rc4.
+2. Cut rc4 with `/release-rc v1.0.0-rc4`.
+3. Owner: hands-on laptop test of the installed rc4.
 
 ## Blocked / needs the owner
 
