@@ -1,4 +1,4 @@
-use folder_core::FolderAlignmentRow;
+use folder_core::{FolderAlignmentRow, FolderNodeKind};
 use logging_core::{LogDomain, LogStatus, StructuredLogEvent};
 use serde::{Deserialize, Serialize};
 use vfs_core::{VfsPath, VfsProvider};
@@ -644,11 +644,17 @@ fn row_is_same(row: &FolderAlignmentRow, time_rules: &SyncTimeRuleOptions) -> bo
         return false;
     };
 
-    timestamps_match(
-        left.metadata.modified_at_ms,
-        right.metadata.modified_at_ms,
-        time_rules,
-    )
+    // Matching times alone don't make two files the same: a mirror must still copy a file whose
+    // size differs (edited with its time preserved, or a truncated copy).
+    let sizes_match =
+        left.kind != FolderNodeKind::File || left.metadata.size == right.metadata.size;
+
+    sizes_match
+        && timestamps_match(
+            left.metadata.modified_at_ms,
+            right.metadata.modified_at_ms,
+            time_rules,
+        )
 }
 
 fn timestamps_match(
@@ -997,6 +1003,25 @@ mod tests {
                 direction: SyncDirection::LeftToRight,
                 source_path: "D:/left/different.txt".to_owned(),
                 target_path: "D:/right/different.txt".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn mirror_copies_a_file_whose_size_differs_even_when_times_match() {
+        let mut row = file_row("resized.txt", Some(1_000), Some(1_000));
+        if let Some(right) = row.right.as_mut() {
+            right.metadata.size += 1;
+        }
+
+        let plan = build_mirror_to_right_plan("D:/left", "D:/right", &[row]);
+
+        assert_eq!(
+            plan.items[0].action,
+            SyncAction::Copy {
+                direction: SyncDirection::LeftToRight,
+                source_path: "D:/left/resized.txt".to_owned(),
+                target_path: "D:/right/resized.txt".to_owned(),
             }
         );
     }
