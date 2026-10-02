@@ -28,6 +28,30 @@ describe('release workflows', () => {
     expect(release).not.toContain('tauri-action')
   })
 
+  it('can create a missing tag on a manual run, after the version check', () => {
+    const release = readWorkflow('release.yml')
+    const on = triggers(release)
+
+    expect(on).toMatch(
+      /create_tag:\n\s+description: .+\n\s+required: false\n\s+type: boolean\n\s+default: false/,
+    )
+    expect(on).toContain('target:')
+    const versionCheck = release.indexOf('needs version $want')
+    const createTag = release.indexOf('gh api "repos/$GH_REPO/git/refs"')
+
+    expect(versionCheck).toBeGreaterThan(0)
+    expect(createTag).toBeGreaterThan(versionCheck)
+  })
+
+  it('fixes up a release that already exists without unpublishing a final one', () => {
+    const release = readWorkflow('release.yml')
+
+    expect(release).toContain('edit+=(--prerelease)')
+    expect(release).toContain('--json body --jq .body')
+    expect(release).toContain('gh release edit "$TAG" "$' + '{edit[@]}"')
+    expect(release).not.toMatch(/gh release edit[^\n]*--draft/)
+  })
+
   it('builds both installer flavours, the portable zip and checksums in one shared workflow', () => {
     const build = readWorkflow('build-windows.yml')
 
