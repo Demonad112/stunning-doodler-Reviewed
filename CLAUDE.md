@@ -65,3 +65,23 @@ Grep for an existing mode (e.g. `version-compare`) and mirror it in:
   - `ci.yml` job `engine-upstream-tests` (only when `native/` changes): the upstream PS 7.6 suites and the stress test
   - `release.yml`: `v*` tags only (or a manual run for an existing tag); see `docs/releasing.md`. Optional signing through `scripts/windows/sign.ps1`
   - `prune-storage.yml`: manual only
+  - `repo-maintenance.yml`: manual only; deletes merged branches and/or one tag + release (`dry_run` defaults to true)
+
+## Session workflow (saves tokens)
+
+- **Start** by reading `docs/HANDOFF.md`. **End** each work block with `/handoff`. Reference notes go in the repo (`docs/`), never only in the scratchpad: containers restart.
+- **GitHub status**: `scripts/gh-status.sh release <tag> | run <id>|latest [wf] | runs [wf] | pr <n> | branches`. Prefer it over connector reads (releases, jobs, logs return 5–15k tokens).
+- **Waiting on CI**: spawn the `ci-watch` agent (Haiku) in the background with `pr <n>` or `run <id>`. Don't poll from the main context.
+- **PR watching**: the owner opts out. Don't call `subscribe_pr_activity` after creating a PR; use `ci-watch` instead.
+- **Releases**: `/release-rc <tag>` (dispatches `release.yml` with `create_tag: true`).
+- **Before every push**: `scripts/prepush.sh` (the `.claude/settings.json` hook runs it on `git push`; `PREPUSH_SKIP=1` in the command bypasses). Code under `#[cfg(windows)]` isn't seen by Linux clippy: re-read it by hand, or `PREPUSH_WINDOWS=1` where the msvc target is installed.
+- **Never merge on red.** A flaky test is a bug: find the race and fix it in the PR.
+
+### Cloud session limits (don't retry these)
+
+| Blocked                                          | Use instead                                                      |
+| ------------------------------------------------ | ---------------------------------------------------------------- |
+| `git push` of tags, `git push --delete`          | `release.yml` with `create_tag: true`; Repo maintenance workflow |
+| Delete branch / edit release (no connector tool) | Repo maintenance workflow; owner via GitHub UI                   |
+| `rm` with a relative glob after `cd`             | absolute paths, or `git rm` / `git clean -n` first               |
+| Editing `.github/workflows/*` in auto mode       | allowed in `.claude/settings.json`; if still refused, ask once   |

@@ -32,7 +32,11 @@ src-tauri/.tauri/
 src-tauri/gen/schemas/
 
 # Local Claude session data
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/skills/
+!.claude/agents/
+!.claude/hooks/
 
 # Native engine build output
 native/diskusage/build/
