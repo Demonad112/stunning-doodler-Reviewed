@@ -25,6 +25,7 @@ export default tseslint.config(
       'coverage/**',
       'native/**',
       'docs/history/**',
+      'V2.0/**',
       '*.config.*.timestamp-*',
     ],
   },
