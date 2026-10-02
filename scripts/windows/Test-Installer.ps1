@@ -1,5 +1,6 @@
-# Silent install / uninstall smoke test for a DeepServer setup.exe (standard or offline flavour).
-# Installs with /S, checks the files and the HKLM Explorer menu keys, uninstalls with /S and waits for the cleanup.
+# Silent install / upgrade / uninstall smoke test for a DeepServer setup.exe (standard or offline flavour).
+# Installs with /S, checks the files and the HKLM Explorer menu keys, installs again over a planted rc1/rc2 leftover
+# (open-diff-cli.exe) to check the in-place upgrade removes it, then uninstalls with /S and waits for the cleanup.
 # Needs an elevated shell (the installer is per-machine). Used by .github/workflows/build-windows.yml.
 param(
   [Parameter(Mandatory = $true)]
@@ -10,18 +11,28 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $setupPath = (Resolve-Path -LiteralPath $Setup).Path
-Write-Output "Installing $setupPath"
-$p = Start-Process $setupPath -ArgumentList '/S' -PassThru
-if (-not $p.WaitForExit($TimeoutSeconds * 1000)) { throw 'installer timed out' }
-if ($p.ExitCode -ne 0) { throw "installer exited with $($p.ExitCode)" }
-
 $installDir = Join-Path $env:ProgramFiles 'DeepServer'
 $exe = Join-Path $installDir 'DeepServer.exe'
 $engine = Join-Path $installDir 'deepserver-diskusage.exe'
 $cli = Join-Path $installDir 'deepserver-cli.exe'
-foreach ($file in $exe, $engine, $cli) {
-  if (-not (Test-Path -LiteralPath $file)) { throw "missing $file" }
+$oldCli = Join-Path $installDir 'open-diff-cli.exe'
+
+function Install-DeepServer {
+  $p = Start-Process $setupPath -ArgumentList '/S' -PassThru
+  if (-not $p.WaitForExit($TimeoutSeconds * 1000)) { throw 'installer timed out' }
+  if ($p.ExitCode -ne 0) { throw "installer exited with $($p.ExitCode)" }
+  foreach ($file in $exe, $engine, $cli) {
+    if (-not (Test-Path -LiteralPath $file)) { throw "missing $file" }
+  }
 }
+
+Write-Output "Installing $setupPath"
+Install-DeepServer
+
+Write-Output 'Upgrading in place over an rc1/rc2 leftover'
+Copy-Item -LiteralPath $cli -Destination $oldCli
+Install-DeepServer
+if (Test-Path -LiteralPath $oldCli) { throw "upgrade left $oldCli behind" }
 
 $keys = @(
   'HKLM:\Software\Classes\*\shell\DeepServer',
@@ -49,8 +60,12 @@ $p = Start-Process (Join-Path $installDir 'uninstall.exe') -ArgumentList '/S' -P
 $p.WaitForExit($TimeoutSeconds * 1000) | Out-Null
 # The NSIS uninstaller re-launches itself from %TEMP%, so poll for the cleanup.
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-while ((Test-Path -LiteralPath $exe) -or (Test-Path -LiteralPath $engine) -or (Test-Path -LiteralPath $cli) -or @($keys | Where-Object { Test-Path -LiteralPath $_ }).Count) {
-  if ((Get-Date) -gt $deadline) { throw 'uninstall left files or menu keys behind' }
+while ((Test-Path -LiteralPath $installDir) -or @($keys | Where-Object { Test-Path -LiteralPath $_ }).Count) {
+  if ((Get-Date) -gt $deadline) {
+    $left = @(Get-ChildItem -LiteralPath $installDir -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object FullName)
+    $left += @($keys | Where-Object { Test-Path -LiteralPath $_ })
+    throw "uninstall left files or menu keys behind: $($left -join ', ')"
+  }
   Start-Sleep -Seconds 2
 }
-Write-Output "install/uninstall OK: $(Split-Path -Leaf $setupPath)"
+Write-Output "install/upgrade/uninstall OK: $(Split-Path -Leaf $setupPath)"
