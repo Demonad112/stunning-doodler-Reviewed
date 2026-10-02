@@ -761,6 +761,18 @@ mod tests {
     #[cfg(windows)]
     const FAKE_HEADER: &str = "echo Folder,Change,Baseline Size (bytes),Current Size (bytes),Size Change (bytes),Baseline Files,Current Files,Files Change> \"%~4\"";
 
+    /// Tests that run a comparison write `deepserver-compare-<pid>-*` files in the shared temp folder.
+    /// They run one at a time, or one test's leftover check sees another's file still in use.
+    #[cfg(windows)]
+    static COMPARE_FILES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[cfg(windows)]
+    fn compare_files_lock() -> std::sync::MutexGuard<'static, ()> {
+        COMPARE_FILES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     #[cfg(windows)]
     fn leftover_compare_files() -> usize {
         let prefix = format!("deepserver-compare-{}-", std::process::id());
@@ -774,6 +786,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn compare_returns_the_filter_warning_and_cleans_up() {
+        let _compare_files = compare_files_lock();
         let dir = std::env::temp_dir().join(format!("diskusage-core-warn-{}", std::process::id()));
         let engine = fake_engine(
             &dir,
@@ -806,6 +819,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn compare_without_a_warning_note_has_none() {
+        let _compare_files = compare_files_lock();
         let dir =
             std::env::temp_dir().join(format!("diskusage-core-nowarn-{}", std::process::id()));
         let engine = fake_engine(&dir, &format!("{FAKE_HEADER}\r\nexit /b 0"));
@@ -857,6 +871,7 @@ mod tests {
     #[test]
     #[ignore = "needs the built engine; set DISKUSAGE_ENGINE"]
     fn real_engine_reports_a_new_folder_between_snapshots() {
+        let _compare_files = compare_files_lock();
         let engine = PathBuf::from(std::env::var("DISKUSAGE_ENGINE").expect("DISKUSAGE_ENGINE"));
         let dir = std::env::temp_dir().join(format!("diskusage-core-real-{}", std::process::id()));
         let scanned = dir.join("data");
