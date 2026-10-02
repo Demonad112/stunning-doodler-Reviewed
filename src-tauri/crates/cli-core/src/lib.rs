@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use shared_types::TextDiffRequest;
+use std::fs::File;
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -379,6 +380,7 @@ pub fn compare_folders(
     left: impl AsRef<Path>,
     right: impl AsRef<Path>,
 ) -> Result<CliFolderCompareResult, CliRuntimeError> {
+    let (left_root, right_root) = (left.as_ref().to_path_buf(), right.as_ref().to_path_buf());
     let cancel_token = job_core::CancellationToken::default();
     let options = folder_core::FolderCompareOptions::default();
     let (left, left_unreadable) =
@@ -407,11 +409,42 @@ pub fn compare_folders(
                 && folder_core::is_at_or_under(&row.relative_path, &folder.relative_path)
         })
     });
-    let report = folder_core::build_folder_report_model(
+    let mut report = folder_core::build_folder_report_model(
         &rows,
         &folder_core::FolderCompareOptions::default(),
         true,
     );
+    // The report's statuses come from metadata (size); the default options also ask for a
+    // content compare, so files it calls Same are read and moved to Different or Error.
+    for row in &rows {
+        let (Some(left_node), Some(_)) = (&row.left, &row.right) else {
+            continue;
+        };
+        if left_node.kind != folder_core::FolderNodeKind::File
+            || folder_core::classify_folder_alignment(row.left.as_ref(), row.right.as_ref())
+                != folder_core::FolderCompareStatus::Same
+        {
+            continue;
+        }
+        let path = &row.relative_path;
+        let status = File::open(left_root.join(path))
+            .and_then(|l| Ok((l, File::open(right_root.join(path))?)))
+            .and_then(|(l, r)| folder_core::compare_binary_streams(l, r, 1 << 20))
+            .map_or(folder_core::FolderCompareStatus::Error, |result| {
+                result.status
+            });
+        match status {
+            folder_core::FolderCompareStatus::Same => {}
+            folder_core::FolderCompareStatus::Error => {
+                report.summary.same -= 1;
+                report.summary.error += 1;
+            }
+            _ => {
+                report.summary.same -= 1;
+                report.summary.different += 1;
+            }
+        }
+    }
     let has_difference = report.summary.different > 0
         || report.summary.left_only > 0
         || report.summary.right_only > 0
@@ -1998,13 +2031,16 @@ mod tests {
         fs::write(left.join("changed.txt"), "left").expect("fixture should be writable");
         fs::write(right.join("changed.txt"), "right").expect("fixture should be writable");
         fs::write(left.join("left-only.txt"), "left").expect("fixture should be writable");
+        // Same size, different bytes: only a content compare catches it.
+        fs::write(left.join("same-size.txt"), "aaaa").expect("fixture should be writable");
+        fs::write(right.join("same-size.txt"), "bbbb").expect("fixture should be writable");
 
         let result = compare_folders(&left, &right).expect("folder comparison should run");
 
         assert_eq!(result.exit_code, CliExitCode::Different);
-        assert_eq!(result.total, 3);
+        assert_eq!(result.total, 4);
         assert_eq!(result.same, 1);
-        assert_eq!(result.different, 1);
+        assert_eq!(result.different, 2);
         assert_eq!(result.left_only, 1);
         assert_eq!(result.right_only, 0);
 
