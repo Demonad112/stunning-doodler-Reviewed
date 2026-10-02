@@ -46,6 +46,17 @@ Follow `docs/install.md` on a clean machine:
 - open the app, run a Disk Usage scan and a Transfer Monitor copy, and use the Explorer menus
 - silent-uninstall, then check that `C:\Program Files\DeepServer` and the Explorer menus are gone
 
+## First release (v1.0.0-rc1): what to watch
+
+The release workflow had never run before 1.0.0-rc1. The tag check and the release notes were dry-run locally, and actionlint is clean. Anything that only happens on GitHub (the hand-off between jobs, the artifact download, `gh release`) first runs for real here.
+
+1. Push the tag from a clone with push rights, on the `main` commit you want to ship. Use the steps in section 2. Don't create the release in the GitHub UI first: the workflow would then only upload assets, and it would keep the UI's draft and pre-release settings.
+2. **Verify tag and version** should log `Releasing v1.0.0-rc1 (version 1.0.0)`.
+3. **Build** takes about 25 minutes. Without signing secrets it logs a notice that signing is off. Both `Test-Installer.ps1` steps must pass.
+4. **Publish GitHub Release** lists `out/` and passes `sha256sum -c`. It then creates a **pre-release** with four assets and a notes table that names the same files.
+5. Download the four files and check them: `sha256sum -c SHA256SUMS.txt` (or `Get-FileHash` on Windows).
+6. If only Publish failed, fix it on `main`. Then re-run with **Actions → Release → Run workflow**, tag `v1.0.0-rc1`. A re-run replaces the assets, and the tag doesn't need to move. A failed Verify or Build that needs a code change needs a new tag (`v1.0.0-rc2`).
+
 ## Code signing (optional)
 
 Without signing, everything still builds; SmartScreen warns on first run and the workflow logs a notice. To sign, add **one** of these sets of repository secrets (**Settings → Secrets and variables → Actions**). The names are the same ones altWinDirStat used.

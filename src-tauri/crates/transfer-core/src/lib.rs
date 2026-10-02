@@ -345,7 +345,9 @@ pub fn user_name() -> String {
 #[cfg(test)]
 pub(crate) mod test_support {
     use std::fs;
-    use std::path::{Path, PathBuf};
+    #[cfg(windows)]
+    use std::path::Path;
+    use std::path::PathBuf;
 
     /// A temp folder removed on drop.
     pub struct TempDir(PathBuf);

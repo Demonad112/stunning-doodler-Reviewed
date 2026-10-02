@@ -16,3 +16,6 @@ serde.workspace = true
 session-core = { path = "../session-core" }
 sync-core = { path = "../sync-core" }
 shared-types = { path = "../shared-types" }
+
+[dev-dependencies]
+serde_json.workspace = true

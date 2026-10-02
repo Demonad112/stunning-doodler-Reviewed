@@ -540,7 +540,9 @@ fn probe_write(destination: &Path) -> std::io::Result<()> {
 mod tests {
     use super::*;
     use crate::test_support::TempDir;
-    use crate::{ItemStatus, NullSink, VerifyLevel};
+    #[cfg(windows)]
+    use crate::ItemStatus;
+    use crate::{NullSink, VerifyLevel};
 
     pub(crate) fn settings(source: &Path, destination: &Path) -> TransferSettings {
         TransferSettings {

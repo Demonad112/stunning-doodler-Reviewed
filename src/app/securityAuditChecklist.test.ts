@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const checklistPath = resolve(process.cwd(), 'docs/安全操作审计清单.md')
+const checklistPath = resolve(process.cwd(), 'docs/history/opendiff/安全操作审计清单.md')
 
 describe('security audit checklist documentation', () => {
   it('defines gates for destructive actions, credentials, scripts, and external commands', () => {

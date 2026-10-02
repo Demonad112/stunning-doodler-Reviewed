@@ -2,7 +2,7 @@ use cli_core::{
     automerge_text_files, build_git_difftool_config, build_git_mergetool_config,
     build_svn_diff_config, cli_exit_code_value, cli_help_text, compare_folders, compare_text_files,
     describe_open_compare, open_named_session, parse_cli_args, preview_folder_sync_cli,
-    write_git_tool_config, write_svn_diff_config, CliCommand, CliExitCode,
+    write_git_tool_config, write_svn_diff_config, CliCommand, CliExitCode, CliUnreadableFolder,
 };
 use shell_core::{ShellCompareOutcome, ShellCompareSessionType, ShellCompareStateStore};
 
@@ -69,6 +69,7 @@ fn main() {
                             result.right_only,
                             result.error
                         );
+                        print_unreadable(&result.unreadable);
                         std::process::exit(cli_exit_code_value(result.exit_code));
                     }
                     ShellCompareSessionType::Text | ShellCompareSessionType::Hex => {
@@ -238,6 +239,7 @@ fn main() {
                     result.error
                 );
             }
+            print_unreadable(&result.unreadable);
             std::process::exit(cli_exit_code_value(result.exit_code));
         }
         CliCommand::OpenSession { store_root, name } => {
@@ -339,6 +341,16 @@ fn main() {
     }
 
     std::process::exit(cli_exit_code_value(invocation.exit_code));
+}
+
+/// Folders the compare couldn't read, on stderr so they show even with `--quiet`.
+fn print_unreadable(unreadable: &[CliUnreadableFolder]) {
+    for folder in unreadable {
+        eprintln!(
+            "unreadable ({}): {} - {}",
+            folder.side, folder.relative_path, folder.message
+        );
+    }
 }
 
 fn shell_compare_state_path() -> std::path::PathBuf {

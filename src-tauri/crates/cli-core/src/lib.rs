@@ -154,6 +154,17 @@ pub struct CliFolderCompareResult {
     pub left_only: usize,
     pub right_only: usize,
     pub error: usize,
+    /// Folders that couldn't be read (E11): listed and counted in `error`, their contents skipped.
+    #[serde(default)]
+    pub unreadable: Vec<CliUnreadableFolder>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CliUnreadableFolder {
+    pub side: String,
+    pub relative_path: String,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -361,14 +372,41 @@ pub fn compare_text_files(
     })
 }
 
+/// Compares two folders. Like the GUI Folder Compare (E11), a folder below either root that can't
+/// be read is listed in `unreadable` and the compare goes on; an unreadable root is still an error.
+/// Sync stays strict: see [`preview_folder_sync_cli`].
 pub fn compare_folders(
     left: impl AsRef<Path>,
     right: impl AsRef<Path>,
 ) -> Result<CliFolderCompareResult, CliRuntimeError> {
     let cancel_token = job_core::CancellationToken::default();
-    let left = folder_core::scan_local_folder(left, &cancel_token).map_err(runtime_error)?;
-    let right = folder_core::scan_local_folder(right, &cancel_token).map_err(runtime_error)?;
-    let rows = folder_core::align_folder_trees(&left, &right);
+    let options = folder_core::FolderCompareOptions::default();
+    let (left, left_unreadable) =
+        folder_core::scan_local_folder_collecting(left, &cancel_token, &options)
+            .map_err(runtime_error)?;
+    let (right, right_unreadable) =
+        folder_core::scan_local_folder_collecting(right, &cancel_token, &options)
+            .map_err(runtime_error)?;
+    let unreadable: Vec<CliUnreadableFolder> =
+        [("left", left_unreadable), ("right", right_unreadable)]
+            .into_iter()
+            .flat_map(|(side, entries)| {
+                entries.into_iter().map(move |entry| CliUnreadableFolder {
+                    side: side.to_owned(),
+                    relative_path: entry.relative_path,
+                    message: entry.message,
+                })
+            })
+            .collect();
+    let mut rows = folder_core::align_folder_trees(&left, &right);
+    // The other side's contents below an unreadable folder weren't compared: leave them out
+    // rather than report them as orphans. The folder's own row stays, with status Error.
+    rows.retain(|row| {
+        !unreadable.iter().any(|folder| {
+            row.relative_path != folder.relative_path
+                && folder_core::is_at_or_under(&row.relative_path, &folder.relative_path)
+        })
+    });
     let report = folder_core::build_folder_report_model(
         &rows,
         &folder_core::FolderCompareOptions::default(),
@@ -391,6 +429,7 @@ pub fn compare_folders(
         left_only: report.summary.left_only,
         right_only: report.summary.right_only,
         error: report.summary.error,
+        unreadable,
     })
 }
 
@@ -1963,6 +2002,68 @@ mod tests {
 
         fs::remove_dir_all(left).expect("fixture should be removable");
         fs::remove_dir_all(right).expect("fixture should be removable");
+    }
+
+    #[test]
+    fn folder_compare_results_list_unreadable_folders() {
+        let left = temp_dir_path("unreadable-json-left");
+        let right = temp_dir_path("unreadable-json-right");
+        fs::create_dir_all(&left).expect("fixture directory should be writable");
+        fs::create_dir_all(&right).expect("fixture directory should be writable");
+
+        let result = compare_folders(&left, &right).expect("folder comparison should run");
+        assert!(result.unreadable.is_empty());
+        assert_eq!(result.exit_code, CliExitCode::Success);
+
+        let json = serde_json::to_value(CliFolderCompareResult {
+            unreadable: vec![CliUnreadableFolder {
+                side: "left".to_owned(),
+                relative_path: "locked".to_owned(),
+                message: "Access is denied.".to_owned(),
+            }],
+            ..result
+        })
+        .expect("serializable");
+        assert_eq!(json["unreadable"][0]["relativePath"], "locked");
+
+        fs::remove_dir_all(left).expect("fixture should be removable");
+        fs::remove_dir_all(right).expect("fixture should be removable");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn folder_compare_keeps_going_past_an_unreadable_folder() {
+        let left = temp_dir_path("unreadable-left");
+        let right = temp_dir_path("unreadable-right");
+        for root in [&left, &right] {
+            fs::create_dir_all(root.join("locked")).expect("fixture directory should be writable");
+            fs::write(root.join("locked").join("inside.txt"), "x").expect("fixture");
+            fs::write(root.join("open.txt"), "same").expect("fixture should be writable");
+        }
+        let locked = left.join("locked");
+        let denied = std::process::Command::new("icacls")
+            .arg(&locked)
+            .args(["/deny", "*S-1-1-0:(RD)"])
+            .output()
+            .expect("icacls should run");
+        assert!(denied.status.success(), "icacls /deny failed");
+
+        let result = compare_folders(&left, &right);
+
+        let _ = std::process::Command::new("icacls")
+            .arg(&locked)
+            .args(["/remove:d", "*S-1-1-0"])
+            .output();
+        let _ = fs::remove_dir_all(&left);
+        let _ = fs::remove_dir_all(&right);
+        let result = result.expect("an unreadable subfolder doesn't stop the compare");
+        assert_eq!(result.exit_code, CliExitCode::Different);
+        assert_eq!(result.unreadable.len(), 1);
+        assert_eq!(result.unreadable[0].side, "left");
+        assert_eq!(result.unreadable[0].relative_path, "locked");
+        assert_eq!(result.error, 1);
+        assert_eq!(result.same, 1, "open.txt");
+        assert_eq!(result.right_only, 0, "locked/inside.txt is not an orphan");
     }
 
     #[test]

@@ -624,6 +624,7 @@ dependencies = [
  "merge-core",
  "script-core",
  "serde",
+ "serde_json",
  "session-core",
  "shared-types",
  "sync-core",

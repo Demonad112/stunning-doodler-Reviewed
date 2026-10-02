@@ -182,17 +182,15 @@ pub fn watch(
             } else {
                 options.reconcile_every
             },
-            files
-                .iter()
-                .filter(|file| file.track != Track::Arrived)
-                .count(),
+            files.len() - progress.files_done as usize,
         );
         if check_all || last_full_check.elapsed() >= interval {
             last_full_check = Instant::now();
-            dirty.extend(
-                (0..files.len()).filter(|&position| files[position].track != Track::Arrived),
-            );
+            dirty.extend(0..files.len());
         }
+        // Arrived is final: a later event on the same file (antivirus, a touched timestamp, the
+        // copier rewriting it) must not count it twice.
+        dirty.retain(|&position| files[position].track != Track::Arrived);
 
         for position in dirty {
             let before = files[position].track;
@@ -553,6 +551,42 @@ mod tests {
         });
 
         let summary = watch(&dir.path("runs"), &id, &fast(true), &control, &mut NullSink).unwrap();
+
+        assert_eq!(
+            summary.state,
+            RunState::Completed,
+            "finished before the watchdog"
+        );
+        assert_eq!((summary.totals.copied, summary.totals.not_copied), (2, 0));
+    }
+
+    #[test]
+    fn a_file_touched_again_after_arriving_is_counted_once() {
+        let dir = TempDir::new("watch-touched");
+        dir.write("src/a.txt", b"first");
+        dir.write("src/b.txt", b"second");
+        let id = watch_run(&dir, VerifyLevel::Hash);
+        let control = WatchControl::default();
+        watchdog(&control, 20);
+        let (src, dst) = (dir.path("src"), dir.path("dst"));
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(200));
+            fs::copy(src.join("a.txt"), dst.join("a.txt")).unwrap();
+            // Rewritten with the same content after it has arrived.
+            std::thread::sleep(Duration::from_millis(800));
+            fs::copy(src.join("a.txt"), dst.join("a.txt")).unwrap();
+            std::thread::sleep(Duration::from_millis(800));
+            fs::copy(src.join("b.txt"), dst.join("b.txt")).unwrap();
+        });
+
+        let summary = watch(
+            &dir.path("runs"),
+            &id,
+            &fast(false),
+            &control,
+            &mut NullSink,
+        )
+        .unwrap();
 
         assert_eq!(
             summary.state,
