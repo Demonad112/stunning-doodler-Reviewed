@@ -1635,6 +1635,7 @@ watch(
             />
           </div>
           <PathMetaFooter
+            hide-size
             :stamp="leftFileStamp"
             test-id="folder-sync-left-path-footer"
           />
@@ -1657,6 +1658,7 @@ watch(
             />
           </div>
           <PathMetaFooter
+            hide-size
             :stamp="rightFileStamp"
             test-id="folder-sync-right-path-footer"
           />
