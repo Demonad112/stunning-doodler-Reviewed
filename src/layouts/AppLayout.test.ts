@@ -1159,7 +1159,7 @@ describe('AppLayout command palette', () => {
       resolve(dirname(fileURLToPath(import.meta.url)), './AppLayout.vue'),
       'utf8',
     )
-    const menusButton = /\.menus button \{[^}]+\}/.exec(source)
+    const menusButton = /\.menus > \.menu-group > button \{[^}]+\}/.exec(source)
     const menuCommand = /\.menu-panel button,[\s\S]*?\.menu-panel \.menu-command \{[^}]+\}/.exec(
       source,
     )
@@ -1171,6 +1171,8 @@ describe('AppLayout command palette', () => {
     expect(menusButton?.[0]).toContain('height: 21.5px')
     expect(menusButton?.[0]).toContain('font-size: 12px')
     expect(menusButton?.[0]).not.toContain('height: 15px')
+    // The 9em cap is for the menu-bar titles only; on panel rows it cut labels to "T." / "Show ...".
+    expect(source).not.toMatch(/^[^{}\n]*\.menus button\s*\{/m)
     expect(menuCommand?.[0]).toContain('min-height: 21.5px')
     expect(menuCommand?.[0]).toContain('font-size: 12px')
   })
