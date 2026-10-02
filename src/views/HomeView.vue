@@ -64,7 +64,7 @@ type HomeLaunchType =
 type HomeTileGroupId = 'compare' | 'copy-sync' | 'disk'
 
 /** Home left tree under New (Text Edit is center-only). */
-type HomeTreeType = Exclude<HomeLaunchType, 'text-edit' | 'disk-usage' | 'transfer-monitor'>
+type HomeTreeType = Exclude<HomeLaunchType, 'text-edit'>
 
 interface QuickStartEntry extends SessionCatalogEntry {
   icon: LucideIcon
@@ -126,6 +126,8 @@ const homeTreeTypes: HomeTreeType[] = [
   'folder-compare',
   'folder-merge',
   'folder-sync',
+  'transfer-monitor',
+  'disk-usage',
   'text-compare',
   'text-merge',
   'hex-compare',

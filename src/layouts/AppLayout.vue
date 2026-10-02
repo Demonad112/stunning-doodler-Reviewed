@@ -2346,7 +2346,9 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   left: 0;
   z-index: 90;
   display: grid;
-  width: 240px;
+  width: max-content;
+  min-width: 240px;
+  max-width: calc(100vw - 16px);
   max-height: calc(100vh - 72px);
   padding: 2px;
   overflow: auto;
