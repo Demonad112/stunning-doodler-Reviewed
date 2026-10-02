@@ -1600,7 +1600,6 @@ async function runFolderCompare(): Promise<void> {
 
   folderCompareLoading.value = true
   folderCompareError.value = undefined
-  appendSessionLog(`${t('ui.username')}:`)
   if (leftRoot.value) {
     appendSessionLog(`Load ${leftRoot.value}`)
   }

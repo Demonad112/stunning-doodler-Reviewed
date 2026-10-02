@@ -768,7 +768,6 @@ function saveSessionLog(): void {
 async function previewSync(options?: { keepRunStatus?: boolean }): Promise<void> {
   previewLoading.value = true
   previewError.value = undefined
-  appendSessionLog(`${t('ui.username')}:`)
   if (leftPath.value && rightPath.value) {
     appendSessionLog(`Load comparison: ${leftPath.value} <-> ${rightPath.value}`)
   }
@@ -2031,7 +2030,7 @@ watch(
                 {{ $t('ui.reset') }}
               </button>
             </label>
-            <span>{{ row.sourcePath ?? '--' }}</span>
+            <span>{{ row.sourcePath ?? row.relativePath }}</span>
             <span>{{ row.targetPath ?? '--' }}</span>
             <span>{{ row.detail }}</span>
             <span :data-testid="`sync-row-status-${row.id}`">{{
