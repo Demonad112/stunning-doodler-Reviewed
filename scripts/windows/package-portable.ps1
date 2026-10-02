@@ -31,7 +31,7 @@ $appExe = Join-Path $releaseRoot "DeepServer.exe"
 if (-not (Test-Path -LiteralPath $appExe)) {
   $appExe = Join-Path $releaseRoot "open-diff-app.exe"
 }
-$cliExe = Join-Path $releaseRoot "open-diff-cli.exe"
+$cliExe = Join-Path $releaseRoot "deepserver-cli.exe"
 if (-not (Test-Path -LiteralPath $appExe)) {
   throw "Missing $appExe (build first or omit -SkipBuild)"
 }

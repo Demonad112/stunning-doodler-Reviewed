@@ -73,7 +73,7 @@ if command -v update-desktop-database >/dev/null 2>&1; then\n\
   update-desktop-database \"$apps_dir\" >/dev/null 2>&1 || true\n\
 fi\n\
 echo \"Installed $apps_dir/{desktop_id}.desktop\"\n\
-echo \"CLI: open-diff-cli shell-compare [--select-left] <path>\"\n\
+echo \"CLI: deepserver-cli shell-compare [--select-left] <path>\"\n\
 "
         )
     }
@@ -200,7 +200,7 @@ cat > \"$macos_dir/open-diff-compare\" <<APP\n\
 set -euo pipefail\n\
 APP_BIN={exec}\n\
 if [[ $# -eq 0 ]]; then\n\
-  echo \"Drop a file/folder on this app, or: open-diff-cli shell-compare <path>\" >&2\n\
+  echo \"Drop a file/folder on this app, or: deepserver-cli shell-compare <path>\" >&2\n\
   exit 2\n\
 fi\n\
 exec \"$APP_BIN\" --shell-compare \"$1\"\n\
@@ -209,7 +209,7 @@ chmod 755 \"$macos_dir/open-diff-compare\"\n\
 \n\
 echo \"Installed helper: $bin_dir/open-diff-shell-compare\"\n\
 echo \"Installed Open With app: $app_dir\"\n\
-echo \"CLI: open-diff-cli shell-compare [--select-left] <path>\"\n\
+echo \"CLI: deepserver-cli shell-compare [--select-left] <path>\"\n\
 "
         )
     }

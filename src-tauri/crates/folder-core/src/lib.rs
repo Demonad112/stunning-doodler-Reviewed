@@ -1290,6 +1290,15 @@ pub enum FolderScanError {
     Vfs(String),
 }
 
+impl std::fmt::Display for FolderScanError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FolderScanError::Cancelled => f.write_str("The scan was cancelled."),
+            FolderScanError::Vfs(message) => f.write_str(message),
+        }
+    }
+}
+
 pub fn scan_local_folder(
     root: impl AsRef<Path>,
     cancel_token: &job_core::CancellationToken,

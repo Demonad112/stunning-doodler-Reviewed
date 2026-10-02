@@ -835,7 +835,7 @@ export const zhTW: LanguagePack = {
     'ui.removeUnixShellIntegration': '移除殼層整合',
     'ui.unixShellHint':
       '在 Linux 安裝 .desktop「以其他程式開啟」項目；在 macOS 安裝 shell-compare 助手與 Open With 應用程式。複用 CLI --shell-compare。',
-    'ui.unixShellCliHint': '也可使用：open-diff-cli shell-compare [--select-left] <path>',
+    'ui.unixShellCliHint': '也可使用：deepserver-cli shell-compare [--select-left] <path>',
     'ui.registerShellExtension': '安裝檔案總管右鍵功能表',
     'ui.installExplorerContextMenu': '安裝檔案總管右鍵功能表',
     'ui.removeExplorerContextMenu': '移除檔案總管右鍵功能表',

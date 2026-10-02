@@ -834,7 +834,7 @@ export const zhCN: LanguagePack = {
     'ui.removeUnixShellIntegration': '移除外壳集成',
     'ui.unixShellHint':
       'Linux 安装 .desktop Open With 条目；macOS 安装 shell-compare 助手与 Open With 应用桩。复用 CLI --shell-compare。',
-    'ui.unixShellCliHint': '也可使用：open-diff-cli shell-compare [--select-left] <path>',
+    'ui.unixShellCliHint': '也可使用：deepserver-cli shell-compare [--select-left] <path>',
     'ui.registerShellExtension': '安装资源管理器右键菜单',
     'ui.installExplorerContextMenu': '安装资源管理器右键菜单',
     'ui.removeExplorerContextMenu': '移除资源管理器右键菜单',

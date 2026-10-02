@@ -870,7 +870,8 @@ export const esES: LanguagePack = {
     'ui.removeUnixShellIntegration': 'Quitar integración de shell',
     'ui.unixShellHint':
       'Instala una entrada .desktop Abrir con en Linux, o un ayudante shell-compare y una app Abrir con en macOS. Reutiliza CLI --shell-compare.',
-    'ui.unixShellCliHint': 'También disponible: open-diff-cli shell-compare [--select-left] <path>',
+    'ui.unixShellCliHint':
+      'También disponible: deepserver-cli shell-compare [--select-left] <path>',
     'ui.registerShellExtension': 'Instalar menú contextual del Explorador',
     'ui.installExplorerContextMenu': 'Instalar menú contextual del Explorador',
     'ui.removeExplorerContextMenu': 'Quitar menú contextual del Explorador',

@@ -70,7 +70,7 @@ name = "open-diff-app"
 path = "src/main.rs"
 
 [[bin]]
-name = "open-diff-cli"
+name = "deepserver-cli"
 path = "src/cli.rs"
 
 [build-dependencies]
