@@ -107,7 +107,7 @@ describe('shell chrome density', () => {
     expect(source).toMatch(/data-menu-sep="capture-1to1-residual"/)
     expect(source).toMatch(/\.menu-separator\s*\{[\s\S]*?margin:\s*2px 4px/)
     expect(source).toMatch(
-      /data-menu-chrome='capture-1to1-residual'\] \.menus button\s*\{[\s\S]*?height:\s*21\.5px/,
+      /data-menu-chrome='capture-1to1-residual'\] \.menus > \.menu-group > button\s*\{[\s\S]*?height:\s*21\.5px/,
     )
     expect(source).toMatch(/menus button\.active\s*\{[\s\S]*?background:\s*var\(--ds-fill-c8e4ff\)/)
   })

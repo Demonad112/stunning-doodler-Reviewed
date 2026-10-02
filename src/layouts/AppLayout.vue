@@ -2413,7 +2413,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   background: var(--ds-fill-c0c0c0);
 }
 
-.menu-bar[data-menu-chrome='capture-1to1-residual'] .menus button {
+.menu-bar[data-menu-chrome='capture-1to1-residual'] .menus > .menu-group > button {
   height: 21.5px;
   color: var(--ds-text-000000);
   font-size: 12px;
@@ -2545,7 +2545,7 @@ function navigationGroup(type: SessionType): NavigationItem['group'] {
   cursor: pointer;
 }
 
-.menus button {
+.menus > .menu-group > button {
   max-width: 9em;
   height: 21.5px;
   padding: 0 8px;
@@ -3355,7 +3355,7 @@ html[data-show-sidebar='1'] .sidebar {
   background: var(--ds-fill-ffffff);
 }
 
-.app-shell-dense-chrome .menus button {
+.app-shell-dense-chrome .menus > .menu-group > button {
   height: 21.5px;
   padding: 0 8px;
   font-size: 12px;

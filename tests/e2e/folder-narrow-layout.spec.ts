@@ -79,3 +79,23 @@ test('home Session menu panel is hit-testable after click', async ({ page }) => 
 
   expect(hit).toBe(true)
 })
+
+test('folder compare View menu rows show full labels and shortcuts', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 800 })
+  await page.goto('/compare/folder')
+  await page.getByTestId('menu-view').click()
+  await expect(page.getByTestId('menu-panel')).toBeVisible()
+
+  const clipped = await page.evaluate(() =>
+    Array.from(
+      document.querySelectorAll<HTMLElement>(
+        '[data-testid="menu-panel"] .menu-command-label, [data-testid="menu-panel"] .menu-command-shortcut',
+      ),
+    )
+      .filter((el) => el.scrollWidth > el.clientWidth + 1)
+      .map((el) => el.textContent),
+  )
+
+  expect(clipped).toEqual([])
+  await page.screenshot({ path: 'test-results/folder-view-menu.png' })
+})
