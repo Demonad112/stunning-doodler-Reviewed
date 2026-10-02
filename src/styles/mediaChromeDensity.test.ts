@@ -42,7 +42,7 @@ describe('media compare chrome density', () => {
     expect(css).toMatch(/\.media-compare-view \.media-scrub-row\s*\{[\s\S]*?min-height:\s*26px/)
     expect(css).toMatch(/\.media-compare-view \.media-scrub-row\s*\{[\s\S]*?gap:\s*4px/)
     expect(css).toMatch(
-      /\.media-compare-view \.media-scrub-row\s*\{[\s\S]*?border-top:\s*1px solid #c0c0c0/,
+      /\.media-compare-view \.media-scrub-row\s*\{[\s\S]*?border-top:\s*1px solid var\(--ds-line-c0c0c0\)/,
     )
     expect(css).toMatch(/\.media-compare-view \.media-scrub-row button\s*\{[\s\S]*?height:\s*26px/)
     expect(css).toMatch(/\.media-compare-view \.media-scrub-row button\s*\{[\s\S]*?border:\s*0/)
@@ -57,7 +57,7 @@ describe('media compare chrome density', () => {
     expect(mediaView).toMatch(/\.media-scrub-play\s*\{[\s\S]*?border:\s*0/)
     expect(mediaView).toMatch(/\.media-scrub-play\s*\{[\s\S]*?background:\s*transparent/)
     expect(mediaView).toMatch(/\.media-scrub\s*\{[\s\S]*?height:\s*19\.5px/)
-    expect(mediaView).toMatch(/\.media-scrub\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(mediaView).toMatch(/\.media-scrub\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
     expect(mediaView).toMatch(/\.path-side-footer\s*\{[\s\S]*?line-height:\s*16px/)
     expect(mediaView).toMatch(/from '@lucide\/vue'/)
     expect(mediaView).toMatch(/:size="12"/)
@@ -101,7 +101,7 @@ describe('media path scrub chrome residual', () => {
     expect(mediaView).toMatch(/data-secondary-density="capture-1to1"/)
     expect(mediaView).toMatch(/data-testid="media-scrub-chrome"/)
     expect(css).toMatch(
-      /\.media-compare-view \.media-path-meta-strip[\s\S]*?border:\s*1px solid #c0c0c0/,
+      /\.media-compare-view \.media-path-meta-strip[\s\S]*?border:\s*1px solid var\(--ds-line-c0c0c0\)/,
     )
     expect(css).toMatch(
       /\.media-compare-view \.media-path-panel input\s*\{[\s\S]*?height:\s*16\.5px/,
@@ -117,12 +117,16 @@ describe('media path scrub chrome residual', () => {
     expect(mediaView).toMatch(/media-path-fields/)
     expect(mediaView).toMatch(/media-path-meta-strip/)
     expect(mediaView).toMatch(/\.media-path-fields\s*\{[\s\S]*?min-height:\s*22px/)
-    expect(mediaView).toMatch(/\.media-path-meta-strip\s*\{[\s\S]*?background:\s*#f0f0f0/)
-    expect(mediaView).toMatch(/\.media-scrub-row\s*\{[\s\S]*?background:\s*#f0f0f0/)
-    expect(mediaView).toMatch(/\.media-scrub-row\s*\{[\s\S]*?border-top:\s*1px solid #c0c0c0/)
+    expect(mediaView).toMatch(
+      /\.media-path-meta-strip\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+    )
+    expect(mediaView).toMatch(/\.media-scrub-row\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
+    expect(mediaView).toMatch(
+      /\.media-scrub-row\s*\{[\s\S]*?border-top:\s*1px solid var\(--ds-line-c0c0c0\)/,
+    )
     expect(css).toMatch(/\.media-compare-view \.media-path-fields\s*\{[\s\S]*?min-height:\s*22px/)
     expect(css).toMatch(
-      /\.media-compare-view \.media-path-meta-strip\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.media-compare-view \.media-path-meta-strip\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
     expect(mediaView).not.toMatch(/min-height:\s*6px/)
   })
@@ -132,11 +136,13 @@ describe('media rules importance strip residual', () => {
   it('keeps Media rules/importance strip on the capture band', () => {
     expect(mediaView).toMatch(/data-rules-density="capture-1to1"/)
     expect(mediaView).toMatch(/data-importance-chrome="capture-1to1"/)
-    expect(mediaView).toMatch(/\.media-rules-panel\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(mediaView).toMatch(
+      /\.media-rules-panel\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+    )
     expect(mediaView).toMatch(/\.media-rules-panel\s*\{[\s\S]*?min-height:\s*18px/)
     expect(mediaView).toMatch(/\.media-rule-row\s*\{[\s\S]*?min-height:\s*16px/)
     expect(css).toMatch(
-      /\.media-compare-view \.media-rules-panel\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.media-compare-view \.media-rules-panel\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
     expect(css).toMatch(/\.media-compare-view \.media-rule-row\s*\{[\s\S]*?min-height:\s*16px/)
     expect(mediaView).not.toMatch(/min-height:\s*6px/)
@@ -146,12 +152,14 @@ describe('media rules importance strip residual', () => {
 describe('media scrub surface residual', () => {
   it('keeps Media scrub strip on capture #f0f0f0 without surface override', () => {
     expect(mediaView).toMatch(/data-media-scrub-residual="capture-1to1"/)
-    expect(mediaView).toMatch(/\.media-scrub-row\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(mediaView).toMatch(/\.media-scrub-row\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
     expect(mediaView).not.toMatch(
-      /\.media-scrub-row\s*\{[\s\S]*?background:\s*#f0f0f0;[\s\S]*?background:\s*var\(--app-surface\)/,
+      /\.media-scrub-row\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\);[\s\S]*?background:\s*var\(--app-surface\)/,
     )
     expect(mediaView).toMatch(/\.media-players\s*\{[\s\S]*?gap:\s*4px/)
-    expect(css).toMatch(/\.media-compare-view \.media-scrub-row\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(css).toMatch(
+      /\.media-compare-view \.media-scrub-row\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+    )
     expect(css).toMatch(/\.media-compare-view \.media-players\s*\{[\s\S]*?gap:\s*4px/)
   })
 })
@@ -169,6 +177,8 @@ describe('media path meta residual', () => {
 
 describe('media side panels fill', () => {
   it('matches capture media side/report panel fill #f0f0f0', () => {
-    expect(css).toMatch(/\.media-compare-view \.media-side[\s\S]*?background:\s*#f0f0f0/)
+    expect(css).toMatch(
+      /\.media-compare-view \.media-side[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+    )
   })
 })

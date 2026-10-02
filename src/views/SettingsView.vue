@@ -3738,7 +3738,7 @@ onMounted(async () => {
   max-height: calc(100vh - 120px);
   padding: 2px 4px;
   overflow: auto;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
   align-content: start;
@@ -3755,7 +3755,7 @@ onMounted(async () => {
   gap: 1px;
   align-content: start;
   padding: 0 0 2px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--ds-line-e0e0e0);
 }
 
 .options-tree-group:last-child {
@@ -3812,7 +3812,7 @@ onMounted(async () => {
   height: 20px;
   min-height: 20px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   color: var(--app-text);
@@ -3836,12 +3836,12 @@ onMounted(async () => {
 }
 
 .options-section-button:hover {
-  background: #dceeff;
+  background: var(--ds-fill-dceeff);
 }
 
 .options-section-button.active {
-  background: #c8e4ff;
-  box-shadow: inset 0 0 0 1px #89bdea;
+  background: var(--ds-fill-c8e4ff);
+  box-shadow: inset 0 0 0 1px var(--ds-line-89bdea);
 }
 
 .auto-save-limit-input,
@@ -3879,7 +3879,7 @@ onMounted(async () => {
   height: 20px;
   min-height: 20px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   color: var(--app-text);
@@ -3905,7 +3905,7 @@ onMounted(async () => {
   width: 28px;
   height: 20px;
   padding: 0;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: transparent;
   cursor: pointer;
@@ -3916,7 +3916,7 @@ onMounted(async () => {
   height: 20px;
   min-height: 20px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   color: var(--app-text);
@@ -3937,7 +3937,7 @@ onMounted(async () => {
   align-items: center;
   min-height: 18px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   font-size: 11px;
   font-weight: 600;
@@ -3968,7 +3968,7 @@ onMounted(async () => {
   --n-border-radius: 0;
   --n-border-color: #a0a0a0;
 
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   font-size: 11px;
   line-height: 16px;
 }
@@ -4031,7 +4031,7 @@ h1 {
   height: 20px;
   min-height: 20px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   color: var(--app-text);
@@ -4095,7 +4095,7 @@ h1 {
   gap: 4px;
   min-height: 20px;
   padding: 2px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
 }
 
@@ -4156,7 +4156,7 @@ h1 {
   gap: 4px;
   min-height: 20px;
   padding: 2px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
 }
 
@@ -4178,7 +4178,7 @@ h1 {
   gap: 6px;
   min-height: 22px;
   padding: 2px 0 0;
-  border-top: 1px solid #c0c0c0;
+  border-top: 1px solid var(--ds-line-c0c0c0);
 }
 
 .options-footer-btn {
@@ -4186,10 +4186,10 @@ h1 {
   height: 18px;
   min-height: 18px;
   padding: 0 10px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #ffffff;
-  color: #111111;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
   cursor: default;

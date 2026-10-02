@@ -1467,7 +1467,7 @@ h2 {
   min-width: 118px;
   min-height: 20px;
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
   text-align: right;
@@ -1492,9 +1492,9 @@ h2 {
   min-width: 0;
   min-height: 20px;
   padding: 2px 4px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .path-field-row {
@@ -1530,10 +1530,10 @@ h2 {
   height: 16.5px;
   min-height: 16.5px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #ffffff;
-  color: #111111;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
 }
@@ -1549,7 +1549,7 @@ h2 {
   min-height: 20px;
   padding: 0 6px;
   overflow: hidden;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   font-size: 11px;
@@ -1570,7 +1570,7 @@ h2 {
   gap: 0;
   min-width: 0;
   padding: 1px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
 }
@@ -1585,18 +1585,18 @@ h2 {
   min-height: 120px;
   max-height: none;
   overflow: auto;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #ffffff;
+  background: var(--ds-fill-ffffff);
 }
 
 .hex-empty-hatch {
   flex: 1 1 auto;
   min-height: 48px;
-  background-color: #ffffff;
+  background-color: var(--ds-fill-ffffff);
   background-image:
-    repeating-linear-gradient(45deg, transparent 0 7px, #e6e6e6 7px 8px),
-    repeating-linear-gradient(-45deg, transparent 0 7px, #e6e6e6 7px 8px);
+    repeating-linear-gradient(45deg, transparent 0 7px, var(--ds-fill-e6e6e6) 7px 8px),
+    repeating-linear-gradient(-45deg, transparent 0 7px, var(--ds-fill-e6e6e6) 7px 8px);
 }
 
 .hex-row {
@@ -1606,7 +1606,7 @@ h2 {
   min-width: 420px;
   min-height: 17.5px;
   border-bottom: 0;
-  background: #ffffff;
+  background: var(--ds-fill-ffffff);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   font-size: 11px;
   line-height: 16px;
@@ -1629,7 +1629,7 @@ h2 {
 }
 
 .hex-offset {
-  background: #ffffff;
+  background: var(--ds-fill-ffffff);
   color: var(--app-text-muted);
 }
 
@@ -1649,7 +1649,7 @@ h2 {
 
 .hex-byte-selected {
   border-color: #00c2c7;
-  background: #9dddff;
+  background: var(--ds-fill-9dddff);
 }
 
 .hex-report-panel {
@@ -1658,7 +1658,7 @@ h2 {
   min-height: 20px;
   margin: 0;
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
 }
@@ -1712,9 +1712,9 @@ h2 {
   gap: 4px 6px;
   min-height: 20px;
   padding: 2px 4px;
-  border: 1px solid #c0c0c0;
+  border: 1px solid var(--ds-line-c0c0c0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .hex-offset-chrome label {
@@ -1724,7 +1724,7 @@ h2 {
 }
 
 .hex-offset-chrome span {
-  color: #333333;
+  color: var(--ds-text-333333);
   font-size: 11px;
   line-height: 14px;
 }
@@ -1735,10 +1735,10 @@ h2 {
   height: 20px;
   min-height: 20px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #ffffff;
-  color: #111111;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
 }
@@ -1762,9 +1762,9 @@ h2 {
   gap: 4px;
   width: min(360px, 100%);
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .hex-goto-dialog header h2 {
@@ -1777,7 +1777,7 @@ h2 {
 
 .hex-goto-dialog p {
   margin: 0;
-  color: #333333;
+  color: var(--ds-text-333333);
   font-size: 11px;
   line-height: 16px;
 }
@@ -1786,9 +1786,9 @@ h2 {
   height: 20px;
   min-height: 20px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #ffffff;
+  background: var(--ds-fill-ffffff);
   font-size: 11px;
   line-height: 16px;
 }
@@ -1804,9 +1804,9 @@ h2 {
   height: 18px;
   min-height: 18px;
   padding: 0 10px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #ffffff;
+  background: var(--ds-fill-ffffff);
   font-size: 11px;
   line-height: 16px;
 }
@@ -1816,7 +1816,7 @@ h2 {
   gap: 4px 6px;
   min-height: 20px;
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
 }
@@ -1824,7 +1824,7 @@ h2 {
 .hex-rules-panel h2 {
   min-height: 20px;
   margin: 0;
-  color: #111111;
+  color: var(--ds-text-111111);
   font-size: 12px;
   font-weight: 700;
   line-height: 16px;
@@ -1845,7 +1845,7 @@ h2 {
   height: 20px;
   min-height: 20px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   color: var(--app-text);
@@ -1858,7 +1858,7 @@ h2 {
   height: 20px;
   min-height: 20px;
   padding: 0 8px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   color: var(--app-text);
@@ -1894,7 +1894,7 @@ h2 {
   min-width: 0;
   height: 16.5px;
   padding: 0 4px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   font-size: 12px;
 }
@@ -1902,15 +1902,15 @@ h2 {
 .hex-path-meta-strip {
   min-height: 18px;
   padding: 1px 4px;
-  border: 1px solid #c0c0c0;
+  border: 1px solid var(--ds-line-c0c0c0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .hex-path-meta-strip :deep(.path-meta-footer) {
   gap: 6px;
   min-height: 16px;
-  color: #111111;
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
 }
@@ -1933,6 +1933,6 @@ h2 {
 }
 
 .path-side-footer-muted {
-  color: #9ca3af;
+  color: var(--ds-text-9ca3af);
 }
 </style>

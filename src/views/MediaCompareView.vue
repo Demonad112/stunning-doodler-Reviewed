@@ -1207,7 +1207,7 @@ function runMediaToolbarCommand(commandId: string): void {
   min-width: 0;
   height: 16.5px;
   padding: 0 4px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   font-size: 12px;
 }
@@ -1216,7 +1216,7 @@ function runMediaToolbarCommand(commandId: string): void {
   height: 20px;
   min-height: 20px;
   padding: 0 8px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   font-size: 11px;
 }
@@ -1224,15 +1224,15 @@ function runMediaToolbarCommand(commandId: string): void {
 .media-path-meta-strip {
   min-height: 18px;
   padding: 1px 4px;
-  border: 1px solid #c0c0c0;
+  border: 1px solid var(--ds-line-c0c0c0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .media-path-meta-strip :deep(.path-meta-footer) {
   gap: 6px;
   min-height: 18px;
-  color: #111111;
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
 }
@@ -1350,7 +1350,7 @@ h1 {
 .media-report-panel {
   gap: 4px 6px;
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
 }
 
 .media-summary-item {
@@ -1441,7 +1441,7 @@ h1 {
   grid-template-columns: 140px minmax(160px, 1fr) minmax(160px, 1fr) 98px 98px;
   min-width: 760px;
   min-height: 18px;
-  border-bottom: 1px solid #a0a0a0;
+  border-bottom: 1px solid var(--ds-line-a0a0a0);
   font-size: 11px;
 }
 
@@ -1454,9 +1454,9 @@ h1 {
   gap: 2px 4px;
   min-height: 18px;
   padding: 2px 4px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .media-rules-panel header {
@@ -1513,7 +1513,7 @@ h1 {
   margin: 0;
   padding: 2px 6px;
   overflow: hidden;
-  border-right: 1px solid #a0a0a0;
+  border-right: 1px solid var(--ds-line-a0a0a0);
   font-style: normal;
   line-height: 16px;
   text-overflow: ellipsis;
@@ -1658,9 +1658,9 @@ h1 {
   min-height: 26px;
   padding: 1px 4px;
   border: 0;
-  border-top: 1px solid #c0c0c0;
+  border-top: 1px solid var(--ds-line-c0c0c0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .media-scrub-play {
@@ -1673,7 +1673,7 @@ h1 {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #606060;
+  color: var(--ds-text-606060);
   font: inherit;
   font-size: 11px;
   line-height: 16px;
@@ -1690,7 +1690,7 @@ h1 {
   height: 19.5px;
   min-height: 19.5px;
   accent-color: #808080;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .media-scrub-row span {
@@ -1721,7 +1721,7 @@ h1 {
   min-height: 18px;
   margin-top: 0;
   overflow: hidden;
-  color: #111111;
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
   text-overflow: ellipsis;
@@ -1729,6 +1729,6 @@ h1 {
 }
 
 .path-side-footer-muted {
-  color: #9ca3af;
+  color: var(--ds-text-9ca3af);
 }
 </style>

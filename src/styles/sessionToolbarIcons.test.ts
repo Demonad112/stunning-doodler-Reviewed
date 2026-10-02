@@ -23,7 +23,7 @@ describe('session toolbar icon presentation', () => {
     expect(css).toContain("data-plate='refresh'")
     expect(css).toContain("data-plate='sessions'")
     expect(css).toContain("data-plate='capture'")
-    expect(css).toContain('color: #2a3038')
+    expect(css).toContain('color: var(--ds-text-2a3038)')
     expect(css).toContain('min-height: 39.5px')
     expect(css).toContain('height: 37.5px')
     expect(css).toContain('width: 22px')

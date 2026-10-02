@@ -935,17 +935,17 @@ function lineNumber(value: number | null): string {
   gap: 4px;
   min-height: 20px;
   padding: 1px 2px;
-  border: 1px solid #c0c0c0;
+  border: 1px solid var(--ds-line-c0c0c0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .patch-path-meta-strip {
   min-height: 18px;
   padding: 1px 4px;
-  border: 1px solid #c0c0c0;
+  border: 1px solid var(--ds-line-c0c0c0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .patch-toolbar [data-testid='patch-section-position'] {
@@ -1220,12 +1220,12 @@ function lineNumber(value: number | null): string {
 }
 
 .patch-preview-removed {
-  background: color-mix(in srgb, var(--diff-deleted-bg, #fff0f0) 85%, transparent);
+  background: color-mix(in srgb, var(--diff-deleted-bg, var(--ds-fill-fff0f0)) 85%, transparent);
   color: var(--diff-deleted-fg, #b42318);
 }
 
 .patch-preview-added {
-  background: color-mix(in srgb, var(--diff-added-bg, #f0fff4) 85%, transparent);
+  background: color-mix(in srgb, var(--diff-added-bg, var(--ds-fill-f0fff4)) 85%, transparent);
   color: var(--diff-added-fg, #027a48);
 }
 
@@ -1254,7 +1254,7 @@ function lineNumber(value: number | null): string {
   height: 16.5px;
   min-height: 16.5px;
   padding: 0 4px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   font-size: 12px;
   line-height: 18px;
@@ -1271,7 +1271,7 @@ function lineNumber(value: number | null): string {
 .path-side-footer {
   min-height: 18px;
   overflow: hidden;
-  color: var(--app-text-muted, #6b7280);
+  color: var(--app-text-muted, var(--ds-text-6b7280));
   font-size: 11px;
   line-height: 16px;
   text-overflow: ellipsis;
@@ -1279,7 +1279,7 @@ function lineNumber(value: number | null): string {
 }
 
 .path-side-footer-muted {
-  color: #9ca3af;
+  color: var(--ds-text-9ca3af);
 }
 
 :deep(.patch-toolbar .n-button) {

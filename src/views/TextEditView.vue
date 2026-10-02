@@ -1238,10 +1238,10 @@ h1 {
   min-width: 20px;
   height: 20px;
   padding: 0 4px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #ffffff;
-  color: #111111;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-111111);
   font: inherit;
   font-size: 11px;
   cursor: default;
@@ -1260,9 +1260,9 @@ h1 {
 .text-edit-path-meta-strip {
   min-height: 18px;
   padding: 1px 4px;
-  border: 1px solid #c0c0c0;
+  border: 1px solid var(--ds-line-c0c0c0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .path-toolbar,
@@ -1306,7 +1306,7 @@ h1 {
 .metadata-row {
   justify-content: space-between;
   min-height: 18px;
-  color: #111111;
+  color: var(--ds-text-111111);
   font-size: 11px;
 }
 

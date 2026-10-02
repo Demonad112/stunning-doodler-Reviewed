@@ -2055,25 +2055,25 @@ function onVisibilityForDiskChange(): void {
   justify-content: space-between;
   gap: 4px;
   padding: 2px 4px;
-  border-bottom: 1px solid var(--app-border-soft, #d7dbe3);
-  background: var(--app-surface-low, #f3f3f3);
+  border-bottom: 1px solid var(--app-border-soft, var(--ds-line-d7dbe3));
+  background: var(--app-surface-low, var(--ds-fill-f3f3f3));
   color: var(--app-text-muted);
   font-size: 11px;
 }
 
 .text-compare-progress button,
 .toolbar-button:focus-visible {
-  outline: 2px solid var(--app-primary, #4aa3ff);
+  outline: 2px solid var(--app-primary, var(--ds-line-4aa3ff));
   outline-offset: 1px;
 }
 
 .text-compare-progress button {
   height: 18px;
   padding: 0 4px;
-  border: 1px solid var(--app-border, #c7cdd6);
+  border: 1px solid var(--app-border, var(--ds-line-c7cdd6));
   border-radius: 0;
-  background: var(--app-canvas, #ffffff);
-  color: var(--app-text, #111111);
+  background: var(--app-canvas, var(--ds-fill-ffffff));
+  color: var(--app-text, var(--ds-text-111111));
   font-size: 11px;
   cursor: pointer;
 }
@@ -2102,7 +2102,7 @@ function onVisibilityForDiskChange(): void {
   gap: 4px;
   margin: 0;
   padding: 2px 4px;
-  border: 1px solid var(--od-border, #d0d7de);
+  border: 1px solid var(--od-border, var(--ds-line-d0d7de));
   border-radius: 2px;
 }
 
@@ -2118,7 +2118,7 @@ function onVisibilityForDiskChange(): void {
   gap: 4px;
   margin: 0;
   padding: 2px 4px;
-  border: 1px solid var(--od-border, #d0d7de);
+  border: 1px solid var(--od-border, var(--ds-line-d0d7de));
   border-radius: 2px;
 }
 
@@ -2229,15 +2229,15 @@ function onVisibilityForDiskChange(): void {
 .text-path-meta-strip {
   min-height: 18px;
   padding: 1px 4px;
-  border: 1px solid #c0c0c0;
+  border: 1px solid var(--ds-line-c0c0c0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .text-path-meta-strip :deep(.path-meta-footer) {
   gap: 6px;
   min-height: 18px;
-  color: #111111;
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
 }
@@ -2245,13 +2245,13 @@ function onVisibilityForDiskChange(): void {
 .path-side-footer {
   min-height: 18px;
   margin-top: 0;
-  color: #111111;
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
 }
 
 .path-side-footer-muted {
-  color: #9ca3af;
+  color: var(--ds-text-9ca3af);
 }
 
 .find-toolbar {
@@ -2331,6 +2331,6 @@ function onVisibilityForDiskChange(): void {
   height: 220px;
   border: 1px solid var(--app-border);
   border-radius: 6px;
-  background: #ffffff;
+  background: var(--ds-fill-ffffff);
 }
 </style>

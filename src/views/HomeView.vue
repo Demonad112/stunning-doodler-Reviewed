@@ -1235,7 +1235,7 @@ onMounted(() => {
 
   /* home.png tree ~241 CSS px at DPR 2; avoid prior 140–170 crush. */
   grid-template-columns: minmax(220px, 248px) minmax(0, 1fr);
-  background: #f9f9f9;
+  background: var(--ds-fill-f9f9f9);
 }
 
 .bc-session-tree {
@@ -1243,8 +1243,8 @@ onMounted(() => {
   grid-template-rows: 28px minmax(0, 1fr) 32px;
   min-width: 0;
   min-height: 0;
-  border-right: 1px solid #b9bec7;
-  background: #e3e7ed;
+  border-right: 1px solid var(--ds-line-b9bec7);
+  background: var(--ds-fill-e3e7ed);
 }
 
 .bc-session-tree header {
@@ -1253,9 +1253,9 @@ onMounted(() => {
   min-width: 0;
   padding: 0 8px;
   overflow: hidden;
-  border-bottom: 1px solid #c6ccd5;
-  background: #ededed;
-  color: #111827;
+  border-bottom: 1px solid var(--ds-line-c6ccd5);
+  background: var(--ds-fill-ededed);
+  color: var(--ds-text-111827);
   font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
   font-size: 12px;
   font-weight: 600;
@@ -1280,7 +1280,7 @@ onMounted(() => {
   padding: 0 2px;
   border: 0;
   background: transparent;
-  color: #111827;
+  color: var(--ds-text-111827);
   font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
   font-size: 12px;
   line-height: 16px;
@@ -1301,7 +1301,7 @@ onMounted(() => {
 .bc-tree-row:hover,
 .bc-tree-row:focus-visible {
   outline: 0;
-  background: #c7dcf6;
+  background: var(--ds-fill-c7dcf6);
 }
 
 .bc-tree-row strong {
@@ -1317,16 +1317,16 @@ onMounted(() => {
   align-items: center;
   gap: 3px;
   padding: 2px 4px;
-  border-top: 1px solid #c6ccd5;
-  background: #fdfdfd;
+  border-top: 1px solid var(--ds-line-c6ccd5);
+  background: var(--ds-fill-fdfdfd);
 }
 
 .bc-tree-footer button {
   height: 28px;
-  border: 1px solid #c6ccd5;
+  border: 1px solid var(--ds-line-c6ccd5);
   border-radius: 0;
-  background: #ffffff;
-  color: #2f343a;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-2f343a);
   font-size: 14px;
   line-height: 1;
 }
@@ -1337,10 +1337,10 @@ onMounted(() => {
   height: 22px;
   padding: 0 6px;
   overflow: hidden;
-  border: 1px solid #c6ccd5;
+  border: 1px solid var(--ds-line-c6ccd5);
   border-radius: 0;
-  background: #ffffff;
-  color: #111827;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-111827);
   font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
   font-size: 12px;
   text-overflow: ellipsis;
@@ -1354,7 +1354,7 @@ onMounted(() => {
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  background: #f9f9f9;
+  background: var(--ds-fill-f9f9f9);
 }
 
 .bc-selected-session {
@@ -1368,7 +1368,7 @@ onMounted(() => {
   align-items: flex-start;
   gap: 10px;
   min-width: 0;
-  color: #111827;
+  color: var(--ds-text-111827);
   font-size: 16px;
 }
 
@@ -1394,7 +1394,7 @@ onMounted(() => {
 }
 
 .bc-selected-title span {
-  color: #374151;
+  color: var(--ds-text-374151);
   font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
   font-size: 13px;
   line-height: 1.2;
@@ -1410,10 +1410,10 @@ onMounted(() => {
   max-width: 100%;
   height: 30px;
   overflow: hidden;
-  border: 1px solid #c7cdd6;
+  border: 1px solid var(--ds-line-c7cdd6);
   border-radius: 2px;
-  background: #ffffff;
-  color: #111827;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-111827);
   font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
   font-size: 12px;
   text-overflow: ellipsis;
@@ -1422,12 +1422,12 @@ onMounted(() => {
 }
 
 .bc-selected-actions button:first-child {
-  border-color: #4aa3ff;
+  border-color: var(--ds-line-4aa3ff);
   color: #1d4f91;
 }
 
 .bc-selected-actions button:last-child {
-  color: #111827;
+  color: var(--ds-text-111827);
 }
 
 .new-session-panel,
@@ -1468,7 +1468,7 @@ onMounted(() => {
   gap: 2px;
   min-height: 20px;
   margin: 0 0 6px;
-  color: #111827;
+  color: var(--ds-text-111827);
   font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
   font-size: 12px;
   line-height: 16px;
@@ -1492,7 +1492,7 @@ onMounted(() => {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #111827;
+  color: var(--ds-text-111827);
   cursor: pointer;
   justify-items: center;
   align-content: start;
@@ -1510,14 +1510,14 @@ onMounted(() => {
 .new-session-card:hover,
 .new-session-card:focus {
   outline: 0;
-  background: #eaf4ff;
+  background: var(--ds-fill-eaf4ff);
 }
 
 .session-card-icon {
   display: inline-grid;
   width: 48px;
   height: 48px;
-  color: #2f353d;
+  color: var(--ds-text-2f353d);
   place-items: center;
 }
 
@@ -1778,9 +1778,9 @@ tr:hover .row-actions,
 
 .bc-home-instructions.dragging {
   padding: 0;
-  border: 1px dashed #4aa3ff;
+  border: 1px dashed var(--ds-line-4aa3ff);
   border-radius: 0;
-  background: #eaf4ff;
+  background: var(--ds-fill-eaf4ff);
 }
 
 .home-primary-ctas {
@@ -1798,10 +1798,10 @@ tr:hover .row-actions,
   height: 16px;
   padding: 0 3px;
   overflow: hidden;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #e8f3ff;
-  color: #111827;
+  background: var(--ds-fill-e8f3ff);
+  color: var(--ds-text-111827);
   font-size: 11px;
   white-space: nowrap;
   cursor: pointer;
@@ -1811,7 +1811,7 @@ tr:hover .row-actions,
 .home-primary-cta:focus-visible,
 .bc-selected-actions button:focus-visible,
 .new-session-card:focus-visible {
-  outline: 2px solid #4aa3ff;
+  outline: 2px solid var(--ds-line-4aa3ff);
   outline-offset: 2px;
 }
 
@@ -1822,7 +1822,7 @@ tr:hover .row-actions,
   min-height: 16px;
   padding: 0 3px;
   overflow: hidden;
-  border: 1px dashed #a0a0a0;
+  border: 1px dashed var(--ds-line-a0a0a0);
   border-radius: 0;
   color: #4b5563;
   font-size: 11px;
@@ -1873,31 +1873,31 @@ tr:hover .row-actions,
   min-width: 0;
   height: 30px;
   padding: 0 8px;
-  border: 1px solid #c6ccd5;
+  border: 1px solid var(--ds-line-c6ccd5);
   border-radius: 2px;
-  background: #ffffff;
-  color: #111827;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-111827);
   font-size: 12px;
 }
 
 .session-edit-panel button {
   height: 30px;
   padding: 0 12px;
-  border: 1px solid #c7cdd6;
+  border: 1px solid var(--ds-line-c7cdd6);
   border-radius: 2px;
-  background: #ffffff;
-  color: #111827;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-111827);
   font-size: 12px;
   cursor: pointer;
 }
 
 .home-view :deep(.workbench-main) {
   padding: 0;
-  background: #ffffff;
+  background: var(--ds-fill-ffffff);
 }
 
 .home-view :deep(.workbench-shell-compact) {
-  background: #ffffff;
+  background: var(--ds-fill-ffffff);
 }
 
 .home-view :deep(.workbench-grid-compact) {

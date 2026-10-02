@@ -19,13 +19,17 @@ describe('session settings and hex goto chrome density', () => {
     expect(settingsDialog).toMatch(/\.session-settings-dialog\s*\{[\s\S]*?gap:\s*4px/)
     expect(settingsDialog).toMatch(/\.session-settings-dialog\s*\{[\s\S]*?border-radius:\s*0/)
     expect(settingsDialog).toMatch(
-      /\.session-settings-dialog\s*\{[\s\S]*?border:\s*1px solid #a0a0a0/,
+      /\.session-settings-dialog\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
     )
     expect(settingsDialog).toMatch(/data-options-rules-density="capture-1to1"/)
     expect(settingsDialog).toMatch(/\.settings-body\s*\{[\s\S]*?padding:\s*4px 6px/)
-    expect(settingsDialog).toMatch(/\.settings-body\s*\{[\s\S]*?border:\s*1px solid #a0a0a0/)
+    expect(settingsDialog).toMatch(
+      /\.settings-body\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
+    )
     expect(settingsDialog).toMatch(/\.settings-body label\s*\{[\s\S]*?font-size:\s*11px/)
-    expect(settingsDialog).toMatch(/\.settings-tabs button\s*\{[\s\S]*?border:\s*1px solid #a0a0a0/)
+    expect(settingsDialog).toMatch(
+      /\.settings-tabs button\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
+    )
     expect(settingsDialog).toMatch(/h2\s*\{[\s\S]*?font-size:\s*12px/)
     expect(settingsDialog).toMatch(/\.settings-tabs button\s*\{[\s\S]*?height:\s*18px/)
     expect(settingsDialog).toMatch(/\.settings-body\s*\{[\s\S]*?gap:\s*4px/)
@@ -65,7 +69,9 @@ describe('options/rules dialog content depth', () => {
     expect(css).toMatch(
       /\.settings-view \.options-content \[class='n-card__content'\]\s*\{[\s\S]*?padding:\s*4px 6px/,
     )
-    expect(css).toMatch(/\.session-settings-dialog\s*\{[\s\S]*?border:\s*1px solid #a0a0a0/)
+    expect(css).toMatch(
+      /\.session-settings-dialog\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
+    )
     expect(css).toMatch(/\.session-settings-dialog \.settings-body\s*\{[\s\S]*?padding:\s*4px 6px/)
     expect(css).toMatch(
       /\.session-settings-dialog \.settings-body input:not\(\[type='checkbox'\]\)[\s\S]*?height:\s*20px/,
@@ -77,10 +83,14 @@ describe('options/rules dialog content depth', () => {
 describe('session rules residual depth', () => {
   it('deepens Session Rules dialog chrome beyond #342/#333 content band', () => {
     expect(settingsDialog).toMatch(/data-rules-depth="capture-1to1-residual"/)
-    expect(settingsDialog).toMatch(/\.settings-tabs\s*\{[\s\S]*?background:\s*#f0f0f0/)
-    expect(settingsDialog).toMatch(/footer\s*\{[\s\S]*?border-top:\s*1px solid #c0c0c0/)
+    expect(settingsDialog).toMatch(
+      /\.settings-tabs\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+    )
+    expect(settingsDialog).toMatch(
+      /footer\s*\{[\s\S]*?border-top:\s*1px solid var\(--ds-line-c0c0c0\)/,
+    )
     expect(css).toMatch(
-      /\.session-settings-dialog\[data-rules-depth='capture-1to1-residual'\]\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.session-settings-dialog\[data-rules-depth='capture-1to1-residual'\]\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
     expect(css).toMatch(
       /\.session-settings-dialog\[data-rules-depth='capture-1to1-residual'\] \.settings-body\s*\{[\s\S]*?gap:\s*2px/,
@@ -110,18 +120,22 @@ describe('session rules micro residual', () => {
   it('closes Session Rules micro-drift vs Options/About sibling chrome', () => {
     expect(settingsDialog).toMatch(/data-rules-micro="capture-1to1-residual"/)
     expect(settingsDialog).toMatch(/header button\s*\{[\s\S]*?height:\s*18px/)
-    expect(settingsDialog).toMatch(/header\s*\{[\s\S]*?border-bottom:\s*1px solid #c0c0c0/)
     expect(settingsDialog).toMatch(
-      /\.settings-tabs button\.active\s*\{[\s\S]*?background:\s*#c8e4ff/,
+      /header\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--ds-line-c0c0c0\)/,
     )
-    expect(settingsDialog).toMatch(/footer button\s*\{[\s\S]*?background:\s*#ffffff/)
+    expect(settingsDialog).toMatch(
+      /\.settings-tabs button\.active\s*\{[\s\S]*?background:\s*var\(--ds-fill-c8e4ff\)/,
+    )
+    expect(settingsDialog).toMatch(
+      /footer button\s*\{[\s\S]*?background:\s*var\(--ds-fill-ffffff\)/,
+    )
     expect(css).toMatch(
       /\.session-settings-dialog\[data-rules-depth='capture-1to1-residual'\]\s*\{[\s\S]*?gap:\s*2px/,
     )
     expect(css).toMatch(
       /\.session-settings-dialog\[data-rules-depth='capture-1to1-residual'\] \.settings-body\s*\{[\s\S]*?padding:\s*2px 4px/,
     )
-    expect(css).toMatch(/button\.active[\s\S]*?background:\s*#c8e4ff/)
+    expect(css).toMatch(/button\.active[\s\S]*?background:\s*var\(--ds-fill-c8e4ff\)/)
     expect(settingsDialog).not.toMatch(/min-height:\s*6px/)
   })
 })
@@ -129,7 +143,7 @@ describe('session rules micro residual', () => {
 describe('options footer border', () => {
   it('matches capture options footer border #c0c0c0', () => {
     expect(css).toMatch(
-      /data-options-footer='capture-1to1-residual'\][\s\S]*?border-top:\s*1px solid #c0c0c0/,
+      /data-options-footer='capture-1to1-residual'\][\s\S]*?border-top:\s*1px solid var\(--ds-line-c0c0c0\)/,
     )
   })
 })

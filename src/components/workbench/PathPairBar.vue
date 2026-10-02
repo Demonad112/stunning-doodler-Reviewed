@@ -176,7 +176,7 @@ onBeforeUnmount(() => window.removeEventListener('click', onDocumentClick))
 .path-pair-field button:focus-visible,
 .path-pair-run:focus-visible,
 .path-pair-swap:focus-visible {
-  outline: 2px solid var(--app-primary, #4aa3ff);
+  outline: 2px solid var(--app-primary, var(--ds-line-4aa3ff));
   outline-offset: 1px;
 }
 </style>

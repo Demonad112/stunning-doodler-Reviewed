@@ -250,14 +250,14 @@ onBeforeUnmount(() => {
   min-width: 0;
   min-height: 16px;
   overflow: visible;
-  color: #111111;
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
   white-space: nowrap;
 }
 
 .path-side-footer-muted {
-  color: #9ca3af;
+  color: var(--ds-text-9ca3af);
 }
 
 .path-meta-modified,
@@ -273,10 +273,10 @@ onBeforeUnmount(() => {
   height: 16px;
   min-height: 16px;
   padding: 0 4px;
-  border: 1px solid #c0c0c0;
+  border: 1px solid var(--ds-line-c0c0c0);
   border-radius: 0;
-  background: #f0f0f0;
-  color: #111111;
+  background: var(--ds-fill-f0f0f0);
+  color: var(--ds-text-111111);
   font-size: 11px;
   font-weight: 600;
   line-height: 16px;
@@ -320,11 +320,11 @@ onBeforeUnmount(() => {
 }
 
 .path-meta-chip:hover {
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .path-meta-chip:focus-visible {
-  outline: 1px solid #4aa3ff;
+  outline: 1px solid var(--ds-line-4aa3ff);
   outline-offset: 0;
 }
 
@@ -344,10 +344,10 @@ onBeforeUnmount(() => {
   margin: 1px 0 0;
   padding: 2px 0;
   overflow: auto;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #ffffff;
-  color: #111111;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-111111);
   list-style: none;
   box-shadow: 1px 1px 3px rgb(0 0 0 / 0.18);
 }
@@ -364,6 +364,6 @@ onBeforeUnmount(() => {
 
 .path-meta-chip-menu-item:hover,
 .path-meta-chip-menu-item.is-active {
-  background: #e5f1fb;
+  background: var(--ds-fill-e5f1fb);
 }
 </style>

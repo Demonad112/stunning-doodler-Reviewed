@@ -94,25 +94,29 @@ describe('home launch card band residual', () => {
 
 describe('home main fill', () => {
   it('matches capture home main fill #f9f9f9', () => {
-    expect(homeView).toMatch(/\.bc-home-workspace\s*\{[\s\S]*?background:\s*#f9f9f9/)
-    expect(homeView).toMatch(/\.bc-home-main\s*\{[\s\S]*?background:\s*#f9f9f9/)
+    expect(homeView).toMatch(
+      /\.bc-home-workspace\s*\{[\s\S]*?background:\s*var\(--ds-fill-f9f9f9\)/,
+    )
+    expect(homeView).toMatch(/\.bc-home-main\s*\{[\s\S]*?background:\s*var\(--ds-fill-f9f9f9\)/)
   })
 })
 
 describe('home tree fill', () => {
   it('matches capture home session-tree fill #e3e7ed', () => {
-    expect(homeView).toMatch(/\.bc-session-tree\s*\{[\s\S]*?background:\s*#e3e7ed/)
+    expect(homeView).toMatch(/\.bc-session-tree\s*\{[\s\S]*?background:\s*var\(--ds-fill-e3e7ed\)/)
   })
 })
 
 describe('home session-tree header fill', () => {
   it('matches capture session-tree header fill #ededed', () => {
-    expect(homeView).toMatch(/\.bc-session-tree header\s*\{[\s\S]*?background:\s*#ededed/)
+    expect(homeView).toMatch(
+      /\.bc-session-tree header\s*\{[\s\S]*?background:\s*var\(--ds-fill-ededed\)/,
+    )
   })
 })
 
 describe('home session-tree footer fill', () => {
   it('matches capture session-tree footer fill #fdfdfd', () => {
-    expect(homeView).toMatch(/\.bc-tree-footer\s*\{[\s\S]*?background:\s*#fdfdfd/)
+    expect(homeView).toMatch(/\.bc-tree-footer\s*\{[\s\S]*?background:\s*var\(--ds-fill-fdfdfd\)/)
   })
 })

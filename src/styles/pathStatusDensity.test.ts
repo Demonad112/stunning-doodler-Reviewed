@@ -137,7 +137,9 @@ describe('path/status strip density', () => {
     expect(css).toMatch(/\.bc-path-row input\s*\{[\s\S]*?border-radius:\s*0/)
     expect(css).toMatch(/\.path-pair input,[\s\S]*?border-radius:\s*0/)
     expect(css).toMatch(/\.bc-path-row button\s*\{[\s\S]*?border-radius:\s*0/)
-    expect(css).toMatch(/\.bc-path-row button\s*\{[\s\S]*?border:\s*1px solid #a0a0a0/)
+    expect(css).toMatch(
+      /\.bc-path-row button\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
+    )
     expect(css).toMatch(/\.path-pair-bar input\s*\{[\s\S]*?border-radius:\s*0/)
     expect(css).toMatch(
       /\.app-shell-single-session \.folder-toolbar \.path-pair\s*\{[\s\S]*?min-height:\s*20px/,
@@ -173,7 +175,7 @@ describe('PathMetaFooter chip spacing residual', () => {
 describe('path-meta-eol border', () => {
   it('matches capture EOL chip border #c0c0c0', () => {
     expect(css).toMatch(
-      /\.path-meta-footer\[data-path-meta-eol='capture-1to1-residual'\] \.path-meta-eol[\s\S]*?border:\s*1px solid #c0c0c0/,
+      /\.path-meta-footer\[data-path-meta-eol='capture-1to1-residual'\] \.path-meta-eol[\s\S]*?border:\s*1px solid var\(--ds-line-c0c0c0\)/,
     )
   })
 })
@@ -181,7 +183,7 @@ describe('path-meta-eol border', () => {
 describe('path-meta-eol fill', () => {
   it('matches capture EOL chip fill #f0f0f0', () => {
     expect(css).toMatch(
-      /\.path-meta-footer\[data-path-meta-eol='capture-1to1-residual'\] \.path-meta-eol[\s\S]*?background:\s*#f0f0f0/,
+      /\.path-meta-footer\[data-path-meta-eol='capture-1to1-residual'\] \.path-meta-eol[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
   })
 })
@@ -189,39 +191,43 @@ describe('path-meta-eol fill', () => {
 describe('folder path-pair fill', () => {
   it('matches capture folder path-pair fill #f0f0f0', () => {
     expect(css).toMatch(
-      /\.app-shell-single-session \.folder-toolbar \.path-pair\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.app-shell-single-session \.folder-toolbar \.path-pair\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
   })
 })
 
 describe('path-meta-eol base chrome', () => {
   it('matches capture EOL chip base fill and border', () => {
-    expect(pathMeta).toMatch(/\.path-meta-eol\s*\{[\s\S]*?border:\s*1px solid #c0c0c0/)
-    expect(pathMeta).toMatch(/\.path-meta-eol\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(pathMeta).toMatch(
+      /\.path-meta-eol\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-c0c0c0\)/,
+    )
+    expect(pathMeta).toMatch(/\.path-meta-eol\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
   })
 })
 
 describe('bc-path-row fill', () => {
   it('matches capture bc-path-row fill #f0f0f0', () => {
-    expect(css).toMatch(/\.bc-path-row\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(css).toMatch(/\.bc-path-row\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
   })
 })
 
 describe('path-pair-bar fill', () => {
   it('matches capture path-pair-bar fill #f0f0f0', () => {
-    expect(css).toMatch(/\.path-pair-bar\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(css).toMatch(/\.path-pair-bar\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
   })
 })
 
 describe('path input border', () => {
   it('matches capture path input border #c0c0c0', () => {
-    expect(css).toMatch(/\.picture-path-panel input,[\s\S]*?border:\s*1px solid #c0c0c0/)
+    expect(css).toMatch(
+      /\.picture-path-panel input,[\s\S]*?border:\s*1px solid var\(--ds-line-c0c0c0\)/,
+    )
   })
 })
 
 describe('path actions fill', () => {
   it('matches capture path action fill #f0f0f0', () => {
-    expect(pathActions).toMatch(/background:\s*#f0f0f0/)
+    expect(pathActions).toMatch(/background:\s*var\(--ds-fill-f0f0f0\)/)
   })
 })
 

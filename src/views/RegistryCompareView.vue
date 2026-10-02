@@ -1280,7 +1280,7 @@ h1 {
   gap: 2px;
   min-width: 220px;
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
   color: var(--app-text-muted);
@@ -1296,7 +1296,7 @@ h1 {
   gap: 4px 6px;
   min-height: 22px;
   padding: 2px 4px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
 }
@@ -1340,7 +1340,7 @@ h1 {
 
 .registry-input-panel textarea,
 .registry-input-panel button {
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   color: var(--app-text);
@@ -1378,7 +1378,7 @@ h1 {
 .registry-live-panel {
   margin: 0;
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
   color: var(--app-text-muted);
@@ -1400,10 +1400,10 @@ h1 {
   height: 20px;
   min-height: 18px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #ffffff;
-  color: #111111;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-111111);
   font: inherit;
   font-size: 11px;
   line-height: 16px;
@@ -1428,7 +1428,7 @@ h1 {
   margin: 4px 0 0;
   padding: 2px 6px;
   overflow: auto;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
   font-family: var(--font-mono);
@@ -1447,7 +1447,7 @@ h1 {
   gap: 4px 6px;
   min-height: 20px;
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
 }
@@ -1464,10 +1464,10 @@ h1 {
   height: 18px;
   min-height: 18px;
   padding: 0 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
-  background: #ffffff;
-  color: #111111;
+  background: var(--ds-fill-ffffff);
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
   cursor: pointer;
@@ -1484,7 +1484,7 @@ h1 {
   gap: 2px;
   min-height: 20px;
   padding: 2px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
 }
@@ -1514,7 +1514,7 @@ h1 {
   gap: 4px;
   min-width: 0;
   padding: 4px 6px;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-surface);
 }
@@ -1539,7 +1539,7 @@ h1 {
   display: grid;
   align-content: start;
   overflow: auto;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
 }
@@ -1551,7 +1551,7 @@ h1 {
   min-height: 16px;
   padding: 1px 6px 1px calc(8px + var(--key-depth, 0) * 14px);
   border: 0;
-  border-bottom: 1px solid #a0a0a0;
+  border-bottom: 1px solid var(--ds-line-a0a0a0);
   background: transparent;
   color: var(--app-text);
   line-height: 16px;
@@ -1581,7 +1581,7 @@ h1 {
 .registry-value-table {
   display: grid;
   overflow: auto;
-  border: 1px solid #a0a0a0;
+  border: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: var(--app-bg);
 }
@@ -1595,7 +1595,7 @@ h1 {
   min-height: 16px;
   padding: 0;
   border: 0;
-  border-bottom: 1px solid #a0a0a0;
+  border-bottom: 1px solid var(--ds-line-a0a0a0);
   border-radius: 0;
   background: transparent;
   color: inherit;
@@ -1614,7 +1614,7 @@ h1 {
   margin: 0;
   padding: 2px 6px;
   overflow: hidden;
-  border-right: 1px solid #a0a0a0;
+  border-right: 1px solid var(--ds-line-a0a0a0);
   font-style: normal;
   line-height: 16px;
   text-overflow: ellipsis;
@@ -1698,15 +1698,15 @@ h1 {
 .registry-secondary-strip {
   min-height: 18px;
   padding: 1px 4px;
-  border: 1px solid #c0c0c0;
+  border: 1px solid var(--ds-line-c0c0c0);
   border-radius: 0;
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .registry-secondary-strip :deep(.path-meta-footer) {
   gap: 6px;
   min-height: 18px;
-  color: #111111;
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
 }
@@ -1720,7 +1720,7 @@ h1 {
   min-height: 18px;
   margin-top: 0;
   overflow: hidden;
-  color: #111111;
+  color: var(--ds-text-111111);
   font-size: 11px;
   line-height: 16px;
   text-overflow: ellipsis;
@@ -1728,6 +1728,6 @@ h1 {
 }
 
 .path-side-footer-muted {
-  color: #9ca3af;
+  color: var(--ds-text-9ca3af);
 }
 </style>

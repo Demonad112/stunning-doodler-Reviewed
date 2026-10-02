@@ -29,14 +29,16 @@ describe('shell chrome density', () => {
     expect(source).toMatch(/\.tab-chip button\s*\{[\s\S]*?height:\s*22px/)
     expect(source).toMatch(/\.tab-chip button\s*\{[\s\S]*?font-size:\s*11px/)
     expect(source).toMatch(/data-menu-density="capture-1to1"/)
-    expect(source).toMatch(/\.menu-bar\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(source).toMatch(/\.menu-bar\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
     expect(source).toMatch(/\.menu-panel\s*\{[\s\S]*?border-radius:\s*0/)
     expect(source).toMatch(/\.menu-panel button,[\s\S]*?min-height:\s*22px/)
     expect(source).toMatch(/\.menu-panel button,[\s\S]*?font-size:\s*12px/)
-    expect(source).toMatch(/\.menus\s*\{[\s\S]*?border-top:\s*1px solid #d0d0d0/)
+    expect(source).toMatch(/\.menus\s*\{[\s\S]*?border-top:\s*1px solid var\(--ds-line-d0d0d0\)/)
     expect(source).toMatch(/\.tab-context-menu\s*\{[\s\S]*?border-radius:\s*0/)
     expect(source).toMatch(/\.dirty-tab-prompt\s*\{[\s\S]*?min-height:\s*22px/)
-    expect(source).toMatch(/\.menu-bar\s*\{[\s\S]*?border-bottom:\s*1px solid #a0a0a0/)
+    expect(source).toMatch(
+      /\.menu-bar\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--ds-line-a0a0a0\)/,
+    )
     expect(source).toMatch(/\.language-panel\s*\{[\s\S]*?border-radius:\s*0/)
     expect(source).toMatch(/\.language-option\s*\{[\s\S]*?min-height:\s*20px/)
     expect(source).toMatch(/\.command-palette\s*\{[\s\S]*?border-radius:\s*0/)
@@ -63,7 +65,9 @@ describe('shell chrome density', () => {
     )
     expect(mainCss).toMatch(/\.workbench-titlebar\s*\{[\s\S]*?height:\s*22px/)
     expect(mainCss).toMatch(/\.bc-session-toolbar\s*\{[\s\S]*?min-height:\s*39\.5px/)
-    expect(mainCss).toMatch(/\.bc-session-toolbar\s*\{[\s\S]*?border-bottom:\s*1px solid #a0a0a0/)
+    expect(mainCss).toMatch(
+      /\.bc-session-toolbar\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--ds-line-a0a0a0\)/,
+    )
     expect(mainCss).toMatch(/\.workbench-inspector-stack\s*\{[\s\S]*?padding:\s*2px 4px/)
     expect(mainCss).toMatch(/\.workbench-inspector-section\s*\{[\s\S]*?border-radius:\s*0/)
     expect(mainCss).toMatch(/\.workbench-inspector-section h2\s*\{[\s\S]*?height:\s*16px/)
@@ -88,7 +92,7 @@ describe('shell chrome density', () => {
   it('keeps Help About dialog residual capture chrome', () => {
     expect(source).toMatch(/data-about-chrome="capture-1to1-residual"/)
     expect(source).toMatch(
-      /\.about-dialog\[data-about-chrome='capture-1to1-residual'\]\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.about-dialog\[data-about-chrome='capture-1to1-residual'\]\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
     expect(source).toMatch(/\.about-dialog button\s*\{[\s\S]*?height:\s*18px/)
   })
@@ -98,23 +102,23 @@ describe('shell chrome density', () => {
     expect(source).toMatch(/menuPanelEntries/)
     expect(source).toMatch(/class="menu-separator"/)
     expect(source).toMatch(/data-enabled/)
-    expect(source).toMatch(/\.menu-separator\s*\{[\s\S]*?background:\s*#c0c0c0/)
+    expect(source).toMatch(/\.menu-separator\s*\{[\s\S]*?background:\s*var\(--ds-fill-c0c0c0\)/)
     expect(source).toMatch(/menu-command\[data-enabled='false'\]/)
     expect(source).toMatch(/data-menu-sep="capture-1to1-residual"/)
     expect(source).toMatch(/\.menu-separator\s*\{[\s\S]*?margin:\s*2px 4px/)
     expect(source).toMatch(
       /data-menu-chrome='capture-1to1-residual'\] \.menus button\s*\{[\s\S]*?height:\s*21\.5px/,
     )
-    expect(source).toMatch(/menus button\.active\s*\{[\s\S]*?background:\s*#c8e4ff/)
+    expect(source).toMatch(/menus button\.active\s*\{[\s\S]*?background:\s*var\(--ds-fill-c8e4ff\)/)
   })
 
   it('keeps tab strip and sole-session frame residual capture chrome', () => {
     expect(source).toMatch(/data-tab-strip-density="capture-1to1-residual"/)
     expect(source).toMatch(
-      /\.tab-strip\[data-tab-strip-density='capture-1to1-residual'\]\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.tab-strip\[data-tab-strip-density='capture-1to1-residual'\]\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
     expect(mainCss).toMatch(
-      /\.workbench-shell-single-session \.bc-session-toolbar\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.workbench-shell-single-session \.bc-session-toolbar\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
   })
 })
@@ -196,7 +200,7 @@ describe('pane-header fill', () => {
 
   it('matches capture pane-header fill #f0f0f0', () => {
     expect(mainCss).toMatch(
-      /\.split-pane-header,\s*\.pane-header,\s*\.metadata-header\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.split-pane-header,\s*\.pane-header,\s*\.metadata-header\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
   })
 })
@@ -214,7 +218,7 @@ describe('workbench-toolbar fill', () => {
 
   it('matches capture workbench-toolbar fill #f0f0f0', () => {
     expect(mainCss).toMatch(
-      /\.workbench-toolbar,\s*\.path-pair-bar\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.workbench-toolbar,\s*\.path-pair-bar\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
   })
 })
@@ -223,7 +227,9 @@ describe('panel border-color', () => {
   const mainCss = readFileSync(resolve(__dirname, './main.css'), 'utf8')
 
   it('matches capture panel border-color #c0c0c0', () => {
-    expect(mainCss).toMatch(/\.profile-detail-panel \{[\s\S]*?border-color:\s*#c0c0c0/)
+    expect(mainCss).toMatch(
+      /\.profile-detail-panel \{[\s\S]*?border-color:\s*var\(--ds-line-c0c0c0\)/,
+    )
   })
 })
 
@@ -239,7 +245,9 @@ describe('about button border residual', () => {
   const source = readFileSync(resolve(__dirname, '../layouts/AppLayout.vue'), 'utf8')
 
   it('matches About dialog button border to capture #a0a0a0', () => {
-    expect(source).toMatch(/\.about-dialog button\s*\{[\s\S]*?border:\s*1px solid #a0a0a0/)
+    expect(source).toMatch(
+      /\.about-dialog button\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
+    )
   })
 })
 

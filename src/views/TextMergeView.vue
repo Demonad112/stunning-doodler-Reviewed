@@ -1500,7 +1500,7 @@ watch(
 
 .toolbar-button-glyph {
   flex-shrink: 0;
-  color: #2f353d;
+  color: var(--ds-text-2f353d);
 }
 
 .toolbar-button:disabled {
@@ -1582,7 +1582,6 @@ watch(
   min-height: 18px;
   padding: 1px 3px;
   border-bottom: 1px solid var(--app-border);
-  background: #f0f0f0;
   background: var(--app-surface-muted);
 }
 
@@ -1671,8 +1670,7 @@ watch(
   padding: 2px 4px;
   border: 1px solid var(--app-border);
   border-radius: 0;
-  background: var(--app-surface);
-  background: #f0f0f0;
+  background: var(--ds-fill-f0f0f0);
 }
 
 .conflict-panel header {

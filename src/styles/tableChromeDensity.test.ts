@@ -52,7 +52,7 @@ describe('table compare chrome density', () => {
 
   it('keeps Table secondary nav/report chrome on capture band', () => {
     expect(css).toMatch(
-      /\.table-compare-view \.table-navigation-bar\s*\{[\s\S]*?border:\s*1px solid #a0a0a0/,
+      /\.table-compare-view \.table-navigation-bar\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
     )
     expect(css).toMatch(
       /\.table-compare-view \.table-navigation-bar\s*\{[\s\S]*?min-height:\s*22px/,
@@ -68,7 +68,9 @@ describe('table compare chrome density', () => {
     )
 
     expect(tableView).toMatch(/data-table-secondary-density="capture-1to1"/)
-    expect(tableView).toMatch(/\.table-navigation-bar\s*\{[\s\S]*?border:\s*1px solid #a0a0a0/)
+    expect(tableView).toMatch(
+      /\.table-navigation-bar\s*\{[\s\S]*?border:\s*1px solid var\(--ds-line-a0a0a0\)/,
+    )
     expect(tableView).toMatch(/\.table-navigation-bar button\s*\{[\s\S]*?height:\s*18px/)
     expect(tableView).toMatch(/\.table-navigation-bar label span[\s\S]*?line-height:\s*16px/)
     expect(tableView).toMatch(/\.table-report-actions\s*\{[\s\S]*?gap:\s*6px/)
@@ -96,7 +98,9 @@ describe('table path-meta secondary strip density', () => {
     expect(tableView).toMatch(/data-secondary-density="capture-1to1"/)
     expect(tableView).toMatch(/table-secondary-strip/)
     expect(tableView).toMatch(/\.table-secondary-strip\s*\{[\s\S]*?min-height:\s*18px/)
-    expect(tableView).toMatch(/\.table-secondary-strip\s*\{[\s\S]*?background:\s*#f0f0f0/)
+    expect(tableView).toMatch(
+      /\.table-secondary-strip\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
+    )
     expect(tableView).toMatch(
       /\.table-secondary-strip :deep\(\.path-meta-footer\)\s*\{[\s\S]*?gap:\s*6px/,
     )
@@ -104,7 +108,7 @@ describe('table path-meta secondary strip density', () => {
       /\.table-compare-view \.table-secondary-strip\s*\{[\s\S]*?min-height:\s*18px/,
     )
     expect(css).toMatch(
-      /\.table-compare-view \.table-secondary-strip\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.table-compare-view \.table-secondary-strip\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
     expect(css).toMatch(/\.table-compare-view \.path-side-footer\s*\{[\s\S]*?min-height:\s*18px/)
     expect(tableView).not.toMatch(/min-height:\s*6px/)
@@ -125,7 +129,7 @@ describe('table grid residual', () => {
 describe('table grid header fill', () => {
   it('matches capture header fill #f0f0f0', () => {
     expect(css).toMatch(
-      /data-table-grid-density='capture-1to1-residual'\] \.table-grid-panel header[\s\S]*?background:\s*#f0f0f0/,
+      /data-table-grid-density='capture-1to1-residual'\] \.table-grid-panel header[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
   })
 })
@@ -133,7 +137,7 @@ describe('table grid header fill', () => {
 describe('table secondary strip border', () => {
   it('matches capture path-meta border #c0c0c0', () => {
     expect(css).toMatch(
-      /\.table-compare-view \.table-secondary-strip[\s\S]*?border:\s*1px solid #c0c0c0/,
+      /\.table-compare-view \.table-secondary-strip[\s\S]*?border:\s*1px solid var\(--ds-line-c0c0c0\)/,
     )
   })
 })
@@ -149,7 +153,7 @@ describe('table virtual grid row track', () => {
 describe('table grid row border', () => {
   it('matches capture grid row border #c0c0c0', () => {
     expect(css).toMatch(
-      /\.table-compare-view \.table-grid-row\s*\{[\s\S]*?border-bottom:\s*1px solid #c0c0c0/,
+      /\.table-compare-view \.table-grid-row\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--ds-line-c0c0c0\)/,
     )
   })
 })
@@ -157,21 +161,21 @@ describe('table grid row border', () => {
 describe('table grid cell border', () => {
   it('matches capture grid cell border #c0c0c0', () => {
     expect(css).toMatch(
-      /data-table-grid-density='capture-1to1-residual'\] \.table-grid-cell[\s\S]*?border-right:\s*1px solid #c0c0c0/,
+      /data-table-grid-density='capture-1to1-residual'\] \.table-grid-cell[\s\S]*?border-right:\s*1px solid var\(--ds-line-c0c0c0\)/,
     )
   })
 })
 
 describe('dense-data-table th fill', () => {
   it('matches capture dense table header fill #f0f0f0', () => {
-    expect(css).toMatch(/\.dense-data-table th[\s\S]*?background:\s*#f0f0f0/)
+    expect(css).toMatch(/\.dense-data-table th[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/)
   })
 })
 
 describe('table-compare-header fill', () => {
   it('matches capture table header fill #f0f0f0', () => {
     expect(css).toMatch(
-      /\.app-shell-single-session \.table-compare-header\s*\{[\s\S]*?background:\s*#f0f0f0/,
+      /\.app-shell-single-session \.table-compare-header\s*\{[\s\S]*?background:\s*var\(--ds-fill-f0f0f0\)/,
     )
   })
 })
