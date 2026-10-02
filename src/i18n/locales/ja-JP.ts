@@ -854,7 +854,7 @@ export const jaJP: LanguagePack = {
     'ui.removeUnixShellIntegration': 'シェル連携を削除',
     'ui.unixShellHint':
       'Linux では .desktop の「別のアプリで開く」を、macOS では shell-compare ヘルパーと Open With 用アプリをインストールします。CLI --shell-compare を再利用します。',
-    'ui.unixShellCliHint': 'CLI も利用可: open-diff-cli shell-compare [--select-left] <path>',
+    'ui.unixShellCliHint': 'CLI も利用可: deepserver-cli shell-compare [--select-left] <path>',
     'ui.registerShellExtension': 'エクスプローラーのコンテキストメニューをインストール',
     'ui.installExplorerContextMenu': 'エクスプローラーのコンテキストメニューをインストール',
     'ui.removeExplorerContextMenu': 'エクスプローラーのコンテキストメニューを削除',

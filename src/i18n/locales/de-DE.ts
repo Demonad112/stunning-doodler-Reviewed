@@ -874,7 +874,7 @@ export const deDE: LanguagePack = {
     'ui.removeUnixShellIntegration': 'Shell-Integration entfernen',
     'ui.unixShellHint':
       'Installiert einen .desktop Open-With-Eintrag unter Linux oder einen shell-compare-Helfer plus Open-With-App-Stub unter macOS. Nutzt CLI --shell-compare.',
-    'ui.unixShellCliHint': 'Auch verfügbar: open-diff-cli shell-compare [--select-left] <path>',
+    'ui.unixShellCliHint': 'Auch verfügbar: deepserver-cli shell-compare [--select-left] <path>',
     'ui.registerShellExtension': 'Explorer-Kontextmenü installieren',
     'ui.installExplorerContextMenu': 'Explorer-Kontextmenü installieren',
     'ui.removeExplorerContextMenu': 'Explorer-Kontextmenü entfernen',

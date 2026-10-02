@@ -272,7 +272,7 @@ pub fn cli_exit_code_value(exit_code: CliExitCode) -> i32 {
 
 pub fn cli_help_text() -> String {
     let mut lines = vec![
-        "Usage: open-diff-cli <command> [args]".to_owned(),
+        "Usage: deepserver-cli <command> [args]".to_owned(),
         "Commands:".to_owned(),
         "  compare [--quiet] <left> <right>".to_owned(),
         "  compare-folders [--quiet] <left> <right>".to_owned(),
@@ -382,11 +382,11 @@ pub fn compare_folders(
     let cancel_token = job_core::CancellationToken::default();
     let options = folder_core::FolderCompareOptions::default();
     let (left, left_unreadable) =
-        folder_core::scan_local_folder_collecting(left, &cancel_token, &options)
-            .map_err(runtime_error)?;
+        folder_core::scan_local_folder_collecting(&left, &cancel_token, &options)
+            .map_err(|error| scan_error(&left, error))?;
     let (right, right_unreadable) =
-        folder_core::scan_local_folder_collecting(right, &cancel_token, &options)
-            .map_err(runtime_error)?;
+        folder_core::scan_local_folder_collecting(&right, &cancel_token, &options)
+            .map_err(|error| scan_error(&right, error))?;
     let unreadable: Vec<CliUnreadableFolder> =
         [("left", left_unreadable), ("right", right_unreadable)]
             .into_iter()
@@ -1213,10 +1213,10 @@ pub fn preview_folder_sync_cli(
     let cancel_token = job_core::CancellationToken::default();
     let left_path = left.as_ref();
     let right_path = right.as_ref();
-    let left_tree =
-        folder_core::scan_local_folder(left_path, &cancel_token).map_err(runtime_error)?;
-    let right_tree =
-        folder_core::scan_local_folder(right_path, &cancel_token).map_err(runtime_error)?;
+    let left_tree = folder_core::scan_local_folder(left_path, &cancel_token)
+        .map_err(|error| scan_error(left_path, error))?;
+    let right_tree = folder_core::scan_local_folder(right_path, &cancel_token)
+        .map_err(|error| scan_error(right_path, error))?;
     let rows = folder_core::align_folder_trees(&left_tree, &right_tree);
     let plan = sync_core::build_update_right_plan(
         left_path.display().to_string(),
@@ -1367,6 +1367,14 @@ fn session_type_label(session_type: &session_core::SessionType) -> &'static str 
         session_core::SessionType::VersionCompare => "version-compare",
         session_core::SessionType::DiskUsage => "disk-usage",
         session_core::SessionType::TransferMonitor => "transfer-monitor",
+    }
+}
+
+/// A folder scan that failed, naming the folder it was scanning (the error itself has no path).
+fn scan_error(root: impl AsRef<Path>, error: folder_core::FolderScanError) -> CliRuntimeError {
+    CliRuntimeError {
+        message: format!("Can't read {}: {error}", root.as_ref().display()),
+        exit_code: CliExitCode::IoError,
     }
 }
 
@@ -2002,6 +2010,30 @@ mod tests {
 
         fs::remove_dir_all(left).expect("fixture should be removable");
         fs::remove_dir_all(right).expect("fixture should be removable");
+    }
+
+    #[test]
+    fn folder_scan_errors_name_the_folder() {
+        let missing = temp_dir_path("missing-folder");
+        let existing = temp_dir_path("existing-folder");
+        fs::create_dir_all(&existing).expect("fixture directory should be writable");
+
+        for error in [
+            compare_folders(&missing, &existing).expect_err("a missing root is an error"),
+            preview_folder_sync_cli(&missing, &existing).expect_err("a missing root is an error"),
+        ] {
+            assert_eq!(error.exit_code, CliExitCode::IoError);
+            assert!(
+                error
+                    .message
+                    .starts_with(&format!("Can't read {}: ", missing.display())),
+                "{}",
+                error.message
+            );
+            assert!(!error.message.contains("Vfs("), "{}", error.message);
+        }
+
+        fs::remove_dir_all(existing).expect("fixture should be removable");
     }
 
     #[test]

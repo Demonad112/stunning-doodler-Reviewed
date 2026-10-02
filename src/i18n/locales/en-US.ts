@@ -856,7 +856,7 @@ export const enUS: LanguagePack = {
     'ui.removeUnixShellIntegration': 'Remove shell integration',
     'ui.unixShellHint':
       'Installs a .desktop Open With entry on Linux, or a shell-compare helper + Open With app stub on macOS. Reuses CLI --shell-compare.',
-    'ui.unixShellCliHint': 'Also available: open-diff-cli shell-compare [--select-left] <path>',
+    'ui.unixShellCliHint': 'Also available: deepserver-cli shell-compare [--select-left] <path>',
     'ui.registerShellExtension': 'Install Explorer context menu',
     'ui.installExplorerContextMenu': 'Install Explorer context menu',
     'ui.removeExplorerContextMenu': 'Remove Explorer context menu',

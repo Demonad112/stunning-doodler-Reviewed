@@ -850,7 +850,7 @@ export const koKR: LanguagePack = {
     'ui.removeUnixShellIntegration': '셸 통합 제거',
     'ui.unixShellHint':
       'Linux에는 .desktop 다른 앱으로 열기 항목을, macOS에는 shell-compare 도우미와 Open With 앱 스텁을 설치합니다. CLI --shell-compare를 재사용합니다.',
-    'ui.unixShellCliHint': 'CLI도 사용 가능: open-diff-cli shell-compare [--select-left] <path>',
+    'ui.unixShellCliHint': 'CLI도 사용 가능: deepserver-cli shell-compare [--select-left] <path>',
     'ui.registerShellExtension': '탐색기 컨텍스트 메뉴 설치',
     'ui.installExplorerContextMenu': '탐색기 컨텍스트 메뉴 설치',
     'ui.removeExplorerContextMenu': '탐색기 컨텍스트 메뉴 제거',

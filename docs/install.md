@@ -58,6 +58,7 @@ Check the result:
 ```powershell
 Test-Path "$env:ProgramFiles\DeepServer\DeepServer.exe"
 Test-Path "$env:ProgramFiles\DeepServer\deepserver-diskusage.exe"
+Test-Path "$env:ProgramFiles\DeepServer\deepserver-cli.exe"
 ```
 
 ### Deploying through Intune, SCCM/MECM or GPO
@@ -88,4 +89,5 @@ Transfer Monitor runs older than 90 days, and all but the newest 200, are remove
 
 - `DeepServer.exe`: the app (compare and merge, sync, Transfer Monitor, Disk Usage views)
 - `deepserver-diskusage.exe`: the Disk Usage engine (GPL v2; source in `native/diskusage`)
+- `deepserver-cli.exe`: the command-line tool (`deepserver-cli --help`). It isn't added to `PATH`, so call it by its full path.
 - Explorer menus: **Compare with DeepServer** and **Select Left … for Compare** on files and folders, **Analyze disk usage** on folders and drives, and **Copy with verification (DeepServer)** on folders and drives

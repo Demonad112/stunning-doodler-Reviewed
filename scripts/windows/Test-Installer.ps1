@@ -18,7 +18,8 @@ if ($p.ExitCode -ne 0) { throw "installer exited with $($p.ExitCode)" }
 $installDir = Join-Path $env:ProgramFiles 'DeepServer'
 $exe = Join-Path $installDir 'DeepServer.exe'
 $engine = Join-Path $installDir 'deepserver-diskusage.exe'
-foreach ($file in $exe, $engine) {
+$cli = Join-Path $installDir 'deepserver-cli.exe'
+foreach ($file in $exe, $engine, $cli) {
   if (-not (Test-Path -LiteralPath $file)) { throw "missing $file" }
 }
 
@@ -48,7 +49,7 @@ $p = Start-Process (Join-Path $installDir 'uninstall.exe') -ArgumentList '/S' -P
 $p.WaitForExit($TimeoutSeconds * 1000) | Out-Null
 # The NSIS uninstaller re-launches itself from %TEMP%, so poll for the cleanup.
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-while ((Test-Path -LiteralPath $exe) -or (Test-Path -LiteralPath $engine) -or @($keys | Where-Object { Test-Path -LiteralPath $_ }).Count) {
+while ((Test-Path -LiteralPath $exe) -or (Test-Path -LiteralPath $engine) -or (Test-Path -LiteralPath $cli) -or @($keys | Where-Object { Test-Path -LiteralPath $_ }).Count) {
   if ((Get-Date) -gt $deadline) { throw 'uninstall left files or menu keys behind' }
   Start-Sleep -Seconds 2
 }
