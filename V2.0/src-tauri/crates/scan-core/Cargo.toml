@@ -1,0 +1,13 @@
+[package]
+name = "scan-core"
+version = "2.0.0-alpha.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Folder size tree scanner and size-based folder comparison for DeepServer 2.0."
+
+[dependencies]
+rayon = "1.12"
+serde = { version = "1.0.228", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3.27"
