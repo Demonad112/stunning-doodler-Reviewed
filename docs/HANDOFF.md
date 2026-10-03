@@ -4,49 +4,48 @@ Session state for the next Claude session. Update with `/handoff`; keep it short
 
 ## Goal
 
-Two tracks: (1) finish V1: merge #36, cut rc5, owner re-checks, tag `v1.0.0`. (2) Build DeepServer 2.0 in `V2.0/`: Compare, Record and Disk Cleanup only, Windows 11 look. Plan: `V2.0/docs/plan.md` (Batches 0–5).
+Two tracks: (1) finish V1: cut rc5, owner re-checks, tag `v1.0.0`. (2) Build DeepServer 2.0 in `V2.0/`: Compare, Record and Disk Cleanup only, Windows 11 look. Plan: `V2.0/docs/plan.md` (Batches 0–5).
 
 ## State
 
-- `main` at `d28f3c0` (#36 V1 dropdown fix and #37 V2 Batch 0 merged). Latest release **v1.0.0-rc4**; rc5 not cut.
-- V2 Batch 1 (`scan-core` + Compare page) on branch `claude/brave-allen-tiokj8` (cloud session), draft PR open. Built in the cloud: Linux tests + Windows-target clippy pass; never run as a desktop app yet.
+- `main` at `e2308af`: V2 Batch 1 Compare (#38, #39), Batch 2 Record (#40) and the Record fixes (#41) are merged. Latest release **v1.0.0-rc4**; rc5 not cut. No open PRs.
+- The repo is **public** for now (owner's choice, 2026-10-03): the private repo's Actions minutes ran out ("recent account payments have failed").
+- Worktrees `.claude/worktrees/v2-batch-2` and `v2-record-fixes`: both merged, can go.
 
-## Done this session (cloud, 2026-10-03)
+## Done this session (laptop, 2026-10-03)
 
-- `V2.0/src-tauri/crates/scan-core`: parallel walker (std `read_dir` + rayon), recursive folder totals, junctions/symlinks not followed, OneDrive online-only files flagged (attributes only, no download), unreadable folders kept with an error. Size compare: missing / extra / size differs / type differs, case-insensitive names, missing bytes rolled up. 2x100k files scan + compare in 0.54 s on Linux.
-- `compare.rs`: `compare_start` (Channel progress every 100 ms, both sides in parallel), `compare_children` (lazy, one level per call), `compare_cancel`. `tauri-plugin-dialog` for Browse.
-- Polish pass: Explorer "Copy as path" quotes stripped; same/nested folders rejected with a clear message; sortable columns; arrow-key tree navigation; right-click menu (show in Explorer, copy path) and double-click to reveal (`tauri-plugin-opener`); "Copy missing list" (header + relative paths, for email/tickets); clickable Missing/Other tiles; elapsed timer, per-side Done, Esc to cancel, cancel notice; recent compares on Compare and Home; layout fits the 900×560 minimum window.
-- Compare page: Source/Destination fields (type, Browse, drag-drop from Explorer, swap), Compare/Cancel, live progress, 4 summary tiles (missing in red), filters All/Differences/Missing, virtualised tree table. Screenshots in `V2.0/docs/screenshots/`.
+- #40 merged: Record (Watch + Copy for me, live panel, report with missed files in red, Retry, Copy missed to…). Tested in the real app with robocopy: it listed the excluded file and the locked file, and Retry copied both.
+- #41: Copy for me no longer downloads OneDrive online-only files. They are listed as `CloudOnly` unless the "Download OneDrive online-only files" box is ticked; Retry and Copy missed to… skip them too.
+- #41: "Ignore system and temp files" toggle, on by default and shared by Compare and Record. Filtered in `scan_core::is_junk`.
+- #41: the PC stays awake while a record runs (`KeepAwake` in `record.rs`). Records are no longer pruned at startup; the prune code is deleted.
+- `.claude/settings.json`: 21 read-only allow rules added (vitest, vue-tsc, `reg query`, PowerShell readers, browser/computer-use read tools).
 
 ## Next
 
-1. Owner on the laptop: `cd V2.0; corepack pnpm install; corepack pnpm tauri dev`, compare two real folders (one under OneDrive), check 175% scaling and both themes; then merge the Batch 1 PR.
-2. `/release-rc v1.0.0-rc5` for V1 when convenient.
-3. On "go": V2 Batch 2 Record (vendor V1 `transfer-core` + `job-core` + `logging-core`; replace its `folder_core` walk with `scan-core`; Watch + Copy modes, live panel, report). Add the "Record copy" button on the Compare page then.
-4. V2 Batches 3–5 per plan (Disk Cleanup reuses `scan-core`, Reports/export, installer).
-5. V1 leftovers before `v1.0.0`: Docs/Support links (`src/app/appMeta.ts`); delete rc1/rc2; Sync "Update Both" decides by mtime only.
+1. Owner tries #41 in the app: Copy for me on a OneDrive folder (online-only files listed, not downloaded), and the new check boxes at 175% scaling and in dark mode.
+2. On "go": V2 Batch 3, Disk Cleanup (drive tiles, scan with progress, treemap, lists, file types, recycle/delete). Reuse `scan-core`.
+3. Batch 4 (Reports) also gets: client/ticket/tech fields on records and compares, per-reason retry (the backend `Selection.reason` already exists), re-checking an old record against its manifest, importing a robocopy log.
+4. Batch 5 (Installer) also gets portable mode, with records saved next to the exe.
+5. A new Batch 6, "Field tools": "Copy missing only" from a Compare result, a pre-flight review screen plus the conflict choice, reading protected files with admin/backup rights, signing in to a share, the CLI for RMM tools, the Explorer right-click.
+6. V1: `/release-rc v1.0.0-rc5`, owner checks it, then tag `v1.0.0`. Leftovers: Docs/Support links (`src/app/appMeta.ts`), delete rc1/rc2.
 
 ## Open questions for the owner
 
+- Keep the repo public, or move it into an organization under the Enterprise trial (`obsidianintelligenceyyc`: 3,000 min/month, 28 days left on 2026-10-03) and make it private again? Or run CI on the laptop (a self-hosted runner, which needs an ASR exclusion for its work folder)?
 - V1 and V2 both install as "DeepServer": side by side, or should V2 replace V1? Decide before Batch 5.
-- Should reports carry company branding/logo for client hand-off (Batch 4)?
-- Must Record survive an app restart/reboot mid-copy (Batch 2)?
-- Full-drive scan speed vs. no elevation popup: MFT reading needs admin (Batch 3).
+- Report branding/logo (Batch 4). MFT speed vs. no elevation prompt (Batch 3).
 
 ## Blocked / needs the owner
 
-- New logo for 2.0 (V2 reuses the V1 icon in title bar and taskbar).
-- Remove stale worktrees: PowerShell `Remove-Item -LiteralPath '\\?\C:\Users\Addy7\Projects\Work\DeepServerV1.0\.claude\worktrees\<name>' -Recurse -Force` for `batch-4-unified-ui`, `fix-sync-direction`, `fix-menu-width`, `fix-dark-mode`; then `git worktree remove --force .claude/worktrees/batch-5-transfer-monitor`; `git worktree prune`.
-- Delete merged remote branches and rc1/rc2: **Actions → Repo maintenance** (`dry_run: true` first).
+- New logo for 2.0.
+- Delete merged branches (`claude/brave-allen-tiokj8`, `fix/menu-row-width`, `v2/batch-0-scaffold`, `v2/batch-2-record`, `v2/record-fixes`) and rc1/rc2: **Actions → Repo maintenance** (`dry_run: true` first).
+- Then remove the worktrees: `git worktree remove .claude/worktrees/v2-batch-2` and `git worktree remove .claude/worktrees/v2-record-fixes`.
 - Archive `open-diff` and `altWinDirStat` (ask first).
-- Silent-install the offline installer on a Windows Server VM/Sandbox.
-- Delete test fixtures: `C:\Users\Addy7\DSTest`, `%TEMP%\ds-cli-test`, `%TEMP%\dsc`.
 
 ## Notes
 
-- Laptop runs at 175% scaling: V2 default window is 1200×720 so it fits above the taskbar.
-- Computer-use can't grant a dev build (`target\debug\deepserver.exe` isn't an installed app). Capture the window with PowerShell `CopyFromScreen` on its `MainWindowHandle` rect (DPI-aware) instead.
-- Running `tauri dev` from `V2.0/`: don't set a relative `CARGO_TARGET_DIR` (cargo runs in `src-tauri/`, so it nests `src-tauri/src-tauri/target`). Leave it unset.
-- V2 Playwright screenshots: run a script from a checkout with root `node_modules` (import `@playwright/test`), against `http://localhost:1430`.
-- `transfer-core` already marks source files missing at the destination as NotCopied in Watch mode; that is V2's Record feature.
+- Defender ASR blocks Cargo build scripts outside the two excluded `target` folders. From a worktree, set `CARGO_TARGET_DIR=C:/Users/Addy7/Projects/Work/DeepServerV1.0/V2.0/src-tauri/target` (V2) or `.../DeepServerV1.0/src-tauri/target` (V1). Smart App Control is off.
+- The repo-root pre-push hook only checks V1. If a push changes only V2, run `corepack pnpm quality` + `corepack pnpm test` in `V2.0/` and push with `PREPUSH_SKIP=1` (from a worktree its clippy builds into an unexcluded `target` and fails with os error 5).
+- Testing the real app without screenshots: start it with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9333`, then drive the page over CDP (`Runtime.evaluate`, `window.__TAURI_INTERNALS__.invoke`).
+- Laptop runs at 175% scaling; V2's default window is 1200×720.
 - Handoff and notes files: commit on `main` directly, no PR (owner's call).
