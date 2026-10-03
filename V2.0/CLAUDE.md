@@ -46,6 +46,17 @@ CI: `.github/workflows/v2.yml`, only when `V2.0/**` changes.
   one record at a time, keeping the PC awake while it runs; UI `RecordPage.vue` (`/compare/record`) and `RecordReportPage.vue`
   (`/compare/record/:id`); the running job lives in `recordJob` (`src/lib/record.ts`) so leaving
   the page keeps Finish/Cancel.
+- `src-tauri/crates/cleanup-core`: Disk Cleanup on a `scan-core` tree. `rows` (one folder level),
+  `overview` (root totals, 100 largest files, every extension), `Protected` (what may never be
+  deleted: outside the scanned folder, Windows, Program Files, Users and profile roots, known
+  folders, pagefile/hiberfil, `$Recycle.Bin`, the Records folder), `drives` and `recycle`
+  (`SHFileOperationW` with undo; Windows asks before deleting anything too big for the bin).
+  Sizes are space on disk: OneDrive online-only bytes (`Node::cloud_bytes`) are left out.
+  Deletes call `Tree::remove`, which subtracts from every folder above. Commands:
+  `src-tauri/src/cleanup.rs`; UI `CleanupPage.vue` (`/cleanup`, `?scan=C:\` starts a scan) with
+  `TreemapView.vue` (squarified, one level, `src/lib/treemap.ts`) and `DriveTiles.vue` (also on
+  Home). The scan lives in `cleanupJob` (`src/lib/cleanup.ts`) so it survives leaving the page.
+  File-type colours are the `--app-type-*` tokens; groups in `src/lib/fileTypes.ts`.
 - Commands live in one file per area (`src-tauri/src/compare.rs`). Long jobs are `async` +
   `spawn_blocking`, stream progress over a `tauri::ipc::Channel` every 100 ms, and keep big
   results in managed state: the UI fetches one folder level at a time (`compare_children`), never

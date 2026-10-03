@@ -26,6 +26,16 @@
   --app-danger: #c42b1c;
   --app-danger-bg: #fde7e9;
   --app-close-hover: #c42b1c;
+  /* Disk Cleanup file-type colours (treemap tiles, legend). */
+  --app-type-folder: #b7791f;
+  --app-type-video: #b4009e;
+  --app-type-audio: #744da9;
+  --app-type-image: #00866e;
+  --app-type-document: #0063b1;
+  --app-type-archive: #c43e00;
+  --app-type-program: #4a5bc4;
+  --app-type-other: #6b6b6b;
+  --app-type-text: #ffffff;
 }
 
 :root[data-theme='dark'] {
@@ -48,6 +58,15 @@
   --app-warning: #fce100;
   --app-danger: #ff99a4;
   --app-danger-bg: #442726;
+  --app-type-folder: #e8b84a;
+  --app-type-video: #e58fdc;
+  --app-type-audio: #b9a2e8;
+  --app-type-image: #4fd1b5;
+  --app-type-document: #6cb8f0;
+  --app-type-archive: #f39a68;
+  --app-type-program: #97a6f7;
+  --app-type-other: #b3b0ad;
+  --app-type-text: #000000;
 }
 
 @theme inline {
