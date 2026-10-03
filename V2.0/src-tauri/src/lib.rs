@@ -1,4 +1,5 @@
 mod compare;
+mod record;
 
 use serde::Serialize;
 use tauri::window::{Effect, EffectsBuilder};
@@ -41,7 +42,9 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(compare::CompareState::default())
+        .manage(record::RecordState::default())
         .setup(|app| {
+            record::prune_in_background();
             if supports_mica() {
                 if let Some(window) = app.get_webview_window("main") {
                     window.set_effects(EffectsBuilder::new().effect(Effect::Mica).build())?;
@@ -57,6 +60,14 @@ pub fn run() {
             compare::compare_path,
             compare::compare_reveal,
             compare::compare_missing,
+            record::record_start,
+            record::record_retry,
+            record::record_finish,
+            record::record_cancel,
+            record::record_recover,
+            record::record_load,
+            record::record_list,
+            record::record_reveal,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DeepServer");

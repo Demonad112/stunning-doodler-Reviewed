@@ -4,6 +4,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import ComparePage from './pages/ComparePage.vue'
 import HomePage from './pages/HomePage.vue'
 import PlaceholderPage from './pages/PlaceholderPage.vue'
+import RecordPage from './pages/RecordPage.vue'
+import RecordReportPage from './pages/RecordReportPage.vue'
 import SettingsPage from './pages/SettingsPage.vue'
 
 export interface Section {
@@ -49,6 +51,8 @@ export const router = createRouter({
   routes: [
     { path: '/', component: HomePage },
     { path: '/compare', component: ComparePage },
+    { path: '/compare/record', component: RecordPage },
+    { path: '/compare/record/:id', component: RecordReportPage, props: true },
     ...sections.slice(2).map((section) => ({
       path: section.path,
       component: PlaceholderPage,

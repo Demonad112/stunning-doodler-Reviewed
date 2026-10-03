@@ -13,8 +13,8 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "rust:fmt:check": "cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check",
-    "rust:clippy": "cargo clippy --all-targets --manifest-path src-tauri/Cargo.toml -- -D warnings",
-    "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "rust:clippy": "cargo clippy --workspace --all-targets --manifest-path src-tauri/Cargo.toml -- -D warnings",
+    "rust:test": "cargo test --workspace --manifest-path src-tauri/Cargo.toml",
     "quality": "corepack pnpm format:check && corepack pnpm typecheck && corepack pnpm rust:fmt:check && corepack pnpm rust:clippy",
     "tauri": "tauri"
   },

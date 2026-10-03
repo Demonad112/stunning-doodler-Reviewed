@@ -99,6 +99,10 @@ pub struct Node {
     pub errors: u64,
     /// Why this folder could not be read completely.
     pub error: Option<String>,
+    /// The Windows error code behind [`Node::error`], when there is one.
+    pub error_code: Option<i32>,
+    /// Files: last modified time, in ms since 1970.
+    pub modified_ms: Option<u64>,
     first_child: NodeId,
     child_count: u32,
 }
@@ -114,6 +118,8 @@ impl Node {
             cloud_files: 0,
             errors: 0,
             error: None,
+            error_code: None,
+            modified_ms: None,
             first_child: 0,
             child_count: 0,
         }
@@ -246,6 +252,7 @@ fn scan_dir(path: &Path, name: String, state: &ScanState) -> Owned {
         Ok(entries) => entries,
         Err(err) => {
             dir.node.error = Some(err.to_string());
+            dir.node.error_code = err.raw_os_error();
             dir.node.errors = 1;
             return dir;
         }
@@ -279,8 +286,13 @@ fn scan_dir(path: &Path, name: String, state: &ScanState) -> Owned {
                     files += 1;
                     bytes += metadata.len();
                     let cloud = is_cloud_placeholder(&metadata);
-                    dir.children
-                        .push(Owned::leaf(name, Kind::File, metadata.len(), cloud));
+                    let mut leaf = Owned::leaf(name, Kind::File, metadata.len(), cloud);
+                    leaf.node.modified_ms = metadata
+                        .modified()
+                        .ok()
+                        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|since| u64::try_from(since.as_millis()).unwrap_or(u64::MAX));
+                    dir.children.push(leaf);
                 }
                 Err(err) => {
                     dir.node.error.get_or_insert_with(|| err.to_string());
@@ -376,6 +388,8 @@ mod tests {
 
         let tree = scan_ok(temp.path());
         let root = tree.root();
+        let file = tree.child_by_name(0, "a.bin").unwrap();
+        assert!(tree.node(file).modified_ms.is_some());
         assert_eq!(root.size, 60);
         assert_eq!(root.files, 3);
         assert_eq!(root.dirs, 3);

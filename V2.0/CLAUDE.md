@@ -35,6 +35,15 @@ CI: `.github/workflows/v2.yml`, only when `V2.0/**` changes.
   and the size compare (`compare` -> `DiffTree`). Flat arenas; children contiguous, largest first.
   `cargo test -p scan-core` runs on Linux; the perf check is
   `cargo test -p scan-core --release --test perf -- --ignored --nocapture` (2x100k files < 5 s).
+- `src-tauri/crates/transfer-core`: Record, vendored from V1 and trimmed (no filters, no
+  `job-core`/`logging-core`/`folder-core`; the source listing is a `scan-core` scan, see
+  `walk.rs`). `prepare` lists the source, then `run::run_copy` (Copy for me) or `watch::watch`
+  (another tool copies); `run::retry` and `recovery::copy_to_recovery` work on stored runs.
+  Runs are files under `%LOCALAPPDATA%\DeepServer2\Records` (`DEEPSERVER2_RECORDS_DIR`
+  overrides it), pruned at startup after 90 days / 200 runs. Commands: `src-tauri/src/record.rs`,
+  one record at a time; UI `RecordPage.vue` (`/compare/record`) and `RecordReportPage.vue`
+  (`/compare/record/:id`); the running job lives in `recordJob` (`src/lib/record.ts`) so leaving
+  the page keeps Finish/Cancel.
 - Commands live in one file per area (`src-tauri/src/compare.rs`). Long jobs are `async` +
   `spawn_blocking`, stream progress over a `tauri::ipc::Channel` every 100 ms, and keep big
   results in managed state: the UI fetches one folder level at a time (`compare_children`), never
