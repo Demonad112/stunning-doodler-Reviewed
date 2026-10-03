@@ -1,0 +1,14 @@
+[package]
+name = "transfer-core"
+version = "2.0.0-alpha.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Record a copy (DeepServer copies, or watches another tool copy) and list every file that did not make it."
+
+[dependencies]
+blake3 = "1.8"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+notify = "8"
+scan-core = { path = "../scan-core" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1"

@@ -382,15 +382,26 @@ function shortPath(path: string): string {
         :title="section?.title ?? 'Compare'"
         summary="Compare two folders by size and find every file that is missing at the destination."
       />
-      <button
+      <div
         v-if="!running"
-        type="button"
-        class="mt-1.5 h-8 shrink-0 rounded-md bg-accent px-5 font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50"
-        :disabled="!canCompare"
-        @click="runCompare()"
+        class="mt-1.5 flex shrink-0 gap-2"
       >
-        Compare
-      </button>
+        <RouterLink
+          to="/compare/record"
+          class="inline-flex h-8 items-center rounded-md border border-stroke bg-card px-4 hover:bg-card-hover"
+          title="Copy the source to the destination, or watch another program copy it, and list every file that did not make it"
+        >
+          Record copy
+        </RouterLink>
+        <button
+          type="button"
+          class="h-8 rounded-md bg-accent px-5 font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50"
+          :disabled="!canCompare"
+          @click="runCompare()"
+        >
+          Compare
+        </button>
+      </div>
       <button
         v-else
         type="button"

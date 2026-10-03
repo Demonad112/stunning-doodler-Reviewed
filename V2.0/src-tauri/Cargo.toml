@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "crates/scan-core"]
+members = [".", "crates/scan-core", "crates/transfer-core"]
 resolver = "2"
 
 [package]
@@ -24,6 +24,7 @@ tauri-build = { version = "2.6.3", features = [] }
 [dependencies]
 scan-core = { path = "crates/scan-core" }
 serde = { version = "1.0.228", features = ["derive"] }
+transfer-core = { path = "crates/transfer-core" }
 tauri = { version = "2.11.3", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
