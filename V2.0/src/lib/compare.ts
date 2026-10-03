@@ -1,6 +1,31 @@
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
+import { ref, watch } from 'vue'
 import { formatBytes, plural } from './format'
+
+const ignoreJunkKey = 'deepserver2-ignore-junk'
+
+/**
+ * "Ignore system and temp files" (Thumbs.db, desktop.ini, ~$ Office lock files, *.tmp, ...),
+ * shared by Compare and Record. On unless turned off.
+ */
+export const ignoreJunk = ref(readIgnoreJunk())
+
+function readIgnoreJunk(): boolean {
+  try {
+    return localStorage.getItem(ignoreJunkKey) !== 'false'
+  } catch {
+    return true
+  }
+}
+
+watch(ignoreJunk, (value) => {
+  try {
+    localStorage.setItem(ignoreJunkKey, String(value))
+  } catch {
+    // Not remembered; the toggle still applies for this session.
+  }
+})
 
 export type EntryKind = 'file' | 'dir' | 'link'
 export type DiffStatus = 'same' | 'different' | 'onlyLeft' | 'onlyRight' | 'kindMismatch'
@@ -87,6 +112,7 @@ export function errorMessage(error: unknown): string {
 export async function startCompare(
   left: string,
   right: string,
+  ignoreJunk: boolean,
   onProgress: (progress: CompareProgress) => void,
 ): Promise<CompareResult> {
   const onEvent = new Channel<CompareEvent>()
@@ -98,7 +124,7 @@ export async function startCompare(
       rightDone: event.rightDone,
     })
   }
-  return invoke<CompareResult>('compare_start', { left, right, onEvent })
+  return invoke<CompareResult>('compare_start', { left, right, ignoreJunk, onEvent })
 }
 
 /** Rows below one folder of the last compare. */

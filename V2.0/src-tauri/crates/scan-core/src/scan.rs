@@ -38,6 +38,7 @@ pub struct ScanState {
     dirs: AtomicU64,
     bytes: AtomicU64,
     current: Mutex<String>,
+    ignore_junk: bool,
 }
 
 impl ScanState {
@@ -46,6 +47,12 @@ impl ScanState {
             cancel,
             ..Self::default()
         }
+    }
+
+    /// Leaves out system and temp files (see [`is_junk`]), as if they weren't there.
+    pub fn ignoring_junk(mut self, ignore: bool) -> Self {
+        self.ignore_junk = ignore;
+        self
     }
 
     pub fn progress(&self) -> ScanProgress {
@@ -276,6 +283,9 @@ fn scan_dir(path: &Path, name: String, state: &ScanState) -> Owned {
             }
         };
         let name = entry.file_name().to_string_lossy().into_owned();
+        if state.ignore_junk && is_junk(&name, file_type.is_dir()) {
+            continue;
+        }
         if file_type.is_symlink() {
             dir.children.push(Owned::leaf(name, Kind::Link, 0, false));
         } else if file_type.is_dir() {
@@ -340,6 +350,20 @@ fn flatten(root: Owned) -> Tree {
         }
     }
     Tree { nodes }
+}
+
+/// Files Windows, Office and macOS leave behind in every folder, and the per-drive system
+/// folders. Nobody needs them copied, so with "Ignore system and temp files" they are skipped.
+pub fn is_junk(name: &str, is_dir: bool) -> bool {
+    let name = name.to_lowercase();
+    if is_dir {
+        return matches!(name.as_str(), "$recycle.bin" | "system volume information");
+    }
+    matches!(
+        name.as_str(),
+        "thumbs.db" | "ehthumbs.db" | "desktop.ini" | ".ds_store"
+    ) || name.starts_with("~$")
+        || name.ends_with(".tmp")
 }
 
 /// OneDrive and other cloud providers mark online-only files with these attributes. Reading the
@@ -432,6 +456,27 @@ mod tests {
         assert_eq!(progress.files, 2);
         assert_eq!(progress.bytes, 12);
         assert_eq!(progress.dirs, 2);
+    }
+
+    #[test]
+    fn junk_is_skipped_only_when_asked() {
+        let temp = tempfile::tempdir().unwrap();
+        write(&temp.path().join("report.docx"), 10);
+        write(&temp.path().join("~$report.docx"), 1);
+        write(&temp.path().join("Thumbs.db"), 2);
+        write(&temp.path().join("sub/desktop.ini"), 3);
+        write(&temp.path().join("sub/setup.TMP"), 4);
+        write(&temp.path().join("$RECYCLE.BIN/x.bin"), 5);
+        // Names must match exactly.
+        write(&temp.path().join("thumbs.db.bak"), 6);
+
+        assert_eq!(scan_ok(temp.path()).root().files, 7);
+        let state = ScanState::default().ignoring_junk(true);
+        let tree = scan(temp.path(), &state).unwrap();
+        assert_eq!((tree.root().files, tree.root().size), (2, 16));
+        assert!(tree.child_by_name(0, "$RECYCLE.BIN").is_none());
+        assert!(is_junk("System Volume Information", true));
+        assert!(!is_junk("System Volume Information", false));
     }
 
     #[test]

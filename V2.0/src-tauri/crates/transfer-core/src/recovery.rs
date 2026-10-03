@@ -251,6 +251,8 @@ mod tests {
             mode: TransferMode::Copy,
             verify: VerifyLevel::SizeAndTime,
             conflict: ConflictPolicy::Skip,
+            ignore_junk: false,
+            download_cloud: false,
         };
         let token = CancelToken::default();
         let (summary, _) = prepare(&dir.path("runs"), settings, &token, &mut NullSink).unwrap();

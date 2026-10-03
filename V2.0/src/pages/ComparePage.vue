@@ -37,6 +37,7 @@ import {
   cleanPath,
   errorMessage,
   formatMissingList,
+  ignoreJunk,
   isCancelled,
   loadChildren,
   loadMissing,
@@ -145,7 +146,7 @@ async function runCompare(pair?: ComparePaths): Promise<void> {
     now.value = Date.now()
   }, 250)
   try {
-    result.value = await startCompare(left, right, (update) => {
+    result.value = await startCompare(left, right, ignoreJunk.value, (update) => {
       progress.value = update
     })
     compared.value = { left, right }
@@ -447,6 +448,15 @@ function shortPath(path: string): string {
         />
       </div>
     </div>
+    <label class="mt-2 flex w-fit items-center gap-2 text-[13px] text-muted">
+      <input
+        v-model="ignoreJunk"
+        type="checkbox"
+        class="size-4 accent-accent"
+        :disabled="running"
+      />
+      Ignore system and temp files (Thumbs.db, desktop.ini, ~$ Office lock files, .tmp)
+    </label>
 
     <p
       v-if="error"

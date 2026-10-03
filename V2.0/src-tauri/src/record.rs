@@ -3,7 +3,7 @@
 //! finished record can be reopened as a report.
 
 use scan_core::{check_pair, clean_path};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -122,18 +122,64 @@ fn to_text(err: impl ToString) -> String {
     err.to_string()
 }
 
+/// Keeps the PC from going to sleep while it lives, so a long copy or watch isn't cut off. The
+/// screen may still turn off. Windows ties this to the thread, so create it on the job's thread.
+struct KeepAwake;
+
+impl KeepAwake {
+    fn new() -> Self {
+        const ES_SYSTEM_REQUIRED: u32 = 0x1;
+        set_execution_state(ES_SYSTEM_REQUIRED);
+        Self
+    }
+}
+
+impl Drop for KeepAwake {
+    fn drop(&mut self) {
+        set_execution_state(0);
+    }
+}
+
+#[cfg(windows)]
+fn set_execution_state(flags: u32) {
+    const ES_CONTINUOUS: u32 = 0x8000_0000;
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn SetThreadExecutionState(flags: u32) -> u32;
+    }
+    // SAFETY: takes a flags value only; no pointers or handles.
+    unsafe {
+        SetThreadExecutionState(ES_CONTINUOUS | flags);
+    }
+}
+
+#[cfg(not(windows))]
+fn set_execution_state(_flags: u32) {}
+
 /// Runs `work` on a blocking thread as the one record job.
 async fn job<F>(state: &RecordState, work: F) -> Result<RunDetails, String>
 where
     F: FnOnce(&WatchControl) -> Result<String, String> + Send + 'static,
 {
     let control = state.begin()?;
-    let outcome = tauri::async_runtime::spawn_blocking(move || work(&control)).await;
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        let _awake = KeepAwake::new();
+        work(&control)
+    })
+    .await;
     state.end();
     let run_id = outcome.map_err(to_text)??;
     tauri::async_runtime::spawn_blocking(move || load(&run_id))
         .await
         .map_err(to_text)?
+}
+
+/// The Record page's check boxes, see [`TransferSettings`].
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordOptions {
+    ignore_junk: bool,
+    download_cloud: bool,
 }
 
 /// Lists the source, then copies it or watches the destination. Returns when the record ends:
@@ -145,6 +191,7 @@ pub async fn record_start(
     destination: String,
     mode: TransferMode,
     verify: VerifyLevel,
+    options: RecordOptions,
     on_event: Channel<TransferProgress>,
 ) -> Result<RunDetails, String> {
     let source = clean_path(&source);
@@ -156,6 +203,8 @@ pub async fn record_start(
         mode,
         verify,
         conflict: ConflictPolicy::Skip,
+        ignore_junk: options.ignore_junk,
+        download_cloud: options.download_cloud,
     };
     job(&state, move |control| {
         let root = transfer_core::records_root();
@@ -249,6 +298,7 @@ pub async fn record_recover(
 ) -> Result<RecoveryResult, String> {
     let control = state.begin()?;
     let result = tauri::async_runtime::spawn_blocking(move || {
+        let _awake = KeepAwake::new();
         let chosen = folder
             .filter(|folder| !folder.trim().is_empty())
             .map(|folder| clean_path(&folder));
@@ -288,23 +338,4 @@ pub fn record_reveal(path: String) -> Result<(), String> {
     let path = PathBuf::from(path);
     tauri_plugin_opener::reveal_item_in_dir(&path)
         .map_err(|err| format!("Could not open {} in Explorer: {err}", path.display()))
-}
-
-/// Startup clean-up of old records (older than 90 days, beyond the newest 200), at most once a
-/// day, on a background thread.
-pub fn prune_in_background() {
-    std::thread::spawn(|| {
-        let root = transfer_core::records_root();
-        let now = transfer_core::now_ms();
-        if store::prune_due(&root, now, store::STARTUP_PRUNE_EVERY_MS) {
-            store::prune_runs(
-                &root,
-                store::KEEP_RUNS_DAYS,
-                store::KEEP_RUNS_MAX,
-                now,
-                &|_| false,
-            );
-            store::mark_pruned(&root, now);
-        }
-    });
 }

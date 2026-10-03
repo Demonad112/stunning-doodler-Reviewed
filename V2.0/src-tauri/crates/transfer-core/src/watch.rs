@@ -457,6 +457,8 @@ mod tests {
             mode: TransferMode::Watch,
             verify,
             conflict: ConflictPolicy::Skip,
+            ignore_junk: false,
+            download_cloud: false,
         };
         prepare(
             &dir.path("runs"),

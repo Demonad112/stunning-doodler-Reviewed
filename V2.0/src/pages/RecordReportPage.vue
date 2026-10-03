@@ -237,6 +237,7 @@ function sourcePath(relativePath: string): string {
         {{ stateText }} · started {{ when(summary.startedAtMs ?? summary.createdAtMs) }} · ended
         {{ when(summary.finishedAtMs) }} · {{ summary.machine }}
         <template v-if="summary.settings.verify === 'hash'"> · contents compared</template>
+        <template v-if="summary.settings.ignoreJunk"> · system and temp files ignored</template>
         <template v-if="totals.excluded > 0">
           · {{ plural(totals.excluded, 'link') }} not followed</template
         >

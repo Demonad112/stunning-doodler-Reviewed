@@ -238,7 +238,7 @@ fn scan_source(
     sink: &mut dyn TransferSink,
     report: &mut PreflightReport,
 ) -> Result<()> {
-    let tree = walk::scan_tree(source, cancel, &mut |scanned| {
+    let tree = walk::scan_tree(source, settings.ignore_junk, cancel, &mut |scanned| {
         sink.progress(&TransferProgress {
             run_id: store.id(),
             phase: Phase::Scanning,
@@ -304,10 +304,17 @@ impl ScanState<'_> {
                 relative_path,
                 size,
                 modified_ms: modified_at_ms,
+                cloud,
             } => {
                 report.files += 1;
                 report.bytes += size;
-                let blocked = self.check_name(&relative_path, report);
+                let blocked = self.check_name(&relative_path, report).or_else(|| {
+                    // Watch mode leaves it to the copying program; only Copy would download it.
+                    let skip = cloud
+                        && self.settings.mode == TransferMode::Copy
+                        && !self.settings.download_cloud;
+                    skip.then_some(FailureReason::CloudOnly)
+                });
                 let target = destination_path(self.destination, &relative_path);
                 if blocked.is_none() {
                     self.count_space(&target, size, modified_at_ms, report);
@@ -424,12 +431,17 @@ fn blocked_result(
     size: u64,
     reason: FailureReason,
 ) -> ItemResult {
+    let side = if reason == FailureReason::CloudOnly {
+        Side::Source
+    } else {
+        Side::Destination
+    };
     ItemResult::not_copied(
         relative_path,
         kind,
         size,
         reason,
-        Some(Side::Destination),
+        Some(side),
         reason.explanation(),
     )
 }
@@ -497,6 +509,8 @@ mod tests {
             mode: TransferMode::Copy,
             verify: VerifyLevel::SizeAndTime,
             conflict: ConflictPolicy::Skip,
+            ignore_junk: false,
+            download_cloud: false,
         }
     }
 
@@ -585,6 +599,26 @@ mod tests {
         .unwrap();
 
         assert_eq!((report.already_there, report.bytes_needed), (1, 3));
+    }
+
+    #[test]
+    fn junk_is_left_out_of_the_listing_when_asked() {
+        let dir = TempDir::new("prepare-junk");
+        dir.write("src/a.txt", b"a");
+        dir.write("src/Thumbs.db", b"junk");
+        let settings = TransferSettings {
+            ignore_junk: true,
+            ..settings(&dir.path("src"), &dir.path("dst"))
+        };
+        let (summary, report) = prepare(
+            &dir.path("runs"),
+            settings,
+            &CancelToken::default(),
+            &mut NullSink,
+        )
+        .unwrap();
+        assert_eq!((report.files, report.bytes), (1, 1));
+        assert!(summary.settings.ignore_junk, "kept for the report");
     }
 
     #[test]
