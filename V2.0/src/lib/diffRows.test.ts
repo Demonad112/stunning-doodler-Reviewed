@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { DiffRow } from './compare'
-import { matchesFilter, sizeDelta, statusLabel, visibleRows } from './diffRows'
+import {
+  defaultSort,
+  matchesFilter,
+  nextSort,
+  sizeDelta,
+  sortRows,
+  statusLabel,
+  visibleRows,
+} from './diffRows'
 
 function row(id: number, overrides: Partial<DiffRow> = {}): DiffRow {
   return {
@@ -45,6 +53,18 @@ describe('visibleRows', () => {
       [4, 0],
     ])
     expect(rows[0]?.expanded).toBe(true)
+    expect(rows.map((visible) => visible.parentId)).toEqual([null, 1, 1, null])
+  })
+
+  it('sorts every level', () => {
+    const big = row(4, { right: { size: 50, files: 1, dirs: 0 } })
+    const small = row(2, { right: { size: 5, files: 1, dirs: 0 } })
+    const rows = visibleRows([folder, big], new Map([[1, [small, lost]]]), new Set([1]), 'all', {
+      key: 'right',
+      dir: 'desc',
+    })
+    // `lost` has no destination side, so it sorts last.
+    expect(rows.map((visible) => visible.row.id)).toEqual([4, 1, 2, 3])
   })
 
   it('keeps an expanded folder whose children are still loading', () => {
@@ -82,5 +102,33 @@ describe('row helpers', () => {
     expect(statusLabel(changed).text).toBe('Size differs')
     expect(statusLabel(folder)).toEqual({ text: '1 missing', tone: 'danger' })
     expect(statusLabel(row(7, { kind: 'dir', status: 'different' })).text).toBe('Differs')
+  })
+})
+
+describe('sorting', () => {
+  it('keeps the backend order by default', () => {
+    expect(sortRows([same, lost, extra], defaultSort).map((r) => r.id)).toEqual([2, 3, 4])
+  })
+
+  it('sorts names naturally with folders first', () => {
+    const rows = [
+      row(1, { name: 'file10.txt' }),
+      row(2, { name: 'file9.txt' }),
+      row(3, { name: 'Zeta', kind: 'dir' }),
+    ]
+    expect(sortRows(rows, { key: 'name', dir: 'asc' }).map((r) => r.id)).toEqual([3, 2, 1])
+    expect(sortRows(rows, { key: 'name', dir: 'desc' }).map((r) => r.id)).toEqual([3, 1, 2])
+  })
+
+  it('sorts by difference, biggest loss first', () => {
+    expect(sortRows([extra, changed, lost], { key: 'delta', dir: 'asc' }).map((r) => r.id)).toEqual(
+      [3, 5, 4],
+    )
+  })
+
+  it('cycles header clicks', () => {
+    expect(nextSort(defaultSort, 'name')).toEqual({ key: 'name', dir: 'asc' })
+    expect(nextSort({ key: 'name', dir: 'asc' }, 'name')).toEqual({ key: 'name', dir: 'desc' })
+    expect(nextSort(defaultSort, 'left')).toEqual({ key: 'left', dir: 'desc' })
   })
 })

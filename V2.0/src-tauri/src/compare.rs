@@ -2,10 +2,11 @@
 //! result in memory and hand it to the UI one folder level at a time.
 
 use scan_core::{
-    compare, scan, CancelToken, DiffRow, DiffSummary, DiffTree, ScanProgress, ScanState,
+    check_pair, clean_path, compare, scan, CancelToken, DiffRow, DiffSummary, DiffTree,
+    ScanProgress, ScanState, Side,
 };
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
@@ -20,15 +21,26 @@ const CANCELLED: &str = "cancelled";
 #[derive(Default)]
 pub struct CompareState {
     cancel: Mutex<Option<CancelToken>>,
-    result: Mutex<Option<DiffTree>>,
+    result: Mutex<Option<Compared>>,
 }
+
+struct Compared {
+    left: PathBuf,
+    right: PathBuf,
+    diff: DiffTree,
+}
+
+const NO_RESULT: &str = "That compare result is no longer available. Compare again.";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum CompareEvent {
+    #[serde(rename_all = "camelCase")]
     Progress {
         left: ScanProgress,
         right: ScanProgress,
+        left_done: bool,
+        right_done: bool,
     },
 }
 
@@ -47,8 +59,9 @@ pub async fn compare_start(
     right: String,
     on_event: Channel<CompareEvent>,
 ) -> Result<CompareResult, String> {
-    let left = PathBuf::from(left.trim());
-    let right = PathBuf::from(right.trim());
+    let left = clean_path(&left);
+    let right = clean_path(&right);
+    check_pair(&left, &right)?;
     let cancel = CancelToken::new();
     if let Some(previous) = state
         .cancel
@@ -63,10 +76,12 @@ pub async fn compare_start(
 
     let started = std::time::Instant::now();
     let job_cancel = cancel.clone();
-    let diff =
-        tauri::async_runtime::spawn_blocking(move || run(&left, &right, &job_cancel, &on_event))
-            .await
-            .map_err(|err| err.to_string())??;
+    let (job_left, job_right) = (left.clone(), right.clone());
+    let diff = tauri::async_runtime::spawn_blocking(move || {
+        run(&job_left, &job_right, &job_cancel, &on_event)
+    })
+    .await
+    .map_err(|err| err.to_string())??;
     // A newer compare (or a cancel) arrived while this one was diffing.
     if cancel.is_cancelled() {
         return Err(CANCELLED.to_string());
@@ -77,23 +92,25 @@ pub async fn compare_start(
         rows: diff.children(0).unwrap_or_default(),
         elapsed_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
     };
-    *state.result.lock().map_err(|err| err.to_string())? = Some(diff);
+    *state.result.lock().map_err(|err| err.to_string())? = Some(Compared { left, right, diff });
     Ok(result)
 }
 
 fn run(
-    left: &std::path::Path,
-    right: &std::path::Path,
+    left: &Path,
+    right: &Path,
     cancel: &CancelToken,
     on_event: &Channel<CompareEvent>,
 ) -> Result<DiffTree, String> {
     let left_state = ScanState::new(cancel.clone());
     let right_state = ScanState::new(cancel.clone());
-    let send_progress = || {
+    let send_progress = |left_done: bool, right_done: bool| {
         // A closed channel (page left) is not an error; the scan still finishes.
         let _ = on_event.send(CompareEvent::Progress {
             left: left_state.progress(),
             right: right_state.progress(),
+            left_done,
+            right_done,
         });
     };
 
@@ -101,12 +118,12 @@ fn run(
         let left_job = scope.spawn(|| scan(left, &left_state));
         let right_job = scope.spawn(|| scan(right, &right_state));
         while !(left_job.is_finished() && right_job.is_finished()) {
-            send_progress();
+            send_progress(left_job.is_finished(), right_job.is_finished());
             thread::sleep(PROGRESS_INTERVAL);
         }
         (left_job.join(), right_job.join())
     });
-    send_progress();
+    send_progress(true, true);
     if cancel.is_cancelled() {
         return Err(CANCELLED.to_string());
     }
@@ -126,8 +143,56 @@ pub fn compare_children(state: State<'_, CompareState>, id: u32) -> Result<Vec<D
     let result = state.result.lock().map_err(|err| err.to_string())?;
     result
         .as_ref()
-        .and_then(|diff| diff.children(id))
-        .ok_or_else(|| "That compare result is no longer available. Compare again.".to_string())
+        .and_then(|compared| compared.diff.children(id))
+        .ok_or_else(|| NO_RESULT.to_string())
+}
+
+/// Full path of a row on one side of the last compare.
+fn full_path(state: &CompareState, id: u32, side: Side) -> Result<PathBuf, String> {
+    let result = state.result.lock().map_err(|err| err.to_string())?;
+    let compared = result.as_ref().ok_or(NO_RESULT)?;
+    let relative = compared
+        .diff
+        .relative_path(id, side)
+        .ok_or("That item is not on this side.")?;
+    let root = match side {
+        Side::Left => &compared.left,
+        Side::Right => &compared.right,
+    };
+    Ok(root.join(relative))
+}
+
+#[tauri::command]
+pub fn compare_path(state: State<'_, CompareState>, id: u32, side: Side) -> Result<String, String> {
+    full_path(&state, id, side).map(|path| path.display().to_string())
+}
+
+/// Opens Explorer with the item selected.
+#[tauri::command]
+pub fn compare_reveal(state: State<'_, CompareState>, id: u32, side: Side) -> Result<(), String> {
+    let path = full_path(&state, id, side)?;
+    tauri_plugin_opener::reveal_item_in_dir(&path)
+        .map_err(|err| format!("Could not open {} in Explorer: {err}", path.display()))
+}
+
+/// Source files missing at the destination, relative to the source, plus the source folder.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MissingList {
+    source: String,
+    destination: String,
+    paths: Vec<String>,
+}
+
+#[tauri::command]
+pub fn compare_missing(state: State<'_, CompareState>) -> Result<MissingList, String> {
+    let result = state.result.lock().map_err(|err| err.to_string())?;
+    let compared = result.as_ref().ok_or(NO_RESULT)?;
+    Ok(MissingList {
+        source: compared.left.display().to_string(),
+        destination: compared.right.display().to_string(),
+        paths: compared.diff.missing_paths(),
+    })
 }
 
 #[tauri::command]

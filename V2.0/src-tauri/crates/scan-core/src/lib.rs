@@ -4,7 +4,9 @@
 //! matches two trees by relative path and produces a [`DiffTree`] that the UI expands lazily.
 
 mod diff;
+mod paths;
 mod scan;
 
-pub use diff::{compare, DiffNode, DiffRow, DiffSide, DiffStatus, DiffSummary, DiffTree};
+pub use diff::{compare, DiffNode, DiffRow, DiffSide, DiffStatus, DiffSummary, DiffTree, Side};
+pub use paths::{check_pair, clean_path};
 pub use scan::{scan, CancelToken, Kind, Node, NodeId, ScanError, ScanProgress, ScanState, Tree};

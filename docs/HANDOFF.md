@@ -15,6 +15,7 @@ Two tracks: (1) finish V1: merge #36, cut rc5, owner re-checks, tag `v1.0.0`. (2
 
 - `V2.0/src-tauri/crates/scan-core`: parallel walker (std `read_dir` + rayon), recursive folder totals, junctions/symlinks not followed, OneDrive online-only files flagged (attributes only, no download), unreadable folders kept with an error. Size compare: missing / extra / size differs / type differs, case-insensitive names, missing bytes rolled up. 2x100k files scan + compare in 0.54 s on Linux.
 - `compare.rs`: `compare_start` (Channel progress every 100 ms, both sides in parallel), `compare_children` (lazy, one level per call), `compare_cancel`. `tauri-plugin-dialog` for Browse.
+- Polish pass: Explorer "Copy as path" quotes stripped; same/nested folders rejected with a clear message; sortable columns; arrow-key tree navigation; right-click menu (show in Explorer, copy path) and double-click to reveal (`tauri-plugin-opener`); "Copy missing list" (header + relative paths, for email/tickets); clickable Missing/Other tiles; elapsed timer, per-side Done, Esc to cancel, cancel notice; recent compares on Compare and Home; layout fits the 900×560 minimum window.
 - Compare page: Source/Destination fields (type, Browse, drag-drop from Explorer, swap), Compare/Cancel, live progress, 4 summary tiles (missing in red), filters All/Differences/Missing, virtualised tree table. Screenshots in `V2.0/docs/screenshots/`.
 
 ## Next

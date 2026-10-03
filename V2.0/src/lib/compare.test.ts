@@ -21,13 +21,20 @@ vi.mock('@tauri-apps/plugin-dialog', () => dialog)
 
 import {
   cancelCompare,
+  cleanPath,
   errorMessage,
+  formatMissingList,
   isCancelled,
   loadChildren,
   loadPaths,
+  loadRecent,
   pickFolder,
+  rememberRecent,
+  revealRow,
+  rowPath,
   savePaths,
   startCompare,
+  type DiffSummary,
 } from './compare'
 
 beforeEach(() => {
@@ -49,8 +56,19 @@ describe('compare commands', () => {
       onEvent: core.channels[0],
     })
     const progress = { files: 1, dirs: 1, bytes: 5, current: 'C:\\a' }
-    core.channels[0]?.onmessage({ kind: 'progress', left: progress, right: progress })
-    expect(onProgress).toHaveBeenCalledWith({ left: progress, right: progress })
+    core.channels[0]?.onmessage({
+      kind: 'progress',
+      left: progress,
+      right: progress,
+      leftDone: true,
+      rightDone: false,
+    })
+    expect(onProgress).toHaveBeenCalledWith({
+      left: progress,
+      right: progress,
+      leftDone: true,
+      rightDone: false,
+    })
   })
 
   it('loads children and cancels', async () => {
@@ -59,6 +77,34 @@ describe('compare commands', () => {
     expect(core.invoke).toHaveBeenCalledWith('compare_children', { id: 7 })
     await cancelCompare()
     expect(core.invoke).toHaveBeenCalledWith('compare_cancel')
+    await rowPath(3, 'right')
+    expect(core.invoke).toHaveBeenCalledWith('compare_path', { id: 3, side: 'right' })
+    await revealRow(3, 'left')
+    expect(core.invoke).toHaveBeenCalledWith('compare_reveal', { id: 3, side: 'left' })
+  })
+
+  it('formats the missing list for pasting', () => {
+    const summary = { missing: 2, missingBytes: 2048 } as DiffSummary
+    const text = formatMissingList(
+      { source: 'C:\\a', destination: 'D:\\b', paths: ['x.txt', 'sub\\y.txt'] },
+      summary,
+      new Date(2026, 9, 3, 15, 42),
+    )
+    expect(text.split('\r\n')).toEqual([
+      'Missing at destination: 2 files (2.00 KB)',
+      'Source: C:\\a',
+      'Destination: D:\\b',
+      'Compared: Oct 3, 2026, 3:42 PM',
+      '',
+      'x.txt',
+      'sub\\y.txt',
+    ])
+  })
+
+  it('cleans pasted paths', () => {
+    expect(cleanPath('  "C:\\My Data"  ')).toBe('C:\\My Data')
+    expect(cleanPath('D:\\x ')).toBe('D:\\x')
+    expect(cleanPath('"')).toBe('"')
   })
 
   it('recognises the cancel error and other messages', () => {
@@ -100,5 +146,23 @@ describe('remembered paths', () => {
     expect(loadPaths()).toEqual({ left: '', right: '' })
     localStorage.setItem('deepserver2-compare-paths', JSON.stringify({ left: 3, right: 'x' }))
     expect(loadPaths()).toEqual({ left: '', right: 'x' })
+  })
+})
+
+describe('recent compares', () => {
+  it('keeps the newest five, without duplicates', () => {
+    for (let i = 0; i < 6; i++) {
+      rememberRecent({ left: `C:\\${String(i)}`, right: 'D:\\x' })
+    }
+    rememberRecent({ left: 'c:\\3', right: 'd:\\X' })
+    const recent = loadRecent()
+    expect(recent).toHaveLength(5)
+    expect(recent[0]).toEqual({ left: 'c:\\3', right: 'd:\\X' })
+    expect(recent.filter((pair) => pair.left.toLowerCase() === 'c:\\3')).toHaveLength(1)
+  })
+
+  it('ignores corrupt values', () => {
+    localStorage.setItem('deepserver2-compare-recent', '{"a":1}')
+    expect(loadRecent()).toEqual([])
   })
 })
