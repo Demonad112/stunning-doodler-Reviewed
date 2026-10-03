@@ -1,5 +1,6 @@
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
+import { formatBytes, plural } from './format'
 
 export type EntryKind = 'file' | 'dir' | 'link'
 export type DiffStatus = 'same' | 'different' | 'onlyLeft' | 'onlyRight' | 'kindMismatch'
@@ -53,7 +54,11 @@ export interface ScanProgress {
 export interface CompareProgress {
   left: ScanProgress
   right: ScanProgress
+  leftDone: boolean
+  rightDone: boolean
 }
+
+export type Side = 'left' | 'right'
 
 export interface CompareResult {
   summary: DiffSummary
@@ -86,7 +91,12 @@ export async function startCompare(
 ): Promise<CompareResult> {
   const onEvent = new Channel<CompareEvent>()
   onEvent.onmessage = (event) => {
-    onProgress({ left: event.left, right: event.right })
+    onProgress({
+      left: event.left,
+      right: event.right,
+      leftDone: event.leftDone,
+      rightDone: event.rightDone,
+    })
   }
   return invoke<CompareResult>('compare_start', { left, right, onEvent })
 }
@@ -98,6 +108,48 @@ export function loadChildren(id: number): Promise<DiffRow[]> {
 
 export function cancelCompare(): Promise<void> {
   return invoke('compare_cancel')
+}
+
+/** Full path of a row on one side of the last compare. */
+export function rowPath(id: number, side: Side): Promise<string> {
+  return invoke<string>('compare_path', { id, side })
+}
+
+/** Opens Explorer with the row's file or folder selected. */
+export function revealRow(id: number, side: Side): Promise<void> {
+  return invoke('compare_reveal', { id, side })
+}
+
+export interface MissingList {
+  source: string
+  destination: string
+  /** Relative to the source; empty folders end with a separator. */
+  paths: string[]
+}
+
+export function loadMissing(): Promise<MissingList> {
+  return invoke<MissingList>('compare_missing')
+}
+
+/** Plain-text list of missing files, ready to paste into an email or ticket. */
+export function formatMissingList(list: MissingList, summary: DiffSummary, when: Date): string {
+  const header = [
+    `Missing at destination: ${plural(summary.missing, 'file')} (${formatBytes(summary.missingBytes)})`,
+    `Source: ${list.source}`,
+    `Destination: ${list.destination}`,
+    `Compared: ${when.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}`,
+  ]
+  return [...header, '', ...list.paths].join('\r\n')
+}
+
+/** Trims spaces and the quotes Explorer's "Copy as path" adds. */
+export function cleanPath(input: string): string {
+  const trimmed = input.trim()
+  const unquoted =
+    trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')
+      ? trimmed.slice(1, -1)
+      : trimmed
+  return unquoted.trim()
 }
 
 /** Native folder picker. `null` when cancelled or outside the desktop app. */
@@ -143,4 +195,44 @@ export function savePaths(paths: ComparePaths): void {
   } catch {
     // Storage full or blocked: the paths just aren't remembered.
   }
+}
+
+const recentKey = 'deepserver2-compare-recent'
+const recentLimit = 5
+
+/** Last compared folder pairs, newest first. */
+export function loadRecent(): ComparePaths[] {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(recentKey) ?? '[]')
+    if (!Array.isArray(saved)) {
+      return []
+    }
+    return saved
+      .filter(
+        (item): item is ComparePaths =>
+          typeof item === 'object' &&
+          item !== null &&
+          typeof (item as Record<string, unknown>).left === 'string' &&
+          typeof (item as Record<string, unknown>).right === 'string',
+      )
+      .slice(0, recentLimit)
+  } catch {
+    return []
+  }
+}
+
+export function rememberRecent(pair: ComparePaths): ComparePaths[] {
+  const same = (item: ComparePaths): boolean =>
+    item.left.toLowerCase() === pair.left.toLowerCase() &&
+    item.right.toLowerCase() === pair.right.toLowerCase()
+  const recent = [
+    { left: pair.left, right: pair.right },
+    ...loadRecent().filter((item) => !same(item)),
+  ].slice(0, recentLimit)
+  try {
+    localStorage.setItem(recentKey, JSON.stringify(recent))
+  } catch {
+    // Not remembered; the list still shows for this session.
+  }
+  return recent
 }

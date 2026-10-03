@@ -1,6 +1,7 @@
 use crate::scan::{Kind, Node, NodeId, Tree};
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};
+use std::path::PathBuf;
 
 /// How a path compares between the source (left) and the destination (right).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -54,6 +55,9 @@ pub struct DiffNode {
     pub cloud: bool,
     /// Either side could not be read completely here.
     pub error: Option<String>,
+    /// The destination's spelling of the name when it differs from the source's (case only).
+    right_name: Option<String>,
+    parent: NodeId,
     first_child: NodeId,
     child_count: u32,
 }
@@ -75,6 +79,14 @@ pub struct DiffRow {
     pub cloud: bool,
     pub error: Option<String>,
     pub has_children: bool,
+}
+
+/// Which of the two compared folders a path belongs to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Side {
+    Left,
+    Right,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
@@ -135,6 +147,66 @@ impl DiffTree {
         })
     }
 
+    /// The path of `id` relative to the compared folder on `side`, or `None` when that side
+    /// does not have it. The root is the empty path.
+    pub fn relative_path(&self, id: NodeId, side: Side) -> Option<PathBuf> {
+        let node = self.node(id)?;
+        let present = match side {
+            Side::Left => node.left.is_some(),
+            Side::Right => node.right.is_some(),
+        };
+        if !present {
+            return None;
+        }
+        let mut names = Vec::new();
+        let mut current = id;
+        while current != 0 {
+            let node = &self.nodes[current as usize];
+            let name = match side {
+                Side::Right => node.right_name.as_deref().unwrap_or(&node.name),
+                Side::Left => &node.name,
+            };
+            names.push(name);
+            current = node.parent;
+        }
+        Some(names.iter().rev().collect())
+    }
+
+    /// Every source file the destination lacks, as paths relative to the source, in table order.
+    /// Empty missing folders are listed too, ending with a separator.
+    pub fn missing_paths(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        self.collect_missing(0, false, &mut out);
+        out
+    }
+
+    fn collect_missing(&self, id: NodeId, inherited: bool, out: &mut Vec<String>) {
+        let node = &self.nodes[id as usize];
+        let missing =
+            inherited || matches!(node.status, DiffStatus::OnlyLeft | DiffStatus::KindMismatch);
+        if missing && id != 0 {
+            let empty_folder = node.kind == Kind::Dir && node.child_count == 0;
+            if node.kind != Kind::Dir || empty_folder {
+                if let Some(path) = self.relative_path(id, Side::Left) {
+                    let mut text = path.display().to_string();
+                    if empty_folder {
+                        text.push(std::path::MAIN_SEPARATOR);
+                    }
+                    out.push(text);
+                }
+                return;
+            }
+        }
+        if !missing && node.status == DiffStatus::Same {
+            return;
+        }
+        for child in node.first_child..node.first_child + node.child_count {
+            if self.nodes[child as usize].left.is_some() {
+                self.collect_missing(child, missing && id != 0, out);
+            }
+        }
+    }
+
     /// The rows directly below `id`, or `None` when `id` does not exist.
     pub fn children(&self, id: NodeId) -> Option<Vec<DiffRow>> {
         let node = self.node(id)?;
@@ -173,9 +245,9 @@ struct Owned {
     children: Vec<Owned>,
 }
 
-type Side<'a> = Option<(&'a Tree, NodeId)>;
+type Pick<'a> = Option<(&'a Tree, NodeId)>;
 
-fn diff(name: String, left: Side<'_>, right: Side<'_>) -> Owned {
+fn diff(name: String, left: Pick<'_>, right: Pick<'_>) -> Owned {
     let left_node = left.map(|(tree, id)| tree.node(id));
     let right_node = right.map(|(tree, id)| tree.node(id));
     let kind = left_node.or(right_node).map_or(Kind::Dir, |node| node.kind);
@@ -206,6 +278,11 @@ fn diff(name: String, left: Side<'_>, right: Side<'_>) -> Owned {
         error: left_node
             .and_then(|node| node.error.clone())
             .or_else(|| right_node.and_then(|node| node.error.clone())),
+        right_name: match (left_node, right_node) {
+            (Some(l), Some(r)) if l.name != r.name => Some(r.name.clone()),
+            _ => None,
+        },
+        parent: 0,
         first_child: 0,
         child_count: 0,
     };
@@ -263,7 +340,7 @@ fn largest(node: &DiffNode) -> u64 {
 }
 
 /// Children of a side, empty unless that side is a folder.
-fn folder_children(side: Side<'_>) -> Vec<NodeId> {
+fn folder_children(side: Pick<'_>) -> Vec<NodeId> {
     match side {
         Some((tree, id)) if tree.node(id).kind == Kind::Dir => tree.node(id).children().collect(),
         _ => Vec::new(),
@@ -272,7 +349,7 @@ fn folder_children(side: Side<'_>) -> Vec<NodeId> {
 
 /// Pairs the children of both sides by name: exact match first, then case-insensitive, then the
 /// leftovers on each side alone.
-fn pair_children<'a>(left: Side<'a>, right: Side<'a>) -> Vec<(Side<'a>, Side<'a>)> {
+fn pair_children<'a>(left: Pick<'a>, right: Pick<'a>) -> Vec<(Pick<'a>, Pick<'a>)> {
     let left_ids = folder_children(left);
     let right_ids = folder_children(right);
     let (Some((left_tree, _)), Some((right_tree, _))) = (left, right) else {
@@ -333,7 +410,8 @@ fn flatten(root: Owned) -> Vec<DiffNode> {
     while let Some((id, children)) = queue.pop_front() {
         nodes[id].first_child = nodes.len() as NodeId;
         nodes[id].child_count = children.len() as u32;
-        for child in children {
+        for mut child in children {
+            child.node.parent = id as NodeId;
             nodes.push(child.node);
             queue.push_back((nodes.len() - 1, child.children));
         }
@@ -465,6 +543,46 @@ mod tests {
         let diff = compare_dirs(left.path(), right.path());
         assert_eq!(diff.node(0).unwrap().status, DiffStatus::Same);
         assert_eq!(diff.children(0).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn builds_paths_and_the_missing_list() {
+        let left = tempfile::tempdir().unwrap();
+        let right = tempfile::tempdir().unwrap();
+        write(&left.path().join("Docs/a.txt"), 1);
+        write(&right.path().join("docs/a.txt"), 1);
+        write(&left.path().join("Docs/lost.txt"), 3);
+        write(&left.path().join("gone/deep/b.txt"), 2);
+        fs::create_dir_all(left.path().join("gone/empty")).unwrap();
+        write(&left.path().join("same.txt"), 1);
+        write(&right.path().join("same.txt"), 1);
+        let diff = compare_dirs(left.path(), right.path());
+
+        let docs = row(&diff.children(0).unwrap(), "Docs").clone();
+        let a = row(&diff.children(docs.id).unwrap(), "a.txt").clone();
+        assert_eq!(
+            diff.relative_path(a.id, Side::Left).unwrap(),
+            Path::new("Docs").join("a.txt")
+        );
+        assert_eq!(
+            diff.relative_path(a.id, Side::Right).unwrap(),
+            Path::new("docs").join("a.txt")
+        );
+        let lost = row(&diff.children(docs.id).unwrap(), "lost.txt").clone();
+        assert!(diff.relative_path(lost.id, Side::Right).is_none());
+        assert_eq!(diff.relative_path(0, Side::Left).unwrap(), Path::new(""));
+
+        let sep = std::path::MAIN_SEPARATOR;
+        let mut missing = diff.missing_paths();
+        missing.sort();
+        assert_eq!(
+            missing,
+            [
+                format!("Docs{sep}lost.txt"),
+                format!("gone{sep}deep{sep}b.txt"),
+                format!("gone{sep}empty{sep}"),
+            ]
+        );
     }
 
     #[test]

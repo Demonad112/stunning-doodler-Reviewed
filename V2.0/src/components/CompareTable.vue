@@ -1,13 +1,35 @@
 <script setup lang="ts">
-import { ChevronRight, Cloud, File, Folder, Link2, LoaderCircle, TriangleAlert } from '@lucide/vue'
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronRight,
+  Cloud,
+  File,
+  Folder,
+  Link2,
+  LoaderCircle,
+  TriangleAlert,
+} from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import StatusChip from '@/components/StatusChip.vue'
-import type { DiffSide } from '@/lib/compare'
-import { sizeDelta, statusLabel, type VisibleRow } from '@/lib/diffRows'
+import type { DiffRow, DiffSide } from '@/lib/compare'
+import { sizeDelta, statusLabel, type Sort, type SortKey, type VisibleRow } from '@/lib/diffRows'
 import { formatBytes, formatDelta } from '@/lib/format'
 
-const props = defineProps<{ rows: VisibleRow[]; loading: ReadonlySet<number> }>()
-const emit = defineEmits<{ toggle: [id: number] }>()
+const props = defineProps<{
+  rows: VisibleRow[]
+  loading: ReadonlySet<number>
+  sort: Sort
+  selected: number | null
+}>()
+const emit = defineEmits<{
+  toggle: [id: number]
+  select: [id: number]
+  /** Enter or double-click on a file. */
+  open: [row: DiffRow]
+  menu: [row: DiffRow, x: number, y: number]
+  sort: [key: Exclude<SortKey, 'size'>]
+}>()
 
 /** Fixed row height so only the rows on screen are rendered (a fully expanded tree can be huge). */
 const rowHeight = 32
@@ -50,9 +72,129 @@ const last = computed(() =>
   ),
 )
 const shown = computed(() => props.rows.slice(first.value, last.value))
+const selectedIndex = computed(() =>
+  props.rows.findIndex((visible) => visible.row.id === props.selected),
+)
 
 function onScroll(event: Event): void {
   scrollTop.value = (event.target as HTMLElement).scrollTop
+}
+
+function scrollToIndex(index: number): void {
+  const element = viewport.value
+  if (!element) {
+    return
+  }
+  const top = index * rowHeight
+  if (top < element.scrollTop) {
+    element.scrollTop = top
+  } else if (top + rowHeight > element.scrollTop + element.clientHeight) {
+    element.scrollTop = top + rowHeight - element.clientHeight
+  }
+}
+
+function selectIndex(index: number): void {
+  const clamped = Math.max(0, Math.min(props.rows.length - 1, index))
+  const target = props.rows[clamped]
+  if (target) {
+    emit('select', target.row.id)
+    scrollToIndex(clamped)
+  }
+}
+
+function openMenuForSelected(): void {
+  const index = selectedIndex.value
+  const visible = props.rows[index]
+  const element = viewport.value
+  if (visible && element) {
+    const box = element.getBoundingClientRect()
+    const top = box.top + index * rowHeight - element.scrollTop
+    emit('menu', visible.row, box.left + 48, top + rowHeight)
+  }
+}
+
+/** Arrow keys as in Explorer's tree: up/down move, right expands, left collapses or goes up. */
+function onKeydown(event: KeyboardEvent): void {
+  const index = selectedIndex.value
+  const current = props.rows[index]
+  const page = Math.max(1, Math.floor(viewportHeight.value / rowHeight) - 1)
+  switch (event.key) {
+    case 'ArrowDown':
+      selectIndex(index + 1)
+      break
+    case 'ArrowUp':
+      selectIndex(index < 0 ? 0 : index - 1)
+      break
+    case 'PageDown':
+      selectIndex(index + page)
+      break
+    case 'PageUp':
+      selectIndex(index - page)
+      break
+    case 'Home':
+      selectIndex(0)
+      break
+    case 'End':
+      selectIndex(props.rows.length - 1)
+      break
+    case 'ArrowRight':
+      if (current?.row.hasChildren) {
+        if (current.expanded) {
+          selectIndex(index + 1)
+        } else {
+          emit('toggle', current.row.id)
+        }
+      }
+      break
+    case 'ArrowLeft':
+      if (current?.expanded) {
+        emit('toggle', current.row.id)
+      } else if (current && current.parentId !== null) {
+        const parentId = current.parentId
+        selectIndex(props.rows.findIndex((visible) => visible.row.id === parentId))
+      }
+      break
+    case 'Enter':
+      if (current) {
+        if (current.row.hasChildren) {
+          emit('toggle', current.row.id)
+        } else {
+          emit('open', current.row)
+        }
+      }
+      break
+    case 'ContextMenu':
+      openMenuForSelected()
+      break
+    case 'F10':
+      if (!event.shiftKey) {
+        return
+      }
+      openMenuForSelected()
+      break
+    default:
+      return
+  }
+  event.preventDefault()
+}
+
+function onFocus(): void {
+  if (selectedIndex.value < 0 && props.rows.length > 0) {
+    selectIndex(0)
+  }
+}
+
+function onDoubleClick(visible: VisibleRow): void {
+  if (visible.row.hasChildren) {
+    emit('toggle', visible.row.id)
+  } else {
+    emit('open', visible.row)
+  }
+}
+
+function onContextMenu(event: MouseEvent, visible: VisibleRow): void {
+  emit('select', visible.row.id)
+  emit('menu', visible.row, event.clientX, event.clientY)
 }
 
 function size(side: DiffSide | null): string {
@@ -64,49 +206,60 @@ function delta(visible: VisibleRow): string {
   return bytes === 0 ? '—' : formatDelta(bytes)
 }
 
-function onRowClick(visible: VisibleRow): void {
-  if (visible.row.hasChildren) {
-    emit('toggle', visible.row.id)
-  }
-}
+const headers: { key: Exclude<SortKey, 'size'>; label: string; class: string }[] = [
+  { key: 'name', label: 'Name', class: 'justify-start' },
+  { key: 'left', label: 'Source', class: 'justify-end' },
+  { key: 'right', label: 'Destination', class: 'justify-end' },
+  { key: 'delta', label: 'Difference', class: 'justify-end delta-col' },
+]
 
-const columns = 'grid grid-cols-[minmax(0,1fr)_6.5rem_6.5rem_6.5rem_9rem] items-center gap-3 px-3'
+const ariaSort = (key: SortKey): 'ascending' | 'descending' | 'none' =>
+  props.sort.key === key ? (props.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'
 </script>
 
 <template>
   <div
-    class="flex min-h-0 flex-col overflow-hidden rounded-lg border border-stroke bg-card"
+    class="compare-table flex min-h-0 flex-col overflow-hidden rounded-lg border border-stroke bg-card"
     role="treegrid"
     aria-label="Compare result"
     :aria-rowcount="rows.length"
   >
     <div
-      :class="columns"
-      class="h-9 shrink-0 border-b border-stroke text-xs font-semibold text-muted"
+      class="grid-row h-9 shrink-0 border-b border-stroke text-xs font-semibold text-muted"
       role="row"
     >
-      <span role="columnheader">Name</span>
+      <button
+        v-for="header in headers"
+        :key="header.key"
+        type="button"
+        role="columnheader"
+        :aria-sort="ariaSort(header.key)"
+        class="flex h-full items-center gap-1 hover:text-fg"
+        :class="[header.class, sort.key === header.key ? 'text-fg' : '']"
+        :title="`Sort by ${header.label.toLowerCase()}`"
+        @click="emit('sort', header.key)"
+      >
+        {{ header.label }}
+        <component
+          :is="sort.dir === 'asc' ? ArrowUp : ArrowDown"
+          v-if="sort.key === header.key"
+          class="size-3"
+        />
+      </button>
       <span
         role="columnheader"
-        class="text-right"
-        >Source</span
+        class="flex items-center"
+        >Status</span
       >
-      <span
-        role="columnheader"
-        class="text-right"
-        >Destination</span
-      >
-      <span
-        role="columnheader"
-        class="text-right"
-        >Difference</span
-      >
-      <span role="columnheader">Status</span>
     </div>
     <div
       ref="viewport"
-      class="min-h-0 flex-1 overflow-auto"
+      class="rows min-h-0 flex-1 overflow-auto outline-none"
+      tabindex="0"
+      :aria-activedescendant="selected === null ? undefined : `compare-row-${String(selected)}`"
       @scroll.passive="onScroll"
+      @keydown="onKeydown"
+      @focus="onFocus"
     >
       <div
         class="relative"
@@ -118,19 +271,22 @@ const columns = 'grid grid-cols-[minmax(0,1fr)_6.5rem_6.5rem_6.5rem_9rem] items-
         >
           <div
             v-for="visible in shown"
+            :id="`compare-row-${String(visible.row.id)}`"
             :key="visible.row.id"
+            class="grid-row text-[13px]"
             :class="[
-              columns,
-              visible.row.hasChildren ? 'cursor-default' : '',
               visible.row.status === 'onlyLeft' ? 'bg-danger-bg/60 text-danger' : 'hover:bg-subtle',
+              visible.row.id === selected ? 'is-selected' : '',
             ]"
-            class="text-[13px]"
             :style="{ height: `${String(rowHeight)}px` }"
             role="row"
             :aria-level="visible.depth + 1"
             :aria-expanded="visible.row.hasChildren ? visible.expanded : undefined"
+            :aria-selected="visible.row.id === selected"
             :data-status="visible.row.status"
-            @click="onRowClick(visible)"
+            @click="emit('select', visible.row.id)"
+            @dblclick="onDoubleClick(visible)"
+            @contextmenu.prevent="onContextMenu($event, visible)"
           >
             <span
               class="flex min-w-0 items-center gap-1.5"
@@ -140,9 +296,11 @@ const columns = 'grid grid-cols-[minmax(0,1fr)_6.5rem_6.5rem_6.5rem_9rem] items-
               <button
                 v-if="visible.row.hasChildren"
                 type="button"
+                tabindex="-1"
                 class="grid size-5 shrink-0 place-items-center rounded text-muted hover:bg-subtle-strong"
                 :aria-label="visible.expanded ? 'Collapse' : 'Expand'"
                 @click.stop="emit('toggle', visible.row.id)"
+                @dblclick.stop
               >
                 <LoaderCircle
                   v-if="loading.has(visible.row.id)"
@@ -204,7 +362,7 @@ const columns = 'grid grid-cols-[minmax(0,1fr)_6.5rem_6.5rem_6.5rem_9rem] items-
               >{{ size(visible.row.right) }}</span
             >
             <span
-              class="text-right tabular-nums"
+              class="delta-col text-right tabular-nums"
               :class="visible.row.status === 'onlyLeft' ? '' : 'text-muted'"
               role="gridcell"
               >{{ delta(visible) }}</span
@@ -221,3 +379,46 @@ const columns = 'grid grid-cols-[minmax(0,1fr)_6.5rem_6.5rem_6.5rem_9rem] items-
     </div>
   </div>
 </template>
+
+<style scoped>
+.compare-table {
+  container-type: inline-size;
+}
+
+/* Name takes the rest; the Difference column drops out when the window is narrow. */
+.grid-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6rem 6.5rem 8.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding-inline: 0.75rem;
+}
+
+.delta-col {
+  display: none;
+}
+
+@container (min-width: 42rem) {
+  .grid-row {
+    grid-template-columns: minmax(0, 1fr) 6.5rem 6.5rem 6.5rem 9rem;
+  }
+
+  button.delta-col {
+    display: flex;
+  }
+
+  span.delta-col {
+    display: block;
+  }
+}
+
+.is-selected {
+  background: var(--app-subtle-strong);
+  box-shadow: inset 2px 0 0 var(--app-accent);
+}
+
+.rows:focus-visible .is-selected {
+  outline: 1px solid var(--app-accent);
+  outline-offset: -1px;
+}
+</style>

@@ -1,53 +1,98 @@
 <script setup lang="ts">
 import { isTauri } from '@tauri-apps/api/core'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
-import { ArrowLeftRight, CircleCheck, Info, LoaderCircle, TriangleAlert } from '@lucide/vue'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch } from 'vue'
+import {
+  ArrowLeftRight,
+  ArrowRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  CircleCheck,
+  ClipboardList,
+  Copy,
+  FolderOpen,
+  History,
+  Info,
+  LoaderCircle,
+  TriangleAlert,
+} from '@lucide/vue'
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  shallowRef,
+  watch,
+} from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import CompareTable from '@/components/CompareTable.vue'
+import ContextMenu, { type MenuItem } from '@/components/ContextMenu.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import PathField from '@/components/PathField.vue'
 import SummaryStrip from '@/components/SummaryStrip.vue'
+import { copyText } from '@/lib/clipboard'
 import {
   cancelCompare,
+  cleanPath,
   errorMessage,
+  formatMissingList,
   isCancelled,
   loadChildren,
+  loadMissing,
   loadPaths,
+  loadRecent,
   pickFolder,
+  rememberRecent,
+  revealRow,
+  rowPath,
   savePaths,
   startCompare,
+  type ComparePaths,
   type CompareProgress,
   type CompareResult,
   type DiffRow,
+  type Side,
 } from '@/lib/compare'
-import { visibleRows, type CompareFilter } from '@/lib/diffRows'
+import {
+  defaultSort,
+  nextSort,
+  visibleRows,
+  type CompareFilter,
+  type Sort,
+  type SortKey,
+} from '@/lib/diffRows'
 import { formatBytes, formatDuration, plural } from '@/lib/format'
 import { sections } from '@/router'
-
-type Side = 'left' | 'right'
 
 const section = sections.find((candidate) => candidate.path === '/compare')
 const paths = reactive(loadPaths())
 watch(paths, () => savePaths(paths))
+const recent = ref<ComparePaths[]>(loadRecent())
 
 const running = ref(false)
 const progress = ref<CompareProgress | null>(null)
 const result = shallowRef<CompareResult | null>(null)
-const compared = ref({ left: '', right: '' })
+const compared = ref<ComparePaths>({ left: '', right: '' })
+const finishedAt = ref<Date | null>(null)
 const error = ref('')
+const notice = ref('')
 
 const children = shallowRef(new Map<number, DiffRow[]>())
 const expanded = shallowRef(new Set<number>())
 const loading = shallowRef(new Set<number>())
 const filter = ref<CompareFilter>('all')
+const sort = ref<Sort>(defaultSort)
+const selected = ref<number | null>(null)
 
 const canCompare = computed(
-  () => !running.value && paths.left.trim() !== '' && paths.right.trim() !== '',
+  () => !running.value && cleanPath(paths.left) !== '' && cleanPath(paths.right) !== '',
 )
 const rows = computed(() =>
-  result.value ? visibleRows(result.value.rows, children.value, expanded.value, filter.value) : [],
+  result.value
+    ? visibleRows(result.value.rows, children.value, expanded.value, filter.value, sort.value)
+    : [],
 )
-
 const unreadable = computed(() =>
   result.value ? result.value.summary.leftErrors + result.value.summary.rightErrors : 0,
 )
@@ -61,30 +106,62 @@ const filters: { value: CompareFilter; label: string }[] = [
   { value: 'missing', label: 'Missing' },
 ]
 
-async function runCompare(): Promise<void> {
+// Elapsed time while a compare runs.
+const startedAt = ref(0)
+const now = ref(0)
+let ticker: ReturnType<typeof setInterval> | undefined
+const elapsed = computed(() => {
+  const seconds = Math.max(0, Math.floor((now.value - startedAt.value) / 1000))
+  return `${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, '0')}`
+})
+
+const resultsEl = ref<HTMLElement | null>(null)
+
+async function runCompare(pair?: ComparePaths): Promise<void> {
+  if (pair) {
+    paths.left = pair.left
+    paths.right = pair.right
+  }
   if (!canCompare.value) {
     return
   }
-  const left = paths.left.trim()
-  const right = paths.right.trim()
+  const left = cleanPath(paths.left)
+  const right = cleanPath(paths.right)
+  paths.left = left
+  paths.right = right
   running.value = true
   error.value = ''
+  notice.value = ''
   progress.value = null
   result.value = null
+  selected.value = null
+  sort.value = defaultSort
   children.value = new Map()
   expanded.value = new Set()
   loading.value = new Set()
+  startedAt.value = Date.now()
+  now.value = startedAt.value
+  ticker = setInterval(() => {
+    now.value = Date.now()
+  }, 250)
   try {
     result.value = await startCompare(left, right, (update) => {
       progress.value = update
     })
     compared.value = { left, right }
+    finishedAt.value = new Date()
     filter.value = result.value.summary.missing > 0 ? 'missing' : 'all'
+    recent.value = rememberRecent({ left, right })
+    await nextTick()
+    resultsEl.value?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   } catch (err) {
-    if (!isCancelled(err)) {
+    if (isCancelled(err)) {
+      notice.value = 'Compare cancelled. Nothing was changed.'
+    } else {
       error.value = errorMessage(err)
     }
   } finally {
+    clearInterval(ticker)
     running.value = false
   }
 }
@@ -96,7 +173,7 @@ async function cancel(): Promise<void> {
 async function browse(side: Side): Promise<void> {
   const picked = await pickFolder(
     side === 'left' ? 'Choose the source folder' : 'Choose the destination folder',
-    paths[side],
+    cleanPath(paths[side]),
   )
   if (picked) {
     paths[side] = picked
@@ -105,6 +182,10 @@ async function browse(side: Side): Promise<void> {
 
 function swap(): void {
   ;[paths.left, paths.right] = [paths.right, paths.left]
+}
+
+function setSort(key: Exclude<SortKey, 'size'>): void {
+  sort.value = nextSort(sort.value, key)
 }
 
 async function toggle(id: number): Promise<void> {
@@ -124,7 +205,7 @@ async function toggle(id: number): Promise<void> {
     const loaded = await loadChildren(id)
     children.value = new Map(children.value).set(id, loaded)
   } catch (err) {
-    error.value = errorMessage(err)
+    showToast(errorMessage(err))
     const collapsed = new Set(expanded.value)
     collapsed.delete(id)
     expanded.value = collapsed
@@ -132,6 +213,105 @@ async function toggle(id: number): Promise<void> {
     const done = new Set(loading.value)
     done.delete(id)
     loading.value = done
+  }
+}
+
+// Short confirmation or error at the bottom of the window.
+const toast = ref('')
+let toastTimer: ReturnType<typeof setTimeout> | undefined
+function showToast(message: string): void {
+  toast.value = message
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
+    toast.value = ''
+  }, 3500)
+}
+
+async function reveal(row: DiffRow, side: Side): Promise<void> {
+  try {
+    await revealRow(row.id, side)
+  } catch (err) {
+    showToast(errorMessage(err))
+  }
+}
+
+function openRow(row: DiffRow): void {
+  void reveal(row, row.left ? 'left' : 'right')
+}
+
+async function copyPath(row: DiffRow, side: Side): Promise<void> {
+  try {
+    await copyText(await rowPath(row.id, side))
+    showToast('Path copied')
+  } catch (err) {
+    showToast(errorMessage(err))
+  }
+}
+
+async function copyMissing(): Promise<void> {
+  if (!result.value) {
+    return
+  }
+  try {
+    const list = await loadMissing()
+    await copyText(formatMissingList(list, result.value.summary, finishedAt.value ?? new Date()))
+    showToast(`Copied ${plural(list.paths.length, 'path')}. Paste it into an email or ticket.`)
+  } catch (err) {
+    showToast(errorMessage(err))
+  }
+}
+
+const menu = shallowRef<{ row: DiffRow; x: number; y: number } | null>(null)
+const menuItems = computed<(MenuItem | null)[]>(() => {
+  const row = menu.value?.row
+  if (!row) {
+    return []
+  }
+  const items: (MenuItem | null)[] = [
+    {
+      label: 'Show source in Explorer',
+      icon: FolderOpen,
+      disabled: !row.left,
+      action: () => void reveal(row, 'left'),
+    },
+    {
+      label: 'Show destination in Explorer',
+      icon: FolderOpen,
+      disabled: !row.right,
+      action: () => void reveal(row, 'right'),
+    },
+    null,
+    {
+      label: 'Copy source path',
+      icon: Copy,
+      disabled: !row.left,
+      action: () => void copyPath(row, 'left'),
+    },
+    {
+      label: 'Copy destination path',
+      icon: Copy,
+      disabled: !row.right,
+      action: () => void copyPath(row, 'right'),
+    },
+  ]
+  if (row.hasChildren) {
+    const isOpen = expanded.value.has(row.id)
+    items.push(null, {
+      label: isOpen ? 'Collapse' : 'Expand',
+      icon: isOpen ? ChevronsDownUp : ChevronsUpDown,
+      action: () => void toggle(row.id),
+    })
+  }
+  return items
+})
+
+function closeMenu(): void {
+  menu.value = null
+}
+
+function onKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && running.value) {
+    void cancel()
   }
 }
 
@@ -151,7 +331,16 @@ function sideAt(x: number, y: number): Side | null {
   return null
 }
 
+const route = useRoute()
+const router = useRouter()
+
 onMounted(async () => {
+  window.addEventListener('keydown', onKeydown)
+  // Home's "Recent compares" opens this page with ?run=1 after filling the paths.
+  if (route.query.run) {
+    void router.replace({ query: {} })
+    void runCompare()
+  }
   if (!isTauri()) {
     return
   }
@@ -174,11 +363,20 @@ onMounted(async () => {
     dropSide.value = side
   })
 })
-onBeforeUnmount(() => stopDragDrop?.())
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  stopDragDrop?.()
+  clearInterval(ticker)
+  clearTimeout(toastTimer)
+})
+
+function shortPath(path: string): string {
+  return path.length > 48 ? `…${path.slice(-47)}` : path
+}
 </script>
 
 <template>
-  <div class="mx-auto flex h-full max-w-6xl min-w-[44rem] flex-col px-10 py-8">
+  <div class="page mx-auto flex min-h-full max-w-6xl flex-col px-6 py-6 lg:px-10 lg:py-8">
     <div class="flex items-start justify-between gap-6">
       <PageHeader
         :title="section?.title ?? 'Compare'"
@@ -189,7 +387,7 @@ onBeforeUnmount(() => stopDragDrop?.())
         type="button"
         class="mt-1.5 h-8 shrink-0 rounded-md bg-accent px-5 font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50"
         :disabled="!canCompare"
-        @click="runCompare"
+        @click="runCompare()"
       >
         Compare
       </button>
@@ -197,6 +395,7 @@ onBeforeUnmount(() => stopDragDrop?.())
         v-else
         type="button"
         class="mt-1.5 h-8 shrink-0 rounded-md border border-stroke bg-card px-5 hover:bg-card-hover"
+        title="Cancel (Esc)"
         @click="cancel"
       >
         Cancel
@@ -208,11 +407,11 @@ onBeforeUnmount(() => stopDragDrop?.())
         <PathField
           v-model="paths.left"
           label="Source"
-          hint="The folder that was copied from"
+          hint="Copied from"
           :disabled="running"
           :drop-target="dropSide === 'left'"
           @browse="browse('left')"
-          @submit="runCompare"
+          @submit="runCompare()"
         />
       </div>
       <button
@@ -229,11 +428,11 @@ onBeforeUnmount(() => stopDragDrop?.())
         <PathField
           v-model="paths.right"
           label="Destination"
-          hint="The folder that was copied to"
+          hint="Copied to"
           :disabled="running"
           :drop-target="dropSide === 'right'"
           @browse="browse('right')"
-          @submit="runCompare"
+          @submit="runCompare()"
         />
       </div>
     </div>
@@ -246,16 +445,27 @@ onBeforeUnmount(() => stopDragDrop?.())
       <TriangleAlert class="mt-0.5 size-4 shrink-0" />
       {{ error }}
     </p>
+    <p
+      v-if="notice"
+      class="mt-4 flex items-center gap-2 text-[13px] text-muted"
+      role="status"
+    >
+      <Info class="size-4 shrink-0" />
+      {{ notice }}
+    </p>
 
     <section
       v-if="running"
       class="mt-6 rounded-lg border border-stroke bg-card px-5 py-4"
       aria-live="polite"
     >
-      <p class="flex items-center gap-2 font-semibold">
-        <LoaderCircle class="size-4 animate-spin text-accent" />
-        Reading both folders…
-      </p>
+      <div class="flex items-center justify-between gap-4">
+        <p class="flex items-center gap-2 font-semibold">
+          <LoaderCircle class="size-4 animate-spin text-accent" />
+          Reading both folders…
+        </p>
+        <p class="text-xs text-muted tabular-nums">{{ elapsed }} · Esc to cancel</p>
+      </div>
       <div class="indeterminate mt-3 h-1 overflow-hidden rounded-full bg-subtle-strong" />
       <div class="mt-3 grid grid-cols-2 gap-6">
         <div
@@ -263,7 +473,16 @@ onBeforeUnmount(() => stopDragDrop?.())
           :key="side"
           class="min-w-0"
         >
-          <p class="text-xs text-muted">{{ side === 'left' ? 'Source' : 'Destination' }}</p>
+          <p class="flex items-center gap-1.5 text-xs text-muted">
+            {{ side === 'left' ? 'Source' : 'Destination' }}
+            <span
+              v-if="progress?.[side === 'left' ? 'leftDone' : 'rightDone']"
+              class="flex items-center gap-1 text-success"
+            >
+              <CircleCheck class="size-3.5" />
+              Done
+            </span>
+          </p>
           <p class="tabular-nums">
             {{ plural(progress?.[side].files ?? 0, 'file') }} ·
             {{ formatBytes(progress?.[side].bytes ?? 0) }}
@@ -278,10 +497,16 @@ onBeforeUnmount(() => stopDragDrop?.())
       </div>
     </section>
 
-    <template v-else-if="result">
-      <div class="mt-5">
-        <SummaryStrip :summary="result.summary" />
-      </div>
+    <div
+      v-else-if="result"
+      ref="resultsEl"
+      class="flex flex-1 scroll-mt-4 flex-col pt-5"
+    >
+      <SummaryStrip
+        :summary="result.summary"
+        :filter="filter"
+        @filter="filter = $event"
+      />
       <div
         v-if="unreadable > 0 || cloudFiles > 0"
         class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[13px]"
@@ -303,9 +528,9 @@ onBeforeUnmount(() => stopDragDrop?.())
         </p>
       </div>
 
-      <div class="mt-4 flex items-center justify-between gap-4">
+      <div class="mt-4 flex items-center gap-3">
         <div
-          class="flex rounded-md border border-stroke bg-subtle p-0.5"
+          class="flex shrink-0 rounded-md border border-stroke bg-subtle p-0.5"
           role="radiogroup"
           aria-label="Show"
         >
@@ -327,19 +552,40 @@ onBeforeUnmount(() => stopDragDrop?.())
           </button>
         </div>
         <p
-          class="truncate text-xs text-muted tabular-nums"
+          class="min-w-0 flex-1 truncate text-right text-xs text-muted tabular-nums"
           :title="`${compared.left} → ${compared.right}`"
         >
-          {{ plural(rows.length, 'row') }} · compared in {{ formatDuration(result.elapsedMs) }}
+          Compared
+          {{ finishedAt?.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) }}
+          in {{ formatDuration(result.elapsedMs) }}
         </p>
+        <button
+          v-if="result.summary.missing > 0"
+          type="button"
+          class="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-stroke bg-card px-3 text-[13px] hover:bg-card-hover"
+          title="Copy every missing file's path, with a short header, to paste into an email or ticket"
+          @click="copyMissing"
+        >
+          <ClipboardList
+            class="size-4"
+            :stroke-width="1.75"
+          />
+          Copy missing list
+        </button>
       </div>
 
       <CompareTable
         v-if="rows.length > 0"
-        class="mt-3 min-h-64 flex-1"
+        class="mt-3 min-h-72 flex-1"
         :rows="rows"
         :loading="loading"
+        :sort="sort"
+        :selected="selected"
         @toggle="toggle"
+        @select="selected = $event"
+        @open="openRow"
+        @menu="(row, x, y) => (menu = { row, x, y })"
+        @sort="setSort"
       />
       <div
         v-else
@@ -370,29 +616,84 @@ onBeforeUnmount(() => stopDragDrop?.())
           </p>
         </div>
       </div>
-    </template>
+      <p
+        v-if="rows.length > 0"
+        class="mt-2 text-xs text-faint"
+      >
+        Double-click a file to show it in Explorer. Right-click for more. Arrow keys move through
+        the list.
+      </p>
+    </div>
 
     <div
       v-else-if="!error"
-      class="mt-6 grid flex-1 place-items-center rounded-lg border border-dashed border-stroke-strong px-6 py-12 text-center"
+      class="mt-6 grid flex-1 place-items-center rounded-lg border border-dashed border-stroke-strong px-6 py-10 text-center"
     >
-      <div>
+      <div class="w-full max-w-lg">
         <component
           :is="section?.icon"
           class="mx-auto size-10 text-faint"
           :stroke-width="1.25"
         />
         <p class="mt-3 font-semibold">Pick two folders</p>
-        <p class="mt-1 max-w-md text-[13px] text-muted">
-          Folder sizes include everything inside them. Files that are in the source but not at the
-          destination are shown in red.
+        <p class="mx-auto mt-1 max-w-md text-[13px] text-muted">
+          Type, paste, browse or drag a folder from Explorer into each box. Folder sizes include
+          everything inside them, and files missing at the destination show in red.
         </p>
+        <div
+          v-if="recent.length > 0"
+          class="mt-6 text-left"
+        >
+          <p class="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted">
+            <History class="size-3.5" />
+            Recent
+          </p>
+          <ul class="overflow-hidden rounded-lg border border-stroke bg-card">
+            <li
+              v-for="pair in recent"
+              :key="`${pair.left}|${pair.right}`"
+              class="border-b border-stroke last:border-b-0"
+            >
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] hover:bg-subtle"
+                :title="`Compare ${pair.left} with ${pair.right}`"
+                @click="runCompare(pair)"
+              >
+                <span class="min-w-0 flex-1 truncate">{{ shortPath(pair.left) }}</span>
+                <ArrowRight class="size-3.5 shrink-0 text-faint" />
+                <span class="min-w-0 flex-1 truncate">{{ shortPath(pair.right) }}</span>
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
     </div>
+
+    <ContextMenu
+      v-if="menu"
+      :items="menuItems"
+      :x="menu.x"
+      :y="menu.y"
+      @close="closeMenu"
+    />
+    <Transition name="toast">
+      <p
+        v-if="toast"
+        class="fixed bottom-5 left-1/2 z-40 max-w-[min(32rem,90vw)] -translate-x-1/2 rounded-md bg-fg px-4 py-2 text-[13px] text-app shadow-lg"
+        role="status"
+      >
+        {{ toast }}
+      </p>
+    </Transition>
   </div>
 </template>
 
 <style scoped>
+.page {
+  container: page / inline-size;
+}
+
 /* Fluent indeterminate progress: a short accent bar sliding across. */
 .indeterminate {
   position: relative;
@@ -415,6 +716,25 @@ onBeforeUnmount(() => stopDragDrop?.())
 
   to {
     transform: translateX(340%);
+  }
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .indeterminate::after {
+    animation-duration: 4s;
   }
 }
 </style>

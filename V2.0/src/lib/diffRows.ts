@@ -7,6 +7,54 @@ export interface VisibleRow {
   row: DiffRow
   depth: number
   expanded: boolean
+  /** The folder row this row sits in; `null` at the top level. */
+  parentId: number | null
+}
+
+/** `size` is the backend order: largest first. */
+export type SortKey = 'size' | 'name' | 'left' | 'right' | 'delta'
+export type SortDir = 'asc' | 'desc'
+
+export interface Sort {
+  key: SortKey
+  dir: SortDir
+}
+
+export const defaultSort: Sort = { key: 'size', dir: 'desc' }
+
+const nameOrder = new Intl.Collator('en-US', { numeric: true, sensitivity: 'base' })
+
+/** Next sort when a column header is clicked: a new column starts at its natural direction. */
+export function nextSort(current: Sort, key: Exclude<SortKey, 'size'>): Sort {
+  if (current.key === key) {
+    return { key, dir: current.dir === 'asc' ? 'desc' : 'asc' }
+  }
+  return { key, dir: key === 'name' || key === 'delta' ? 'asc' : 'desc' }
+}
+
+export function sortRows(rows: readonly DiffRow[], sort: Sort): readonly DiffRow[] {
+  if (sort.key === 'size') {
+    return rows
+  }
+  const sign = sort.dir === 'asc' ? 1 : -1
+  const value = (row: DiffRow): number => {
+    switch (sort.key) {
+      case 'left':
+        return row.left?.size ?? -1
+      case 'right':
+        return row.right?.size ?? -1
+      default:
+        return sizeDelta(row)
+    }
+  }
+  return [...rows].sort((a, b) => {
+    if (sort.key === 'name') {
+      // Folders first, as in Explorer.
+      const folders = Number(b.kind === 'dir') - Number(a.kind === 'dir')
+      return folders || sign * nameOrder.compare(a.name, b.name)
+    }
+    return sign * (value(a) - value(b)) || nameOrder.compare(a.name, b.name)
+  })
 }
 
 /** Whether a row (and so its folder) belongs in the table under `filter`. */
@@ -30,22 +78,23 @@ export function visibleRows(
   children: ReadonlyMap<number, readonly DiffRow[]>,
   expanded: ReadonlySet<number>,
   filter: CompareFilter,
+  sort: Sort = defaultSort,
 ): VisibleRow[] {
   const out: VisibleRow[] = []
-  const visit = (rows: readonly DiffRow[], depth: number): void => {
-    for (const row of rows) {
+  const visit = (rows: readonly DiffRow[], depth: number, parentId: number | null): void => {
+    for (const row of sortRows(rows, sort)) {
       if (!matchesFilter(row, filter)) {
         continue
       }
       const isExpanded = row.hasChildren && expanded.has(row.id)
-      out.push({ row, depth, expanded: isExpanded })
+      out.push({ row, depth, expanded: isExpanded, parentId })
       const below = isExpanded ? children.get(row.id) : undefined
       if (below) {
-        visit(below, depth + 1)
+        visit(below, depth + 1, row.id)
       }
     }
   }
-  visit(roots, 0)
+  visit(roots, 0, null)
   return out
 }
 

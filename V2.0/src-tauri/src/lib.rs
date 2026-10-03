@@ -39,6 +39,7 @@ fn app_info(app: tauri::AppHandle) -> AppInfo {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(compare::CompareState::default())
         .setup(|app| {
             if supports_mica() {
@@ -53,6 +54,9 @@ pub fn run() {
             compare::compare_start,
             compare::compare_children,
             compare::compare_cancel,
+            compare::compare_path,
+            compare::compare_reveal,
+            compare::compare_missing,
         ])
         .run(tauri::generate_context!())
         .expect("error while running DeepServer");
