@@ -1,6 +1,7 @@
 import { FileText, FolderSync, HardDrive, House, Settings } from '@lucide/vue'
 import type { Component } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
+import ComparePage from './pages/ComparePage.vue'
 import HomePage from './pages/HomePage.vue'
 import PlaceholderPage from './pages/PlaceholderPage.vue'
 import SettingsPage from './pages/SettingsPage.vue'
@@ -47,7 +48,8 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', component: HomePage },
-    ...sections.slice(1).map((section) => ({
+    { path: '/compare', component: ComparePage },
+    ...sections.slice(2).map((section) => ({
       path: section.path,
       component: PlaceholderPage,
       props: { section },

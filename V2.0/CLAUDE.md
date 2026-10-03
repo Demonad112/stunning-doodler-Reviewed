@@ -30,6 +30,19 @@ CI: `.github/workflows/v2.yml`, only when `V2.0/**` changes.
   `text-accent`, `text-danger`, ... Never use raw hex or Tailwind palette colours in components.
 - `src/router.ts`: `sections` drives both the routes and the nav rail.
 - `src/lib/`: plain TS helpers, each with a `*.test.ts` when it has logic.
+- `src-tauri/crates/scan-core`: folder walker (`scan`, std `read_dir` + rayon, reparse points
+  listed but never followed, OneDrive online-only files flagged from their attributes, never read)
+  and the size compare (`compare` -> `DiffTree`). Flat arenas; children contiguous, largest first.
+  `cargo test -p scan-core` runs on Linux; the perf check is
+  `cargo test -p scan-core --release --test perf -- --ignored --nocapture` (2x100k files < 5 s).
+- Commands live in one file per area (`src-tauri/src/compare.rs`). Long jobs are `async` +
+  `spawn_blocking`, stream progress over a `tauri::ipc::Channel` every 100 ms, and keep big
+  results in managed state: the UI fetches one folder level at a time (`compare_children`), never
+  the whole tree. TS wrappers in `src/lib/<area>.ts`, mocked in tests with `vi.mock`.
+- The app crate needs WebKitGTK to build on Linux. In a cloud container without it, check it with
+  `rustup target add x86_64-pc-windows-msvc` and
+  `cargo clippy --all-targets --target x86_64-pc-windows-msvc -- -D warnings` (also covers
+  `#[cfg(windows)]` code).
 - Window: no OS frame (`TitleBar.vue` draws it), created hidden and transparent; `startShell()`
   adds `html.mica` on Windows 11 and then shows the window. Windows 10/Server keep the solid
   `--app-bg`.

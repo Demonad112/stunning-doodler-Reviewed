@@ -1,3 +1,5 @@
+mod compare;
+
 use serde::Serialize;
 use tauri::window::{Effect, EffectsBuilder};
 use tauri::Manager;
@@ -36,6 +38,8 @@ fn app_info(app: tauri::AppHandle) -> AppInfo {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .manage(compare::CompareState::default())
         .setup(|app| {
             if supports_mica() {
                 if let Some(window) = app.get_webview_window("main") {
@@ -44,7 +48,12 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![app_info])
+        .invoke_handler(tauri::generate_handler![
+            app_info,
+            compare::compare_start,
+            compare::compare_children,
+            compare::compare_cancel,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running DeepServer");
 }

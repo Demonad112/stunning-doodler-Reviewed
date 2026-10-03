@@ -8,24 +8,29 @@ Two tracks: (1) finish V1: merge #36, cut rc5, owner re-checks, tag `v1.0.0`. (2
 
 ## State
 
-- `main` at `1edf92e` (Merge #35). Latest release **v1.0.0-rc4**; rc5 not cut.
-- PR #36 `fix/menu-row-width`: GREEN, mergeable. V1 dropdown rows clipped to 9em (`AppLayout.vue` `.menus button` also matched panel rows); scoped to `.menus > .menu-group > button`, plus a new e2e test.
-- PR #37 `v2/batch-0-scaffold`: GREEN, mergeable. V2 Batch 0 shell.
-- Worktrees: `.claude/worktrees/fix-menu-row-width`, `.claude/worktrees/v2-batch-0` (delete after merge).
+- `main` at `d28f3c0` (#36 V1 dropdown fix and #37 V2 Batch 0 merged). Latest release **v1.0.0-rc4**; rc5 not cut.
+- V2 Batch 1 (`scan-core` + Compare page) on branch `claude/brave-allen-tiokj8` (cloud session), draft PR open. Built in the cloud: Linux tests + Windows-target clippy pass; never run as a desktop app yet.
 
-## Done this session
+## Done this session (cloud, 2026-10-03)
 
-- Owner decided V2 scope (2026-10-02): in-app disk analyzer (drop the WinDirStat engine), drop every other compare mode, `V2.0/` in this repo, Windows 11 Fluent/Mica look.
-- #36: V1 dropdown fix (the "squished dropdown" was the menu bar, not `<select>`).
-- #37: `V2.0/` Tauri 2 + Vue 3 + Tailwind v4 app (`com.demonad112.deepserver2`, dev port 1430): frameless title bar, Mica on Win11, nav rail, light/dark/system theme, placeholder pages, `V2.0/CLAUDE.md`, `.github/workflows/v2.yml` (V2.0/** only). Root prettier/eslint skip `V2.0/`.
+- `V2.0/src-tauri/crates/scan-core`: parallel walker (std `read_dir` + rayon), recursive folder totals, junctions/symlinks not followed, OneDrive online-only files flagged (attributes only, no download), unreadable folders kept with an error. Size compare: missing / extra / size differs / type differs, case-insensitive names, missing bytes rolled up. 2x100k files scan + compare in 0.54 s on Linux.
+- `compare.rs`: `compare_start` (Channel progress every 100 ms, both sides in parallel), `compare_children` (lazy, one level per call), `compare_cancel`. `tauri-plugin-dialog` for Browse.
+- Compare page: Source/Destination fields (type, Browse, drag-drop from Explorer, swap), Compare/Cancel, live progress, 4 summary tiles (missing in red), filters All/Differences/Missing, virtualised tree table. Screenshots in `V2.0/docs/screenshots/`.
 
 ## Next
 
-1. Owner merges #36 and #37, then `/release-rc v1.0.0-rc5`.
-2. On "go": V2 Batch 1: `scan-core` (recursive size tree, progress via `tauri::ipc::Channel`) + Compare page (two path pickers, summary strip, tree table, missing in red).
-3. V2 Batch 2: Record (vendor V1 `transfer-core` + `job-core` + `logging-core`; replace its `folder_core`/`file_core` calls; Watch + Copy modes, live panel, report).
-4. V2 Batches 3–5 per plan (Disk Cleanup, Reports/export, installer).
+1. Owner on the laptop: `cd V2.0; corepack pnpm install; corepack pnpm tauri dev`, compare two real folders (one under OneDrive), check 175% scaling and both themes; then merge the Batch 1 PR.
+2. `/release-rc v1.0.0-rc5` for V1 when convenient.
+3. On "go": V2 Batch 2 Record (vendor V1 `transfer-core` + `job-core` + `logging-core`; replace its `folder_core` walk with `scan-core`; Watch + Copy modes, live panel, report). Add the "Record copy" button on the Compare page then.
+4. V2 Batches 3–5 per plan (Disk Cleanup reuses `scan-core`, Reports/export, installer).
 5. V1 leftovers before `v1.0.0`: Docs/Support links (`src/app/appMeta.ts`); delete rc1/rc2; Sync "Update Both" decides by mtime only.
+
+## Open questions for the owner
+
+- V1 and V2 both install as "DeepServer": side by side, or should V2 replace V1? Decide before Batch 5.
+- Should reports carry company branding/logo for client hand-off (Batch 4)?
+- Must Record survive an app restart/reboot mid-copy (Batch 2)?
+- Full-drive scan speed vs. no elevation popup: MFT reading needs admin (Batch 3).
 
 ## Blocked / needs the owner
 
