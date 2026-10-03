@@ -1,3 +1,4 @@
+mod cleanup;
 mod compare;
 mod record;
 
@@ -41,6 +42,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .manage(cleanup::CleanupState::default())
         .manage(compare::CompareState::default())
         .manage(record::RecordState::default())
         .setup(|app| {
@@ -53,6 +55,13 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
+            cleanup::cleanup_drives,
+            cleanup::cleanup_scan,
+            cleanup::cleanup_cancel,
+            cleanup::cleanup_children,
+            cleanup::cleanup_path,
+            cleanup::cleanup_reveal,
+            cleanup::cleanup_delete,
             compare::compare_start,
             compare::compare_children,
             compare::compare_cancel,

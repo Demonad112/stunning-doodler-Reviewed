@@ -102,6 +102,8 @@ pub struct Node {
     /// Cloud-only placeholders (OneDrive "online-only") at or below this node. Their size is the
     /// logical size; the data is not on the disk.
     pub cloud_files: u64,
+    /// Bytes of those placeholders: counted in [`Node::size`] but not stored on this disk.
+    pub cloud_bytes: u64,
     /// Folders at or below this node that could not be read completely.
     pub errors: u64,
     /// Why this folder could not be read completely.
@@ -112,6 +114,9 @@ pub struct Node {
     pub modified_ms: Option<u64>,
     first_child: NodeId,
     child_count: u32,
+    parent: NodeId,
+    /// Deleted after the scan (see [`Tree::remove`]); left out of every listing.
+    removed: bool,
 }
 
 impl Node {
@@ -123,12 +128,15 @@ impl Node {
             files: 0,
             dirs: 0,
             cloud_files: 0,
+            cloud_bytes: 0,
             errors: 0,
             error: None,
             error_code: None,
             modified_ms: None,
             first_child: 0,
             child_count: 0,
+            parent: 0,
+            removed: false,
         }
     }
 
@@ -170,6 +178,76 @@ impl Tree {
         self.node(id)
             .children()
             .find(|&child| self.node(child).name == name)
+    }
+
+    /// The folder holding `id`; `None` for the root.
+    pub fn parent(&self, id: NodeId) -> Option<NodeId> {
+        (id != 0).then(|| self.node(id).parent)
+    }
+
+    /// Children of `id` that were not removed, largest first as scanned.
+    pub fn live_children(&self, id: NodeId) -> impl Iterator<Item = NodeId> + '_ {
+        self.node(id)
+            .children()
+            .filter(|&child| !self.node(child).removed)
+    }
+
+    /// True when `id` exists and neither it nor a folder above it was removed.
+    pub fn is_live(&self, id: NodeId) -> bool {
+        if id as usize >= self.nodes.len() {
+            return false;
+        }
+        let mut current = Some(id);
+        while let Some(at) = current {
+            if self.node(at).removed {
+                return false;
+            }
+            current = self.parent(at);
+        }
+        true
+    }
+
+    /// Full path of `id`. The root's name is the scanned folder's path.
+    pub fn path(&self, id: NodeId) -> PathBuf {
+        let mut names = Vec::new();
+        let mut current = id;
+        while let Some(parent) = self.parent(current) {
+            names.push(&self.node(current).name);
+            current = parent;
+        }
+        let mut path = PathBuf::from(&self.root().name);
+        path.extend(names.into_iter().rev());
+        path
+    }
+
+    /// Marks a deleted item as gone and takes it out of the totals of every folder above it.
+    /// False when `id` is the root or already gone.
+    pub fn remove(&mut self, id: NodeId) -> bool {
+        if id == 0 || !self.is_live(id) {
+            return false;
+        }
+        let node = &mut self.nodes[id as usize];
+        node.removed = true;
+        let (size, files, cloud_files, cloud_bytes, errors) = (
+            node.size,
+            node.files,
+            node.cloud_files,
+            node.cloud_bytes,
+            node.errors,
+        );
+        let dirs = node.dirs + u64::from(node.kind == Kind::Dir);
+        let mut current = id;
+        while let Some(parent) = self.parent(current) {
+            let above = &mut self.nodes[parent as usize];
+            above.size = above.size.saturating_sub(size);
+            above.files = above.files.saturating_sub(files);
+            above.dirs = above.dirs.saturating_sub(dirs);
+            above.cloud_files = above.cloud_files.saturating_sub(cloud_files);
+            above.cloud_bytes = above.cloud_bytes.saturating_sub(cloud_bytes);
+            above.errors = above.errors.saturating_sub(errors);
+            current = parent;
+        }
+        true
     }
 }
 
@@ -235,6 +313,7 @@ impl Owned {
         node.size = size;
         node.files = u64::from(kind == Kind::File);
         node.cloud_files = u64::from(cloud);
+        node.cloud_bytes = if cloud { size } else { 0 };
         Self {
             node,
             children: Vec::new(),
@@ -326,6 +405,7 @@ fn scan_dir(path: &Path, name: String, state: &ScanState) -> Owned {
         node.files += child.node.files;
         node.dirs += child.node.dirs + u64::from(child.node.kind == Kind::Dir);
         node.cloud_files += child.node.cloud_files;
+        node.cloud_bytes += child.node.cloud_bytes;
         node.errors += child.node.errors;
     }
     dir.children.sort_by(|a, b| {
@@ -344,7 +424,8 @@ fn flatten(root: Owned) -> Tree {
     while let Some((id, children)) = queue.pop_front() {
         nodes[id].first_child = nodes.len() as NodeId;
         nodes[id].child_count = children.len() as u32;
-        for child in children {
+        for mut child in children {
+            child.node.parent = id as NodeId;
             nodes.push(child.node);
             queue.push_back((nodes.len() - 1, child.children));
         }
@@ -443,6 +524,39 @@ mod tests {
             .collect();
         assert_eq!(names, ["big.bin", "mid", "small.bin"]);
         assert_eq!(tree.len(), 5);
+    }
+
+    #[test]
+    fn removing_an_item_updates_every_folder_above() {
+        let temp = tempfile::tempdir().unwrap();
+        write(&temp.path().join("a.bin"), 10);
+        write(&temp.path().join("sub/deeper/c.bin"), 30);
+        write(&temp.path().join("sub/b.bin"), 20);
+
+        let mut tree = scan_ok(temp.path());
+        let sub = tree.child_by_name(0, "sub").unwrap();
+        let deeper = tree.child_by_name(sub, "deeper").unwrap();
+        let c = tree.child_by_name(deeper, "c.bin").unwrap();
+        assert_eq!(
+            tree.path(c),
+            temp.path().join("sub").join("deeper").join("c.bin")
+        );
+        assert_eq!(tree.parent(c), Some(deeper));
+        assert_eq!(tree.parent(0), None);
+
+        assert!(tree.remove(deeper));
+        assert_eq!(
+            (tree.root().size, tree.root().files, tree.root().dirs),
+            (30, 2, 1)
+        );
+        assert_eq!((tree.node(sub).size, tree.node(sub).dirs), (20, 0));
+        assert_eq!(tree.live_children(sub).count(), 1);
+        // Anything inside a removed folder is already gone; the root never goes.
+        assert!(!tree.is_live(c));
+        assert!(!tree.remove(c));
+        assert!(!tree.remove(deeper));
+        assert!(!tree.remove(0));
+        assert_eq!(tree.root().size, 30);
     }
 
     #[test]

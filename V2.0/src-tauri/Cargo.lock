@@ -492,6 +492,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cleanup-core"
+version = "2.0.0-alpha.0"
+dependencies = [
+ "scan-core",
+ "serde",
+ "tempfile",
+]
+
+[[package]]
 name = "combine"
 version = "4.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -715,6 +724,7 @@ dependencies = [
 name = "deepserver"
 version = "2.0.0-alpha.0"
 dependencies = [
+ "cleanup-core",
  "scan-core",
  "serde",
  "tauri",

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ArrowRight, ChevronRight, History } from '@lucide/vue'
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import DriveTiles from '@/components/DriveTiles.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { appInfo } from '@/lib/appInfo'
+import { drives, refreshDrives, type Drive } from '@/lib/cleanup'
 import { loadRecent, savePaths, type ComparePaths } from '@/lib/compare'
 import { sections } from '@/router'
 
@@ -15,6 +17,12 @@ function compareAgain(pair: ComparePaths): void {
   savePaths(pair)
   void router.push({ path: '/compare', query: { run: '1' } })
 }
+
+/** A drive tile opens Disk Cleanup and scans that drive. */
+function scanDrive(drive: Drive): void {
+  void router.push({ path: '/cleanup', query: { scan: drive.path } })
+}
+onMounted(refreshDrives)
 
 const tools = sections.slice(1)
 const summary = computed(() =>
@@ -56,6 +64,17 @@ const summary = computed(() =>
         <span class="mt-1 text-[13px] leading-5 text-muted">{{ tool.summary }}</span>
       </RouterLink>
     </div>
+
+    <section
+      v-if="drives.length > 0"
+      class="mt-8"
+    >
+      <h2 class="mb-2 text-[13px] font-semibold text-muted">This PC</h2>
+      <DriveTiles
+        :drives="drives"
+        @pick="scanDrive"
+      />
+    </section>
 
     <section
       v-if="recent.length > 0"
