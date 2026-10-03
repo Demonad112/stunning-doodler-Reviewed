@@ -33,12 +33,14 @@ pub enum FailureReason {
     Missing,
     /// Watch mode: the destination file is still partial or held open by the copying tool.
     Incomplete,
+    /// Copy mode: a OneDrive online-only file, left alone so the copy doesn't download it.
+    CloudOnly,
     Cancelled,
     Unknown,
 }
 
 impl FailureReason {
-    pub const ALL: [FailureReason; 16] = [
+    pub const ALL: [FailureReason; 17] = [
         FailureReason::AccessDenied,
         FailureReason::FileLocked,
         FailureReason::DiskFull,
@@ -53,6 +55,7 @@ impl FailureReason {
         FailureReason::VerifyMismatch,
         FailureReason::Missing,
         FailureReason::Incomplete,
+        FailureReason::CloudOnly,
         FailureReason::Cancelled,
         FailureReason::Unknown,
     ];
@@ -81,6 +84,7 @@ impl FailureReason {
             FailureReason::VerifyMismatch => "Copy does not match the source",
             FailureReason::Missing => "Never arrived at the destination",
             FailureReason::Incomplete => "Still incomplete at the destination",
+            FailureReason::CloudOnly => "Online-only (not downloaded)",
             FailureReason::Cancelled => "Cancelled",
             FailureReason::Unknown => "Other error",
         }
@@ -124,6 +128,9 @@ impl FailureReason {
             }
             FailureReason::Incomplete => {
                 "The destination file was still partial or held open by the copying program."
+            }
+            FailureReason::CloudOnly => {
+                "The file is only in OneDrive, not on this PC, and the copy was set not to download it."
             }
             FailureReason::Cancelled => "The run was stopped before this file was copied.",
             FailureReason::Unknown => "Windows reported an error that has no specific category.",

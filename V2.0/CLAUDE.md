@@ -40,8 +40,10 @@ CI: `.github/workflows/v2.yml`, only when `V2.0/**` changes.
   `walk.rs`). `prepare` lists the source, then `run::run_copy` (Copy for me) or `watch::watch`
   (another tool copies); `run::retry` and `recovery::copy_to_recovery` work on stored runs.
   Runs are files under `%LOCALAPPDATA%\DeepServer2\Records` (`DEEPSERVER2_RECORDS_DIR`
-  overrides it), pruned at startup after 90 days / 200 runs. Commands: `src-tauri/src/record.rs`,
-  one record at a time; UI `RecordPage.vue` (`/compare/record`) and `RecordReportPage.vue`
+  overrides it), never pruned (they are client proof). Copy mode lists OneDrive online-only files
+  as `CloudOnly` instead of downloading them unless `download_cloud` is set; "Ignore system and
+  temp files" is `scan_core::is_junk`, shared with Compare. Commands: `src-tauri/src/record.rs`,
+  one record at a time, keeping the PC awake while it runs; UI `RecordPage.vue` (`/compare/record`) and `RecordReportPage.vue`
   (`/compare/record/:id`); the running job lives in `recordJob` (`src/lib/record.ts`) so leaving
   the page keeps Finish/Cancel.
 - Commands live in one file per area (`src-tauri/src/compare.rs`). Long jobs are `async` +

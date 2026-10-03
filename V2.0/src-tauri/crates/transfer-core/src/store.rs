@@ -202,85 +202,6 @@ pub fn list_runs(root: &Path) -> Vec<RunSummary> {
     runs
 }
 
-/// What [`prune_runs`] removed.
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PruneResult {
-    pub removed: usize,
-    pub freed_bytes: u64,
-}
-
-/// Runs older than this are removed by [`prune_runs`].
-pub const KEEP_RUNS_DAYS: u64 = 90;
-/// At most this many runs are kept.
-pub const KEEP_RUNS_MAX: usize = 200;
-
-/// Deletes run folders older than `keep_days` and all but the newest `keep_max`, so the runs
-/// folder doesn't grow forever. Runs for which `active` returns true are always kept. Folders
-/// without a readable `run.json` are left alone: they may not be ours.
-pub fn prune_runs(
-    root: &Path,
-    keep_days: u64,
-    keep_max: usize,
-    now: u64,
-    active: &dyn Fn(&str) -> bool,
-) -> PruneResult {
-    let cutoff = now.saturating_sub(keep_days.saturating_mul(86_400_000));
-    let mut result = PruneResult::default();
-    for (position, run) in list_runs(root).iter().enumerate() {
-        if active(&run.id) || (position < keep_max && run.created_at_ms >= cutoff) {
-            continue;
-        }
-        let Ok(store) = RunStore::open(root, &run.id) else {
-            continue;
-        };
-        let bytes = folder_size(store.dir());
-        if fs::remove_dir_all(store.dir()).is_ok() {
-            result.removed += 1;
-            result.freed_bytes += bytes;
-        }
-    }
-    result
-}
-
-/// Marker in the runs folder holding when the runs were last pruned (ms since the epoch).
-const PRUNE_MARKER: &str = ".last-prune";
-/// The automatic clean-up at startup runs at most this often.
-pub const STARTUP_PRUNE_EVERY_MS: u64 = 86_400_000;
-
-/// True when the runs haven't been pruned in the last `every_ms`, or the marker is missing or
-/// unreadable, or the clock went back.
-pub fn prune_due(root: &Path, now: u64, every_ms: u64) -> bool {
-    let last = fs::read_to_string(root.join(PRUNE_MARKER))
-        .ok()
-        .and_then(|text| text.trim().parse::<u64>().ok());
-    match last {
-        Some(last) if last <= now => now - last >= every_ms,
-        _ => true,
-    }
-}
-
-/// Records that the runs were pruned at `now`, for [`prune_due`].
-pub fn mark_pruned(root: &Path, now: u64) {
-    if fs::create_dir_all(root).is_ok() {
-        let _ = fs::write(root.join(PRUNE_MARKER), now.to_string());
-    }
-}
-
-fn folder_size(path: &Path) -> u64 {
-    let Ok(entries) = fs::read_dir(path) else {
-        return 0;
-    };
-    entries
-        .filter_map(|entry| entry.ok())
-        .map(|entry| match entry.metadata() {
-            Ok(meta) if meta.is_dir() => folder_size(&entry.path()),
-            Ok(meta) => meta.len(),
-            Err(_) => 0,
-        })
-        .sum()
-}
-
 fn run_id_for(ms: u64) -> String {
     // "2026-09-30 06:15:02 UTC" → "20260930-061502-123"
     let text = crate::format_utc(ms);
@@ -373,6 +294,8 @@ mod tests {
                 mode: crate::TransferMode::Copy,
                 verify: crate::VerifyLevel::SizeAndTime,
                 conflict: crate::ConflictPolicy::Skip,
+                ignore_junk: false,
+                download_cloud: false,
             },
             state: crate::RunState::Completed,
             created_at_ms,
@@ -388,48 +311,14 @@ mod tests {
     }
 
     #[test]
-    fn prune_removes_old_and_surplus_runs_but_keeps_active_ones() {
-        let dir = TempDir::new("store-prune");
+    fn runs_are_listed_newest_first_and_never_pruned() {
+        let dir = TempDir::new("store-list");
         let root = dir.path("runs");
-        let day = 86_400_000;
-        let now = 1_000 * day;
-        let old = stored_run(&root, now - 100 * day);
-        let old_active = stored_run(&root, now - 120 * day);
-        let recent: Vec<String> = (0..3).map(|n| stored_run(&root, now - n * day)).collect();
+        let old = stored_run(&root, 1_000);
+        let new = stored_run(&root, 2_000);
         fs::create_dir_all(root.join("not-a-run")).unwrap();
-
-        let result = prune_runs(&root, 90, 2, now, &|id| id == old_active);
-
-        assert_eq!(result.removed, 2);
-        assert!(result.freed_bytes > 0);
-        assert!(!root.join(&old).exists());
-        assert!(root.join(&old_active).exists());
-        assert!(root.join(&recent[0]).exists());
-        assert!(root.join(&recent[1]).exists());
-        assert!(!root.join(&recent[2]).exists(), "beyond the newest 2");
-        assert!(root.join("not-a-run").exists());
-    }
-
-    #[test]
-    fn startup_prune_runs_at_most_once_a_day() {
-        let dir = TempDir::new("store-prune-due");
-        let root = dir.path("runs");
-        let day = 86_400_000;
-        let now = 1_000 * day;
-        assert!(prune_due(&root, now, day), "never pruned");
-
-        mark_pruned(&root, now);
-        assert!(!prune_due(&root, now + day - 1, day));
-        assert!(prune_due(&root, now + day, day));
-        assert!(prune_due(&root, now - 1, day), "the clock went back");
-
-        fs::write(root.join(PRUNE_MARKER), "garbage").unwrap();
-        assert!(prune_due(&root, now, day), "unreadable marker");
-
-        mark_pruned(&root, now);
-        assert!(list_runs(&root).is_empty(), "the marker is not a run");
-        assert_eq!(prune_runs(&root, 90, 200, now, &|_| false).removed, 0);
-        assert!(root.join(PRUNE_MARKER).exists());
+        let ids: Vec<String> = list_runs(&root).into_iter().map(|run| run.id).collect();
+        assert_eq!(ids, [new, old]);
     }
 
     #[test]

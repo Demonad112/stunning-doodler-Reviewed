@@ -101,9 +101,14 @@ pub fn retry(
         .into_values()
         .filter(|item| selection.matches(item))
         .filter(|item| {
+            // Online-only files stay put: a new record with "Download" on copies them.
             !matches!(
                 item.reason,
-                Some(FailureReason::InvalidName | FailureReason::NameCollision)
+                Some(
+                    FailureReason::InvalidName
+                        | FailureReason::NameCollision
+                        | FailureReason::CloudOnly
+                )
             )
         })
         .collect();
@@ -211,6 +216,8 @@ fn finish(
 pub(crate) struct Copier<'a> {
     source: PathBuf,
     destination: PathBuf,
+    ignore_junk: bool,
+    download_cloud: bool,
     options: CopyOptions,
     cancel: &'a CancelToken,
     sink: &'a mut dyn TransferSink,
@@ -229,6 +236,8 @@ impl<'a> Copier<'a> {
         Ok(Self {
             source: PathBuf::from(&settings.source),
             destination: PathBuf::from(&settings.destination),
+            ignore_junk: settings.ignore_junk,
+            download_cloud: settings.download_cloud,
             options,
             cancel,
             sink,
@@ -354,26 +363,34 @@ impl<'a> Copier<'a> {
         let root = destination_path(&self.source, relative_folder);
         let prefix = |relative: &str| format!("{relative_folder}/{relative}");
         let mut entries = Vec::new();
-        let walked = walk::scan_tree(&root, self.cancel, &mut |_| {}).and_then(|tree| {
-            walk::visit(&tree, &mut |entry| {
-                match entry {
-                    Entry::Folder { relative_path } => {
-                        entries.push(Ok((prefix(&relative_path), ItemKind::Folder, 0)));
+        let skip_cloud = !self.download_cloud;
+        let walked =
+            walk::scan_tree(&root, self.ignore_junk, self.cancel, &mut |_| {}).and_then(|tree| {
+                walk::visit(&tree, &mut |entry| {
+                    match entry {
+                        Entry::Folder { relative_path } => {
+                            entries.push(Ok((prefix(&relative_path), ItemKind::Folder, 0, false)));
+                        }
+                        Entry::File {
+                            relative_path,
+                            size,
+                            cloud,
+                            ..
+                        } => entries.push(Ok((
+                            prefix(&relative_path),
+                            ItemKind::File,
+                            size,
+                            cloud && skip_cloud,
+                        ))),
+                        Entry::Link => {}
+                        Entry::Unreadable {
+                            relative_path,
+                            error,
+                        } => entries.push(Err((prefix(&relative_path), error))),
                     }
-                    Entry::File {
-                        relative_path,
-                        size,
-                        ..
-                    } => entries.push(Ok((prefix(&relative_path), ItemKind::File, size))),
-                    Entry::Link => {}
-                    Entry::Unreadable {
-                        relative_path,
-                        error,
-                    } => entries.push(Err((prefix(&relative_path), error))),
-                }
-                Ok(true)
-            })
-        });
+                    Ok(true)
+                })
+            });
         if let Err(error) = walked {
             let message = match error {
                 TransferError::Cancelled => return Ok(()),
@@ -399,8 +416,20 @@ impl<'a> Copier<'a> {
         self.progress.files_total += entries.len() as u64;
         for entry in entries {
             match entry {
-                Ok((path, ItemKind::Folder, _)) => self.make_folder(&path)?,
-                Ok((path, ItemKind::File, size)) => {
+                Ok((path, ItemKind::Folder, _, _)) => self.make_folder(&path)?,
+                Ok((path, ItemKind::File, size, true)) => {
+                    let reason = FailureReason::CloudOnly;
+                    self.progress.files_done += 1;
+                    self.record(ItemResult::not_copied(
+                        path,
+                        ItemKind::File,
+                        size,
+                        reason,
+                        Some(Side::Source),
+                        reason.explanation(),
+                    ))?;
+                }
+                Ok((path, ItemKind::File, size, false)) => {
                     self.progress.bytes_total += size;
                     self.copy(&path, size, None)?;
                 }
@@ -446,6 +475,8 @@ mod tests {
             mode: TransferMode::Copy,
             verify: VerifyLevel::Hash,
             conflict: ConflictPolicy::Skip,
+            ignore_junk: false,
+            download_cloud: false,
         }
     }
 

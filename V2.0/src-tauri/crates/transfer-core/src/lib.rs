@@ -62,6 +62,12 @@ pub struct TransferSettings {
     pub mode: TransferMode,
     pub verify: VerifyLevel,
     pub conflict: ConflictPolicy,
+    /// Leave out system and temp files (`Thumbs.db`, `desktop.ini`, `~$` Office lock files, ...).
+    #[serde(default)]
+    pub ignore_junk: bool,
+    /// Download OneDrive online-only files to copy them. Off: they are listed as not copied.
+    #[serde(default)]
+    pub download_cloud: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

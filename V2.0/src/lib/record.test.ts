@@ -53,8 +53,13 @@ describe('record commands', () => {
     core.invoke.mockResolvedValue({ summary: { id: 'r1' } })
     const seen: RecordProgress[] = []
 
-    const pending = startRecord('C:\\src', 'D:\\dst', 'watch', 'hash', (progress) =>
-      seen.push(progress),
+    const pending = startRecord(
+      'C:\\src',
+      'D:\\dst',
+      'watch',
+      'hash',
+      { ignoreJunk: true, downloadCloud: false },
+      (progress) => seen.push(progress),
     )
     core.channels[0]?.onmessage({ phase: 'watching', filesDone: 3 })
     await pending
@@ -64,6 +69,7 @@ describe('record commands', () => {
       destination: 'D:\\dst',
       mode: 'watch',
       verify: 'hash',
+      options: { ignoreJunk: true, downloadCloud: false },
       onEvent: core.channels[0],
     })
     expect(seen).toEqual([{ phase: 'watching', filesDone: 3 }])

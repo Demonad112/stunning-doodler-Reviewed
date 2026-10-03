@@ -44,7 +44,6 @@ pub fn run() {
         .manage(compare::CompareState::default())
         .manage(record::RecordState::default())
         .setup(|app| {
-            record::prune_in_background();
             if supports_mica() {
                 if let Some(window) = app.get_webview_window("main") {
                     window.set_effects(EffectsBuilder::new().effect(Effect::Mica).build())?;

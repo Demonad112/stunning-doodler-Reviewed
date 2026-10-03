@@ -36,7 +36,14 @@ export interface RunTotals {
 
 export interface RunSummary {
   id: string
-  settings: { source: string; destination: string; mode: RecordMode; verify: VerifyLevel }
+  settings: {
+    source: string
+    destination: string
+    mode: RecordMode
+    verify: VerifyLevel
+    ignoreJunk: boolean
+    downloadCloud: boolean
+  }
   state: RunState
   createdAtMs: number
   startedAtMs: number | null
@@ -62,6 +69,7 @@ export type FailureReason =
   | 'verifyMismatch'
   | 'missing'
   | 'incomplete'
+  | 'cloudOnly'
   | 'cancelled'
   | 'unknown'
 
@@ -141,6 +149,7 @@ export function startRecord(
   destination: string,
   mode: RecordMode,
   verify: VerifyLevel,
+  options: { ignoreJunk: boolean; downloadCloud: boolean },
   onProgress: (progress: RecordProgress) => void,
 ): Promise<RunDetails> {
   return invoke<RunDetails>('record_start', {
@@ -148,6 +157,7 @@ export function startRecord(
     destination,
     mode,
     verify,
+    options,
     onEvent: channel(onProgress),
   })
 }
@@ -203,6 +213,7 @@ const reasonTitles: Record<FailureReason, string> = {
   verifyMismatch: 'Copy does not match the source',
   missing: 'Never arrived at the destination',
   incomplete: 'Still incomplete at the destination',
+  cloudOnly: 'Online-only (not downloaded)',
   cancelled: 'Cancelled',
   unknown: 'Other error',
 }

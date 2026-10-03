@@ -4,7 +4,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import PathField from '@/components/PathField.vue'
-import { errorMessage, loadPaths, pickFolder, savePaths } from '@/lib/compare'
+import { errorMessage, ignoreJunk, loadPaths, pickFolder, savePaths } from '@/lib/compare'
 import { formatBytes, formatCount, plural } from '@/lib/format'
 import {
   bytesPerSecond,
@@ -25,6 +25,7 @@ const router = useRouter()
 const paths = reactive(loadPaths())
 const mode = ref<RecordMode>('watch')
 const hash = ref(false)
+const downloadCloud = ref(false)
 const error = ref('')
 const recent = ref<RunSummary[]>([])
 
@@ -92,6 +93,7 @@ async function start(): Promise<void> {
       paths.right,
       mode.value,
       hash.value ? 'hash' : 'sizeAndTime',
+      { ignoreJunk: ignoreJunk.value, downloadCloud: mode.value === 'copy' && downloadCloud.value },
       (progress: RecordProgress) => {
         // "Done" closes each step (listing, then the copy); the next step's progress follows.
         if (progress.phase === 'done') {
@@ -275,6 +277,25 @@ function when(ms: number): string {
           class="size-4 accent-accent"
         />
         Also compare file contents (slower: every file is read twice)
+      </label>
+      <label class="mt-2 flex w-fit items-center gap-2 text-[13px]">
+        <input
+          v-model="ignoreJunk"
+          type="checkbox"
+          class="size-4 accent-accent"
+        />
+        Ignore system and temp files (Thumbs.db, desktop.ini, ~$ Office lock files, .tmp)
+      </label>
+      <label
+        v-if="mode === 'copy'"
+        class="mt-2 flex w-fit items-center gap-2 text-[13px]"
+      >
+        <input
+          v-model="downloadCloud"
+          type="checkbox"
+          class="size-4 accent-accent"
+        />
+        Download OneDrive online-only files (off: they are listed as not copied)
       </label>
       <p
         v-if="mode === 'watch'"

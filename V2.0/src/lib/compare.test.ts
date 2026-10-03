@@ -48,11 +48,12 @@ describe('compare commands', () => {
   it('starts a compare and forwards progress events', async () => {
     core.invoke.mockResolvedValue({ rows: [] })
     const onProgress = vi.fn()
-    await startCompare('C:\\a', 'D:\\b', onProgress)
+    await startCompare('C:\\a', 'D:\\b', true, onProgress)
 
     expect(core.invoke).toHaveBeenCalledWith('compare_start', {
       left: 'C:\\a',
       right: 'D:\\b',
+      ignoreJunk: true,
       onEvent: core.channels[0],
     })
     const progress = { files: 1, dirs: 1, bytes: 5, current: 'C:\\a' }

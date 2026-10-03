@@ -16,6 +16,8 @@ pub(crate) enum Entry {
         relative_path: String,
         size: u64,
         modified_ms: Option<u64>,
+        /// A OneDrive online-only file: reading it downloads it.
+        cloud: bool,
     },
     /// A symlink or junction: never followed or copied.
     Link,
@@ -29,10 +31,11 @@ pub(crate) enum Entry {
 /// Scans `root`, calling `on_progress` every 100 ms while it runs.
 pub(crate) fn scan_tree(
     root: &Path,
+    ignore_junk: bool,
     cancel: &CancelToken,
     on_progress: &mut dyn FnMut(&ScanProgress),
 ) -> Result<Tree> {
-    let state = ScanState::new(cancel.clone());
+    let state = ScanState::new(cancel.clone()).ignoring_junk(ignore_junk);
     let scanned = thread::scope(|scope| {
         let job = scope.spawn(|| scan(root, &state));
         while !job.is_finished() {
@@ -81,6 +84,7 @@ fn visit_children(
                     relative_path,
                     size: node.size,
                     modified_ms: node.modified_ms,
+                    cloud: node.cloud_files > 0,
                 })?;
             }
             Kind::Dir if node.error.is_some() && !node.has_children() => {

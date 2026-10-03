@@ -57,6 +57,7 @@ pub async fn compare_start(
     state: State<'_, CompareState>,
     left: String,
     right: String,
+    ignore_junk: bool,
     on_event: Channel<CompareEvent>,
 ) -> Result<CompareResult, String> {
     let left = clean_path(&left);
@@ -78,7 +79,7 @@ pub async fn compare_start(
     let job_cancel = cancel.clone();
     let (job_left, job_right) = (left.clone(), right.clone());
     let diff = tauri::async_runtime::spawn_blocking(move || {
-        run(&job_left, &job_right, &job_cancel, &on_event)
+        run(&job_left, &job_right, ignore_junk, &job_cancel, &on_event)
     })
     .await
     .map_err(|err| err.to_string())??;
@@ -99,11 +100,12 @@ pub async fn compare_start(
 fn run(
     left: &Path,
     right: &Path,
+    ignore_junk: bool,
     cancel: &CancelToken,
     on_event: &Channel<CompareEvent>,
 ) -> Result<DiffTree, String> {
-    let left_state = ScanState::new(cancel.clone());
-    let right_state = ScanState::new(cancel.clone());
+    let left_state = ScanState::new(cancel.clone()).ignoring_junk(ignore_junk);
+    let right_state = ScanState::new(cancel.clone()).ignoring_junk(ignore_junk);
     let send_progress = |left_done: bool, right_done: bool| {
         // A closed channel (page left) is not an error; the scan still finishes.
         let _ = on_event.send(CompareEvent::Progress {
