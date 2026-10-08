@@ -5,12 +5,14 @@ on:
     paths:
       - 'V2.0/**'
       - '.github/workflows/v2.yml'
+      - '.github/workflows/build-v2-windows.yml'
   push:
     branches:
       - main
     paths:
       - 'V2.0/**'
       - '.github/workflows/v2.yml'
+      - '.github/workflows/build-v2-windows.yml'
 
 permissions:
   contents: read
@@ -53,3 +55,8 @@ jobs:
       - run: corepack pnpm quality
       - run: corepack pnpm test
       - run: corepack pnpm rust:test
+
+  installer:
+    name: V2 installers
+    needs: check
+    uses: ./.github/workflows/build-v2-windows.yml

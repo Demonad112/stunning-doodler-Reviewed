@@ -6,6 +6,10 @@ Session state for the next Claude session. Update with `/handoff`; keep it short
 
 (1) Finish V1: cut rc5, owner re-checks, tag `v1.0.0`. (2) DeepServer 2.0 in `V2.0/` (Compare, Record, Disk Cleanup; plan `V2.0/docs/plan.md`).
 
+## Decision (2026-10-08)
+
+**V2 replaces V1.** rc5 (V1) was installed and judged bloated; V1 gets no more releases and is **not** tagged `v1.0.0`. Batch 5 (branch `v2/batch-5-installer`) builds the V2 installers, portable zip and `release-v2.yml` (`v2.*` tags; `release.yml` is now `v1.*` only). V2 installs as "DeepServer" over V1 and its installer hook removes V1 leftovers. Details: `V2.0/docs/install.md`. Owner still has to test an upgrade from the installed rc5 on the laptop. The "Next" list below predates this; items 1 and 3 are superseded.
+
 ## State (2026-10-08)
 
 - `main`: V2 Batches 0–4 merged (Reports, HTML/CSV export, quick cleanups, retry by reason: #47). Latest release **v1.0.0-rc4**; rc5 not cut. No worktrees.
