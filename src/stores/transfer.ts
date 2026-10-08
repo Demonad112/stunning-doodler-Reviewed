@@ -96,11 +96,14 @@ export const useTransferStore = defineStore('transfer', () => {
     () => stage.value === 'preparing' || stage.value === 'running' || stage.value === 'watching',
   )
   const groups = computed<NotCopiedGroup[]>(() => {
+    // Reading the ref is how this computed depends on it; the set below is not reactive.
+    // eslint-disable-next-line @typescript-eslint/no-meaningless-void-operator
     void notCopiedRevision.value
 
     return groupNotCopied(notCopied.values())
   })
   const notCopiedCount = computed(() => {
+    // eslint-disable-next-line @typescript-eslint/no-meaningless-void-operator
     void notCopiedRevision.value
 
     return notCopied.size
