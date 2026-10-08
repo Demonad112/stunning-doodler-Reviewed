@@ -15,8 +15,8 @@ use transfer_core::run::Selection;
 use transfer_core::store::{self, RunStore};
 use transfer_core::watch::{WatchControl, WatchOptions};
 use transfer_core::{
-    ConflictPolicy, ItemResult, ItemStatus, Phase, RunSummary, TransferMode, TransferProgress,
-    TransferSettings, TransferSink, VerifyLevel,
+    ConflictPolicy, FailureReason, ItemResult, ItemStatus, Phase, RunSummary, TransferMode,
+    TransferProgress, TransferSettings, TransferSink, VerifyLevel,
 };
 
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
@@ -266,14 +266,12 @@ pub async fn record_retry(
     state: State<'_, RecordState>,
     run_id: String,
     paths: Vec<String>,
+    reason: Option<FailureReason>,
     on_event: Channel<TransferProgress>,
 ) -> Result<RunDetails, String> {
     job(&state, move |control| {
         let mut sink = ChannelSink::new(&on_event);
-        let selection = Selection {
-            paths,
-            reason: None,
-        };
+        let selection = Selection { paths, reason };
         let finished = transfer_core::run::retry(
             &transfer_core::records_root(),
             &run_id,

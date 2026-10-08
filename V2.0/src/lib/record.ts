@@ -165,13 +165,14 @@ export function startRecord(
   })
 }
 
-/** Copies the not-copied files again: `paths`, or all of them when empty. */
+/** Copies the not-copied files again: `paths` and/or one `reason`, or all of them when neither. */
 export function retryRecord(
   runId: string,
   paths: string[],
   onProgress: (progress: RecordProgress) => void,
+  reason: FailureReason | null = null,
 ): Promise<RunDetails> {
-  return invoke<RunDetails>('record_retry', { runId, paths, onEvent: channel(onProgress) })
+  return invoke<RunDetails>('record_retry', { runId, paths, reason, onEvent: channel(onProgress) })
 }
 
 /** Watch mode: stop watching and check every file that has not arrived. */

@@ -25,6 +25,7 @@ import {
   isCancelled,
   loadRecord,
   reasonTitle,
+  type FailureReason,
   recordJob,
   recoverRecord,
   retryRecord,
@@ -115,7 +116,7 @@ function when(ms: number | null | undefined): string {
     : '—'
 }
 
-async function retry(): Promise<void> {
+async function retry(reason: FailureReason | null = null): Promise<void> {
   notice.value = ''
   error.value = ''
   job.running = true
@@ -125,7 +126,7 @@ async function retry(): Promise<void> {
   job.finishing = false
   try {
     const before = totals.value?.notCopied ?? 0
-    details.value = await retryRecord(props.id, [], (progress) => (job.progress = progress))
+    details.value = await retryRecord(props.id, [], (progress) => (job.progress = progress), reason)
     const fixed = before - details.value.summary.totals.notCopied
     notice.value =
       details.value.summary.totals.notCopied === 0
@@ -343,7 +344,7 @@ function sourcePath(relativePath: string): string {
             type="button"
             class="inline-flex h-8 items-center gap-1.5 rounded-md bg-accent px-4 font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50"
             :disabled="busy"
-            @click="retry"
+            @click="retry()"
           >
             <RotateCcw class="size-4" />
             Retry missed
@@ -401,9 +402,17 @@ function sourcePath(relativePath: string): string {
           <li
             v-for="group in reasons"
             :key="group.reason"
-            class="rounded-full border border-danger/30 px-3 py-0.5 text-danger"
           >
-            {{ reasonTitle(group.reason) }}: {{ formatCount(group.count) }}
+            <button
+              type="button"
+              class="rounded-full border border-danger/30 px-3 py-0.5 text-danger hover:bg-danger-bg disabled:opacity-50"
+              :disabled="busy"
+              :title="`Retry only: ${reasonTitle(group.reason)}`"
+              @click="retry(group.reason)"
+            >
+              {{ reasonTitle(group.reason) }}: {{ formatCount(group.count) }}
+              <RotateCcw class="mb-0.5 ml-1 inline size-3" />
+            </button>
           </li>
         </ul>
 
@@ -463,7 +472,8 @@ function sourcePath(relativePath: string): string {
           >.
         </p>
         <p class="mt-2 text-[13px] text-muted">
-          Double-click a row to show the source file in Explorer.
+          Double-click a row to show the source file in Explorer. Click a reason above to retry only
+          those files.
           <template v-if="summary.settings.mode === 'watch'">
             In Watch mode the reason is DeepServer's best guess, since another program did the copy.
           </template>
