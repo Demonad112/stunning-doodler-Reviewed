@@ -3,7 +3,7 @@ use crate::{
     RemoteEntryKind, RemoteFileProvider, RemoteProfile, RemoteProtocol, RemoteProviderError,
     RemoteProviderResult,
 };
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};

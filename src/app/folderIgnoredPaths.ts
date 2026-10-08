@@ -125,7 +125,6 @@ export function saveIgnoredRelativePathsForRoots(
   if (paths.length === 0) {
     const { [key]: _removed, ...rest } = nextStore
 
-    void _removed
     saveFolderIgnoredPathsStore(rest, storage)
 
     return

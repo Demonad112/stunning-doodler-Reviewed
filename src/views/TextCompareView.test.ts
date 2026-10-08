@@ -66,13 +66,13 @@ const TextDiffPanelStub = {
   },
   methods: {
     setDisplayMode(_mode?: string): void {
-      void _mode
+      // stub: these tests never read the display mode back
     },
     getDisplayMode(): 'all' | 'differences' | 'same' {
       return 'all'
     },
-    setDifferenceContextRowCount(value?: number): void {
-      void value
+    setDifferenceContextRowCount(_value?: number): void {
+      // stub: these tests never read the context row count back
     },
     getDifferenceContextRowCount(): number {
       return 0
@@ -84,9 +84,6 @@ const TextDiffPanelStub = {
       return textDiffStubWordWrap
     },
     jumpToLineNumber(_line?: number, _side?: 'left' | 'right'): boolean {
-      void _line
-      void _side
-
       return true
     },
   },
