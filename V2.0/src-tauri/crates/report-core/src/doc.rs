@@ -12,8 +12,20 @@ pub struct Document {
     pub meta: Vec<(String, String)>,
     pub tiles: Vec<Tile>,
     pub notes: Vec<String>,
+    /// A headline bar under the tiles (Compare: how much of the source is at the destination).
+    pub share: Option<Share>,
     /// The first table is the one exported as CSV.
     pub tables: Vec<Table>,
+}
+
+/// A labelled progress bar: `percent` is 0 to 100.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Share {
+    pub label: String,
+    pub detail: String,
+    pub percent: f64,
+    pub tone: Tone,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -64,9 +76,19 @@ impl Document {
             esc(&self.title),
             esc(brand)
         ));
+        let verdict = if self.tiles.iter().any(|tile| tile.tone == Tone::Bad) {
+            Some(("bad", "Needs attention"))
+        } else if self.tiles.iter().any(|tile| tile.tone == Tone::Good) {
+            Some(("good", "All clear"))
+        } else {
+            None
+        };
         out.push_str(&format!(
-            "<header><p class=\"brand\">{}</p><h1>{}</h1><p class=\"subtitle\">{}</p>",
+            "<header><div class=\"top\"><p class=\"brand\">{}</p>{}</div><h1>{}</h1><p class=\"subtitle\">{}</p>",
             esc(brand),
+            verdict.map_or(String::new(), |(tone, text)| format!(
+                "<span class=\"pill {tone}\">{text}</span>"
+            )),
             esc(&self.title),
             esc(&self.subtitle)
         ));
@@ -96,15 +118,29 @@ impl Document {
             }
             out.push_str("</section>\n");
         }
+        if let Some(share) = &self.share {
+            out.push_str(&format!(
+                "<section class=\"share {}\"><div class=\"head\"><strong>{}</strong><span>{}</span></div><div class=\"bar\"><i style=\"width:{:.1}%\"></i></div></section>\n",
+                tone_class(share.tone),
+                esc(&share.label),
+                esc(&share.detail),
+                share.percent.clamp(0.0, 100.0)
+            ));
+        }
         for note in &self.notes {
             out.push_str(&format!("<p class=\"note\">{}</p>\n", esc(note)));
         }
         for table in &self.tables {
-            out.push_str(&format!("<section><h2>{}</h2>", esc(&table.heading)));
+            out.push_str(&format!(
+                "<section class=\"card\"><h2>{}<span class=\"count\">{}</span></h2>",
+                esc(&table.heading),
+                table.rows.len()
+            ));
             if table.rows.is_empty() {
-                out.push_str("<p class=\"empty\">None.</p></section>\n");
+                out.push_str("<p class=\"empty\">Nothing to list.</p></section>\n");
                 continue;
             }
+            out.push_str("<div class=\"scroll\">");
             out.push_str("<table><thead><tr>");
             for (index, column) in table.columns.iter().enumerate() {
                 out.push_str(&format!(
@@ -129,14 +165,14 @@ impl Document {
                 }
                 out.push_str("</tr>");
             }
-            out.push_str("</tbody></table>");
+            out.push_str("</tbody></table></div>");
             if !table.footnote.is_empty() {
                 out.push_str(&format!("<p class=\"note\">{}</p>", esc(&table.footnote)));
             }
             out.push_str("</section>\n");
         }
         out.push_str(&format!(
-            "<footer>Made with DeepServer 2.0 · {}</footer>\n</main>\n</body>\n</html>\n",
+            "<footer><span>Made with DeepServer 2.0</span><span>{}</span></footer>\n</main>\n</body>\n</html>\n",
             esc(generated)
         ));
         out
@@ -207,30 +243,44 @@ fn num_class(table: &Table, index: usize) -> &'static str {
 }
 
 const STYLE: &str = "
-:root{color-scheme:light;--text:#1b1b1b;--muted:#5d5d5d;--line:#e5e5e5;--card:#fafafa;--accent:#005fb8;--good:#0f7b0f;--bad:#c42b1c;--bad-bg:#fde7e9}
+:root{color-scheme:light dark;--page:#f3f5f8;--surface:#fff;--text:#14181f;--muted:#5b6472;--line:#e3e7ee;--zebra:#f8fafc;--accent:#0b5cad;--accent-2:#2f86e0;--good:#0f7b3f;--good-bg:#e6f6ec;--bad:#c42b1c;--bad-bg:#fdecea;--bad-line:#f3b9b2}
+@media (prefers-color-scheme:dark){:root{--page:#0f1319;--surface:#181e27;--text:#e8ecf2;--muted:#9aa5b5;--line:#2a3340;--zebra:#1c232d;--accent:#7ab6f5;--accent-2:#4a98ea;--good:#58c98a;--good-bg:#12301f;--bad:#ff8a7d;--bad-bg:#35181a;--bad-line:#6b2c2c}}
 *{box-sizing:border-box}
-body{margin:0;background:#fff;color:var(--text);font:14px/1.45 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;overflow-wrap:anywhere}
-main{max-width:960px;margin:0 auto;padding:32px 24px}
-header{border-bottom:3px solid var(--accent);padding-bottom:16px;margin-bottom:20px}
-.brand{margin:0;color:var(--accent);font-weight:600;letter-spacing:.02em}
-h1{margin:4px 0 0;font:600 28px/1.2 'Segoe UI Variable Display','Segoe UI',system-ui,sans-serif}
-.subtitle{margin:4px 0 0;color:var(--muted)}
-dl{display:flex;flex-wrap:wrap;gap:4px 24px;margin:12px 0 0}
-dl div{display:flex;gap:6px}dt{color:var(--muted)}dd{margin:0;font-weight:600}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
-.tile{border:1px solid var(--line);border-radius:8px;background:var(--card);padding:10px 14px}
-.tile p{margin:0}.label,.detail{color:var(--muted);font-size:12px}
-.value{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
-.tile.good .value{color:var(--good)}.tile.bad{border-color:#f1b8b2;background:var(--bad-bg)}.tile.bad .value{color:var(--bad)}
-.note{color:var(--muted);font-size:13px}.empty{color:var(--muted)}
-h2{font-size:16px;margin:24px 0 8px}
+body{margin:0;background:var(--page);color:var(--text);font:14px/1.5 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;overflow-wrap:anywhere}
+main{max-width:1000px;margin:0 auto;padding:24px 16px 40px}
+header{background:linear-gradient(135deg,#0b3d75,#1a73c8);color:#fff;border-radius:14px;padding:24px 28px;margin-bottom:16px;box-shadow:0 6px 24px rgba(11,61,117,.25)}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.brand{margin:0;font-weight:600;letter-spacing:.08em;text-transform:uppercase;font-size:12px;opacity:.85}
+.pill{border-radius:999px;padding:3px 12px;font-size:12px;font-weight:600;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.45)}
+.pill.good{background:#d7f5e3;color:#0b5a2d;border-color:#d7f5e3}.pill.bad{background:#ffe0dc;color:#9c1f12;border-color:#ffe0dc}
+h1{margin:10px 0 0;font:600 30px/1.15 'Segoe UI Variable Display','Segoe UI',system-ui,sans-serif}
+.subtitle{margin:6px 0 0;opacity:.9;font-size:15px}
+dl{display:flex;flex-wrap:wrap;gap:6px 28px;margin:16px 0 0;padding-top:14px;border-top:1px solid rgba(255,255,255,.25)}
+dl div{display:flex;flex-direction:column}dt{font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.75}dd{margin:0;font-weight:600}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px}
+.tile{background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--accent-2);border-radius:10px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.tile p{margin:0}.label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}.detail{color:var(--muted);font-size:12px}
+.value{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;margin:2px 0}
+.tile.good{border-top-color:var(--good)}.tile.good .value{color:var(--good)}
+.tile.bad{border-top-color:var(--bad);background:var(--bad-bg);border-color:var(--bad-line)}.tile.bad .value{color:var(--bad)}
+.share{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:16px}
+.share .head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}.share .head span{color:var(--muted)}
+.bar{height:12px;border-radius:999px;background:var(--line);overflow:hidden}.bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+.share.good .bar i{background:var(--good)}.share.bad .bar i{background:var(--bad)}
+.note{color:var(--muted);font-size:13px;margin:8px 4px}.empty{color:var(--muted);padding:8px 0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 16px 12px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+h2{font-size:16px;margin:10px 0;display:flex;align-items:center;gap:10px}
+.count{font-size:12px;font-weight:600;color:var(--accent);background:var(--page);border-radius:999px;padding:1px 10px}
+.scroll{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);padding:6px 8px}
-td{border-bottom:1px solid var(--line);padding:5px 8px;vertical-align:top}
+th{position:sticky;top:0;background:var(--surface);text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid var(--line);padding:8px}
+td{border-bottom:1px solid var(--line);padding:6px 8px;vertical-align:top}
+tbody tr:nth-child(even){background:var(--zebra)}
 .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
-tr.bad td{color:var(--bad)}
-footer{margin-top:32px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
-@media print{main{padding:0}.tile{break-inside:avoid}tr{break-inside:avoid}}
+tr.bad td{color:var(--bad)}tr.bad td:first-child{border-left:3px solid var(--bad)}
+footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:24px;color:var(--muted);font-size:12px}
+@media (max-width:560px){header{padding:18px}h1{font-size:24px}.value{font-size:20px}}
+@media print{:root{--page:#fff}body{background:#fff}main{padding:0}header{box-shadow:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}.tile,.card,tr{break-inside:avoid;box-shadow:none}th{position:static}}
 ";
 
 #[cfg(test)]
@@ -249,6 +299,7 @@ mod tests {
                 ..Tile::default()
             }],
             notes: vec![],
+            share: None,
             tables: vec![Table {
                 heading: "Missing at destination".into(),
                 columns: vec!["Path".into(), "Size".into()],
@@ -275,6 +326,26 @@ mod tests {
         assert!(sample()
             .html("  ", "x")
             .contains("<p class=\"brand\">DeepServer</p>"));
+    }
+
+    #[test]
+    fn html_shows_verdict_share_bar_and_row_count() {
+        let mut doc = sample();
+        doc.share = Some(Share {
+            label: "Found".into(),
+            detail: "8 of 10".into(),
+            percent: 180.0,
+            tone: Tone::Plain,
+        });
+        let html = doc.html("Acme", "x");
+        assert!(html.contains("<span class=\"pill bad\">Needs attention</span>"));
+        assert!(html.contains("<i style=\"width:100.0%\"></i>"));
+        assert!(html.contains("<span class=\"count\">2</span>"));
+        assert!(html.contains("prefers-color-scheme:dark"));
+        doc.tiles[0].tone = Tone::Good;
+        assert!(doc.html("Acme", "x").contains("All clear"));
+        doc.tiles.clear();
+        assert!(!doc.html("Acme", "x").contains("class=\"pill"));
     }
 
     #[test]

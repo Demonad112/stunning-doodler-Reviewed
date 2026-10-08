@@ -205,11 +205,7 @@ pub async fn cleanup_delete(
             return Err("That item is already gone. Scan again to refresh.".to_string());
         }
         let node = tree.node(id);
-        Ok((
-            tree.path(id),
-            tree.path(0),
-            node.size.saturating_sub(node.cloud_bytes),
-        ))
+        Ok((tree.path(id), tree.path(0), node.disk))
     })?;
     Protected::for_this_pc().check(&path, &root)?;
 
