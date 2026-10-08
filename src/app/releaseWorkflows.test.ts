@@ -14,11 +14,22 @@ function triggers(workflow: string): string {
 }
 
 describe('release workflows', () => {
-  it('releases Windows builds only, from an existing v* tag (E20)', () => {
+  it('builds DeepServer 2 releases from v2.* tags in their own workflow', () => {
+    const release = readWorkflow('release-v2.yml')
+    const on = triggers(release)
+
+    expect(on).toContain("- 'v2.*'")
+    expect(on).toContain('workflow_dispatch:')
+    expect(release).toContain('uses: ./.github/workflows/build-v2-windows.yml')
+    expect(release).toContain('git rev-parse -q --verify "refs/tags/$tag"')
+    expect(readWorkflow('release.yml')).not.toContain("- 'v2.*'")
+  })
+
+  it('releases Windows builds only, from an existing v1.* tag (E20)', () => {
     const release = readWorkflow('release.yml')
     const on = triggers(release)
 
-    expect(on).toContain("- 'v*'")
+    expect(on).toContain("- 'v1.*'")
     expect(on).toContain('workflow_dispatch:')
     expect(on).toMatch(/tag:\n\s+description: .+\n\s+required: true/)
     expect(on).not.toContain('pull_request')

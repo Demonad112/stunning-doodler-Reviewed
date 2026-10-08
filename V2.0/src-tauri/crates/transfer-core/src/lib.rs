@@ -33,9 +33,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub const RECORDS_DIR_ENV: &str = "DEEPSERVER2_RECORDS_DIR";
 
 /// `%LOCALAPPDATA%\DeepServer2\Records`, apart from DeepServer 1's transfers.
+/// In portable mode (a `portable.txt` next to the exe): `<exe folder>\Data\Records`.
 pub fn records_root() -> PathBuf {
     if let Some(dir) = std::env::var_os(RECORDS_DIR_ENV).filter(|value| !value.is_empty()) {
         return PathBuf::from(dir);
+    }
+    if let Some(data) = scan_core::portable_data_dir() {
+        return data.join("Records");
     }
     std::env::var_os("LOCALAPPDATA")
         .filter(|value| !value.is_empty())

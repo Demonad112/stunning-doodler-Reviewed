@@ -1,6 +1,6 @@
 [package]
 name = "report-core"
-version = "2.0.0-alpha.0"
+version = "2.0.0"
 edition = "2021"
 license = "Apache-2.0"
 description = "Saved Compare, Record and Disk Cleanup reports for DeepServer 2.0, with HTML and CSV export."

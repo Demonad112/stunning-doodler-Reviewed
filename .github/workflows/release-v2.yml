@@ -1,21 +1,19 @@
-name: Release
+name: Release V2
 
-# Windows only. Runs on a pushed v* tag, or manually for a tag (E20): a manual run without a tag is rejected
-# instead of falling back to the branch name. A manual run with create_tag creates a missing tag on `target`
-# (default: the default branch) after the version check, then builds it in the same run; a tag created with
-# the workflow token doesn't trigger the tag-push run, so nothing builds twice. Assets: the standard and
-# offline/server installers, the portable zip and SHA256SUMS.txt. -alpha/-beta/-rc tags publish a pre-release;
-# final tags create a draft that the owner reviews and publishes. A release that already exists (for example
-# one made in the GitHub UI) gets its assets replaced, is marked pre-release for -alpha/-beta/-rc tags, and gets
-# the notes below if its own are empty.
+# DeepServer 2.0 releases (v2.* tags). Same rules as release.yml, which now handles v1.* only: runs on a pushed
+# tag, or manually for a tag (a manual run without a tag is rejected). A manual run with create_tag creates a
+# missing tag on `target` (default: the default branch) after the version check and builds it in the same run.
+# Assets: the standard and offline installers, the portable zip and SHA256SUMS.txt. -alpha/-beta/-rc tags
+# publish a pre-release; final tags create a draft that the owner reviews and publishes. Unsigned for now.
+# The tag v2.0.0-rc1 needs version 2.0.0 in V2.0/package.json and V2.0/src-tauri/tauri.conf.json.
 on:
   push:
     tags:
-      - 'v1.*'
+      - 'v2.*'
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag to build and publish (for example v1.0.0-rc1)
+        description: Tag to build and publish (for example v2.0.0-rc1)
         required: true
         type: string
       create_tag:
@@ -33,7 +31,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref_name }}
+  group: release-v2-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -68,12 +66,8 @@ jobs:
             echo "::error::Releases are built from tags only."
             exit 1
           fi
-          if ! printf '%s' "$tag" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
-            echo "::error::'$tag' is not a release tag like v1.0.0 or v1.0.0-rc1."
-            exit 1
-          fi
-          if ! printf '%s' "$tag" | grep -qE '^v1\.'; then
-            echo "::error::'$tag' is not a DeepServer 1 tag. DeepServer 2 releases use release-v2.yml."
+          if ! printf '%s' "$tag" | grep -qE '^v2\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::'$tag' is not a DeepServer 2 tag like v2.0.0 or v2.0.0-rc1."
             exit 1
           fi
           new_tag=false
@@ -92,10 +86,11 @@ jobs:
           fi
           want="${tag#v}"
           want="${want%%-*}"
-          tauri=$(jq -r .version src-tauri/tauri.conf.json)
-          pkg=$(jq -r .version package.json)
-          if [ "$tauri" != "$want" ] || [ "$pkg" != "$want" ]; then
-            echo "::error::Tag $tag needs version $want, but tauri.conf.json has $tauri and package.json has $pkg."
+          tauri=$(jq -r .version V2.0/src-tauri/tauri.conf.json)
+          pkg=$(jq -r .version V2.0/package.json)
+          cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' V2.0/src-tauri/Cargo.toml | head -n 1)
+          if [ "$tauri" != "$want" ] || [ "$pkg" != "$want" ] || [ "$cargo" != "$want" ]; then
+            echo "::error::Tag $tag needs version $want, but tauri.conf.json has $tauri, package.json has $pkg and Cargo.toml has $cargo."
             exit 1
           fi
           if [ "$new_tag" = "true" ]; then
@@ -108,11 +103,9 @@ jobs:
   build:
     name: Build
     needs: verify
-    uses: ./.github/workflows/build-windows.yml
+    uses: ./.github/workflows/build-v2-windows.yml
     with:
       ref: refs/tags/${{ needs.verify.outputs.tag }}
-      sign: true
-    secrets: inherit
 
   publish:
     name: Publish GitHub Release
@@ -123,7 +116,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: DeepServer-windows
+          name: DeepServer2-windows
           path: out
       - name: Create or update the release
         env:
@@ -140,14 +133,17 @@ jobs:
           cat > notes.md <<EOF
           DeepServer ${TAG} for Windows 10/11 and Windows Server 2016+ (Desktop Experience).
 
+          Installing it replaces DeepServer 1.x in place (same install folder; the old Explorer menu entries are removed).
+          Records and reports from 2.0 betas stay where they are.
+
           | File | Use it for |
           | --- | --- |
-          | \`DeepServer_${VERSION}_x64-setup.exe\` | Workstations and servers with internet access (downloads WebView2 if it's missing) |
-          | \`DeepServer_${VERSION}_x64-offline-setup.exe\` | Offline or locked-down servers (WebView2 runtime included) |
-          | \`DeepServer_${VERSION}_windows_x64_portable.zip\` | No install: unzip and run \`DeepServer.exe\` (no Explorer menu) |
+          | \`DeepServer_${VERSION}_x64-setup.exe\` | PCs with internet access (downloads WebView2 if it's missing) |
+          | \`DeepServer_${VERSION}_x64-offline-setup.exe\` | Offline or locked-down PCs and servers (WebView2 runtime included) |
+          | \`DeepServer_${VERSION}_windows_x64_portable.zip\` | No install: unzip and run \`DeepServer.exe\`; records and reports are saved in the \`Data\` folder next to it |
           | \`SHA256SUMS.txt\` | Checksums for the files above |
 
-          Silent install: \`DeepServer_${VERSION}_x64-offline-setup.exe /S\`. See [docs/install.md](https://github.com/${GH_REPO}/blob/${TAG}/docs/install.md).
+          Silent install: \`DeepServer_${VERSION}_x64-offline-setup.exe /S\`. See [V2.0/docs/install.md](https://github.com/${GH_REPO}/blob/${TAG}/V2.0/docs/install.md).
           EOF
           if gh release view "$TAG" > /dev/null 2>&1; then
             echo "Release $TAG exists; replacing its assets."

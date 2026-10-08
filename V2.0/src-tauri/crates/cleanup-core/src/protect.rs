@@ -42,7 +42,9 @@ impl Protected {
         let drive = var("SystemDrive").or_else(|| Some("C:".into()));
         let profile = var("USERPROFILE");
 
+        let portable = scan_core::portable_data_dir().map(|dir| dir.to_string_lossy().into_owned());
         let inside = [
+            portable,
             var("SystemRoot"),
             var("ProgramFiles"),
             var("ProgramFiles(x86)"),
