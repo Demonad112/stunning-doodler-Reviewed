@@ -209,12 +209,12 @@ fn num_class(table: &Table, index: usize) -> &'static str {
 const STYLE: &str = "
 :root{color-scheme:light;--text:#1b1b1b;--muted:#5d5d5d;--line:#e5e5e5;--card:#fafafa;--accent:#005fb8;--good:#0f7b0f;--bad:#c42b1c;--bad-bg:#fde7e9}
 *{box-sizing:border-box}
-body{margin:0;background:#fff;color:var(--text);font:14px/1.45 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif}
+body{margin:0;background:#fff;color:var(--text);font:14px/1.45 'Segoe UI Variable Text','Segoe UI',system-ui,sans-serif;overflow-wrap:anywhere}
 main{max-width:960px;margin:0 auto;padding:32px 24px}
 header{border-bottom:3px solid var(--accent);padding-bottom:16px;margin-bottom:20px}
 .brand{margin:0;color:var(--accent);font-weight:600;letter-spacing:.02em}
 h1{margin:4px 0 0;font:600 28px/1.2 'Segoe UI Variable Display','Segoe UI',system-ui,sans-serif}
-.subtitle{margin:4px 0 0;color:var(--muted);word-break:break-all}
+.subtitle{margin:4px 0 0;color:var(--muted)}
 dl{display:flex;flex-wrap:wrap;gap:4px 24px;margin:12px 0 0}
 dl div{display:flex;gap:6px}dt{color:var(--muted)}dd{margin:0;font-weight:600}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
@@ -226,8 +226,8 @@ dl div{display:flex;gap:6px}dt{color:var(--muted)}dd{margin:0;font-weight:600}
 h2{font-size:16px;margin:24px 0 8px}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);padding:6px 8px}
-td{border-bottom:1px solid var(--line);padding:5px 8px;word-break:break-all;vertical-align:top}
-.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;word-break:normal}
+td{border-bottom:1px solid var(--line);padding:5px 8px;vertical-align:top}
+.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 tr.bad td{color:var(--bad)}
 footer{margin-top:32px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
 @media print{main{padding:0}.tile{break-inside:avoid}tr{break-inside:avoid}}
