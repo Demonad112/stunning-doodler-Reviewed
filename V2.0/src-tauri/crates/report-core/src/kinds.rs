@@ -1,6 +1,6 @@
 //! What each kind of report holds, its row on the Reports page, and its export layout.
 
-use crate::doc::{Document, Table, Tile, Tone};
+use crate::doc::{Document, Share, Table, Tile, Tone};
 use crate::{
     format_bytes, format_count, plural, record_job, Body, Entry, JobInfo, ReportKind, Saved,
 };
@@ -285,6 +285,23 @@ pub(crate) fn document(saved: &Saved) -> Document {
                     ),
                 ],
                 notes,
+                share: (report.source_files > 0).then(|| {
+                    let there = report.source_files.saturating_sub(report.missing);
+                    Share {
+                        label: "Source files found at the destination".into(),
+                        detail: format!(
+                            "{} of {}",
+                            format_count(there),
+                            format_count(report.source_files)
+                        ),
+                        percent: there as f64 * 100.0 / report.source_files as f64,
+                        tone: if report.missing == 0 {
+                            Tone::Good
+                        } else {
+                            Tone::Plain
+                        },
+                    }
+                }),
                 tables: vec![Table {
                     heading: "Missing at destination".into(),
                     columns: vec!["Path (relative to the source)".into()],
@@ -434,6 +451,7 @@ pub(crate) fn document(saved: &Saved) -> Document {
                 meta,
                 tiles,
                 notes,
+                share: None,
                 tables,
             }
         }
@@ -451,6 +469,7 @@ pub(crate) fn document(saved: &Saved) -> Document {
                 Tone::Good,
             )],
             notes: vec!["Files in use or changed in the last day are left in place.".into()],
+            share: None,
             tables: vec![Table {
                 heading: "Cleaned".into(),
                 columns: vec![
@@ -555,6 +574,7 @@ pub(crate) fn record_document(records: &Path, id: &str) -> Result<Document, Stri
             },
         ],
         notes,
+        share: None,
         tables: vec![Table {
             heading: "Not copied".into(),
             columns: vec![

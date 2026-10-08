@@ -33,8 +33,13 @@ installers (`build-v2-windows.yml`, reusable). Releases: `release-v2.yml` for `v
   `text-accent`, `text-danger`, ... Never use raw hex or Tailwind palette colours in components.
 - `src/router.ts`: `sections` drives both the routes and the nav rail.
 - `src/lib/`: plain TS helpers, each with a `*.test.ts` when it has logic.
-- `src-tauri/crates/scan-core`: folder walker (`scan`, std `read_dir` + rayon, reparse points
-  listed but never followed, OneDrive online-only files flagged from their attributes, never read)
+- `src-tauri/crates/scan-core`: folder walker (`scan`, rayon; `list.rs` lists a folder with
+  `NtQueryDirectoryFile` in bulk on Windows, std `read_dir` elsewhere; reparse points listed but
+  never followed, OneDrive online-only files flagged from their attributes, never read). Every
+  node has `size` (logical; Compare/Record use it) and `disk` (size on disk: clusters,
+  compressed/sparse/WOF via `GetCompressedFileSizeW`, hard links counted once, cloud = 0;
+  Disk Cleanup uses it). The approach is modelled on the WinDirStat fork's scanner, written
+  fresh (the fork is GPL-2, V2 is Apache-2.0: never copy its source in)
   and the size compare (`compare` -> `DiffTree`). Flat arenas; children contiguous, largest first.
   `cargo test -p scan-core` runs on Linux; the perf check is
   `cargo test -p scan-core --release --test perf -- --ignored --nocapture` (2x100k files < 5 s).
@@ -54,7 +59,7 @@ installers (`build-v2-windows.yml`, reusable). Releases: `release-v2.yml` for `v
   deleted: outside the scanned folder, Windows, Program Files, Users and profile roots, known
   folders, pagefile/hiberfil, `$Recycle.Bin`, the Records folder), `drives` and `recycle`
   (`SHFileOperationW` with undo; Windows asks before deleting anything too big for the bin).
-  Sizes are space on disk: OneDrive online-only bytes (`Node::cloud_bytes`) are left out.
+  Sizes are `Node::disk` (space on disk; OneDrive online-only files are 0).
   Deletes call `Tree::remove`, which subtracts from every folder above. Commands:
   `src-tauri/src/cleanup.rs`; UI `CleanupPage.vue` (`/cleanup`, `?scan=C:\` starts a scan) with
   `TreemapView.vue` (squarified, one level, `src/lib/treemap.ts`) and `DriveTiles.vue` (also on

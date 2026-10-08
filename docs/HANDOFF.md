@@ -4,39 +4,37 @@ Session state for the next Claude session. Update with `/handoff`; keep it short
 
 ## Goal
 
-(1) Finish V1: cut rc5, owner re-checks, tag `v1.0.0`. (2) DeepServer 2.0 in `V2.0/` (Compare, Record, Disk Cleanup; plan `V2.0/docs/plan.md`).
-
-## Decision (2026-10-08)
-
-**V2 replaces V1.** rc5 (V1) was installed and judged bloated; V1 gets no more releases and is **not** tagged `v1.0.0`. Batch 5 (branch `v2/batch-5-installer`) builds the V2 installers, portable zip and `release-v2.yml` (`v2.*` tags; `release.yml` is now `v1.*` only). V2 installs as "DeepServer" over V1 and its installer hook removes V1 leftovers. Details: `V2.0/docs/install.md`. Owner still has to test an upgrade from the installed rc5 on the laptop. The "Next" list below predates this; items 1 and 3 are superseded.
+DeepServer 2.0 (`V2.0/`: Compare, Record, Disk Cleanup) **replaces** V1. V1 gets no more releases. Plan: `V2.0/docs/plan.md`; install details: `V2.0/docs/install.md`.
 
 ## State (2026-10-08)
 
-- `main`: V2 Batches 0–4 merged (Reports, HTML/CSV export, quick cleanups, retry by reason: #47). Latest release **v1.0.0-rc4**; rc5 not cut. No worktrees.
-- Repo is **public** (owner's choice): the private repo's Actions minutes ran out ("account payments have failed"). CI runs while public.
-- Dependency refresh merged (#48, supersedes Dependabot #44/#45). Held back: `ureq` 3 migration in `remote-core`; `typescript` < 7 (typescript-eslint). `dependabot.yml` now covers `V2.0/`.
+- `main`: V2 Batches 0-5 merged (#54). **v2.0.0-rc1** is released (pre-release) and installed on the owner's laptop over V1 (V1 leftovers gone). The app has not been launched there yet: owner test pending.
+- Open PR **`v2/scan-accuracy`** (this session), not merged until CI is green and the owner says so:
+  - **Scanner**: `scan-core/src/list.rs` lists folders with `NtQueryDirectoryFile` in bulk (std `read_dir` fallback). New `Node.disk` = size on disk (clusters, compressed/sparse/WOF via `GetCompressedFileSizeW`, hard links once, cloud files 0). `Node.size` stays logical for Compare/Record. Disk Cleanup (`cleanup-core`, `src-tauri/src/cleanup.rs`) now shows `disk`. Written fresh from the WinDirStat fork's approach (`native/diskusage/windirstat/FinderBasic.cpp`); no source copied (fork is GPL-2, V2 is Apache-2.0).
+  - **Reports**: shared HTML renderer (`report-core/src/doc.rs`) redesigned: gradient header, verdict pill, tile accents, "found at destination" bar for Compare (`Document.share`), row counts, zebra rows, dark mode, phone width, print styles. CSV unchanged.
+  - Not done: no 1440px / 390px screenshots (no browser tool in that session). Open `Document::html` output in a browser before merging. No real-disk comparison against WinDirStat yet.
 
-## Next
+## Next (suggested order)
 
-1. Owner tries Batch 4 on real laptop data (Reports with real records, Recycle Bin quick win, Restart as administrator) at 175%, light and dark.
-2. Batch 5 on "go": NSIS standard + offline WebView2, portable mode (records next to the exe), `v2.*` release workflow. Decide side by side vs replace V1 first.
-3. V1: `/release-rc v1.0.0-rc5`, owner checks, tag `v1.0.0`. Leftover: delete rc1/rc2. (Docs/Support links in `src/app/appMeta.ts` already point at the public repo.)
-4. Batch 4 follow-ups: CSV sizes as raw bytes (today text like "1.25 GB"; needs a raw-value path in `report-core`); prune old reports and the `%TEMP%\DeepServer2 reports` exports; Settings (default verify level, report folder).
-5. Batch 6 "Field tools": Copy missing only from Compare, pre-flight review + conflict choice, admin/backup-rights reads, share sign-in, RMM CLI, Explorer right-click, re-check an old record against its manifest, robocopy log import.
-
-## Open questions for the owner
-
-- V2 side by side with V1, or replace it? (before Batch 5)
-- CI long term: stay public, fix billing, org trial (`obsidianintelligenceyyc`), or self-hosted runner.
-- New logo for 2.0. MFT speed vs. no elevation prompt (Cleanup).
+1. Owner: launch rc1, scan a real drive and compare the total with WinDirStat / Explorer "Size on disk"; merge the PR if good; cut rc2.
+2. Scanner follow-ups:
+   - Optional MFT fast path for admin runs (the fork's `FinderNtfs.cpp` shows the technique; re-implement, don't copy). Cleanup already has an admin relaunch.
+   - UI toggle "Size on disk / Size" in Disk Cleanup, and a hardlink marker on rows (the data exists: repeat links have `disk` 0).
+   - Show "N hard links, M compressed files" in the Cleanup report note.
+   - Perf check: `cargo test -p scan-core --release --test perf -- --ignored --nocapture` (2x100k files < 5 s) was not re-run after the rewrite.
+3. Reports: Disk Cleanup report with a proportional bar per top folder; Record report with a copied/missed bar; CSV sizes as raw bytes; prune old reports and `%TEMP%\DeepServer2 reports`.
+4. Batch 6 "Field tools": Copy missing only from Compare, pre-flight review + conflict choice, admin/backup-rights reads, share sign-in, RMM CLI, Explorer right-click, re-check a record against its manifest, robocopy log import.
+5. Product polish: new logo (icon is still V1's), code signing (`scripts/windows/sign.ps1` hook exists; builds are unsigned), Settings page (default verify level, report folder), in-app "check for update".
 
 ## Needs the owner
 
-- Delete merged remote branches (`claude/brave-allen-tiokj8`, `claude/friendly-galileo-2b664k`, `fix/menu-row-width`, `v2/batch-0-scaffold`, `v2/batch-2-record`, `v2/batch-3-cleanup`, `v2/batch-4-reports`, `v2/record-fixes`) and rc1/rc2: **Actions → Repo maintenance**, `dry_run: true` first.
-- Archive `open-diff` and `altWinDirStat` (ask first).
+- Dependabot PRs #50-#53, #55 (review/merge).
+- Stray folder `C:\Dev\projects\DeepServerV1.0\--clobber\` (untracked, delete with approval).
+- Repo maintenance workflow (`dry_run: true` first): merged branches incl. `v2/batch-5-installer`, V1 rc1/rc2 releases. Archive `open-diff` and `altWinDirStat` only after the owner confirms.
+- CI long term: stay public, fix billing, org trial, or self-hosted runner.
 
 ## Notes
 
 - Windows Application Control blocks the `deepserver_lib` test binary locally (os error 4551): use `cargo test --workspace --no-fail-fast`; CI covers the app crate.
-- A V2-only push: run `corepack pnpm quality` + `corepack pnpm test` in `V2.0/`, push with `PREPUSH_SKIP=1`.
-- Real-app testing over CDP (`--remote-debugging-port=9333`): pass a Tauri Channel as the string `__CHANNEL__:<transformCallback(cb)>`. Point `TEMP`, `DEEPSERVER2_REPORTS_DIR`, `DEEPSERVER2_RECORDS_DIR` at a scratch folder for safe cleanup tests. Stopping the shell can leave vite on port 1430 (kill by port); editing Rust during `tauri dev` restarts the app.
+- Local cargo from a worktree: `CARGO_TARGET_DIR=C:/Dev/projects/DeepServerV1.0/V2.0/src-tauri/target`. `windows-sys` `CreateFileW` needs the `Win32_Security` feature.
+- Clippy (1.98) flags `chunks_exact(const)`: use `as_chunks`.

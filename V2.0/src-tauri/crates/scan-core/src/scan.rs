@@ -1,6 +1,7 @@
+use crate::list::{list_dir, Entry};
 use rayon::prelude::*;
 use serde::Serialize;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::fmt;
 use std::fs;
 use std::io;
@@ -95,6 +96,10 @@ pub struct Node {
     pub kind: Kind,
     /// Logical size in bytes (what Explorer shows as "Size").
     pub size: u64,
+    /// Space on the disk in bytes: whole clusters, compressed and sparse files at their real
+    /// cost, hard links counted once, online-only cloud files 0. This is the number to use when
+    /// asking "how much can I free"; [`Node::size`] is the number to use when comparing copies.
+    pub disk: u64,
     /// Files at or below this node (1 for a file).
     pub files: u64,
     /// Folders below this node, not counting itself.
@@ -125,6 +130,7 @@ impl Node {
             name,
             kind,
             size: 0,
+            disk: 0,
             files: 0,
             dirs: 0,
             cloud_files: 0,
@@ -228,8 +234,9 @@ impl Tree {
         }
         let node = &mut self.nodes[id as usize];
         node.removed = true;
-        let (size, files, cloud_files, cloud_bytes, errors) = (
+        let (size, disk, files, cloud_files, cloud_bytes, errors) = (
             node.size,
+            node.disk,
             node.files,
             node.cloud_files,
             node.cloud_bytes,
@@ -240,6 +247,7 @@ impl Tree {
         while let Some(parent) = self.parent(current) {
             let above = &mut self.nodes[parent as usize];
             above.size = above.size.saturating_sub(size);
+            above.disk = above.disk.saturating_sub(disk);
             above.files = above.files.saturating_sub(files);
             above.dirs = above.dirs.saturating_sub(dirs);
             above.cloud_files = above.cloud_files.saturating_sub(cloud_files);
@@ -288,7 +296,7 @@ pub fn scan(root: &Path, state: &ScanState) -> Result<Tree, ScanError> {
         return Err(ScanError::NotADirectory(root.to_path_buf()));
     }
 
-    let tree = scan_dir(root, root.display().to_string(), state);
+    let mut tree = scan_dir(root, root.display().to_string(), state);
     if state.cancel.is_cancelled() {
         return Err(ScanError::Cancelled);
     }
@@ -298,6 +306,8 @@ pub fn scan(root: &Path, state: &ScanState) -> Result<Tree, ScanError> {
             message: tree.node.error.unwrap_or_default(),
         });
     }
+    count_hard_links_once(&mut tree);
+    total_up(&mut tree);
     Ok(flatten(tree))
 }
 
@@ -305,103 +315,79 @@ pub fn scan(root: &Path, state: &ScanState) -> Result<Tree, ScanError> {
 struct Owned {
     node: Node,
     children: Vec<Owned>,
+    /// Volume-unique id of a file, 0 when unknown; used to find hard links.
+    file_id: u64,
 }
 
 impl Owned {
-    fn leaf(name: String, kind: Kind, size: u64, cloud: bool) -> Self {
-        let mut node = Node::new(name, kind);
-        node.size = size;
-        node.files = u64::from(kind == Kind::File);
-        node.cloud_files = u64::from(cloud);
-        node.cloud_bytes = if cloud { size } else { 0 };
+    fn leaf(entry: Entry) -> Self {
+        let mut node = Node::new(entry.name, entry.kind);
+        node.size = entry.size;
+        node.disk = entry.disk;
+        node.files = u64::from(entry.kind == Kind::File);
+        node.cloud_files = u64::from(entry.cloud);
+        node.cloud_bytes = if entry.cloud { entry.size } else { 0 };
+        node.modified_ms = entry.modified_ms;
         Self {
             node,
             children: Vec::new(),
+            file_id: entry.file_id,
         }
     }
 }
 
-fn scan_dir(path: &Path, name: String, state: &ScanState) -> Owned {
-    let mut dir = Owned {
-        node: Node::new(name, Kind::Dir),
-        children: Vec::new(),
-    };
-    if state.cancel.is_cancelled() {
-        return dir;
-    }
-    state.dirs.fetch_add(1, Ordering::Relaxed);
-    if let Ok(mut current) = state.current.try_lock() {
-        *current = path.display().to_string();
-    }
-
-    let entries = match fs::read_dir(path) {
-        Ok(entries) => entries,
-        Err(err) => {
-            dir.node.error = Some(err.to_string());
-            dir.node.error_code = err.raw_os_error();
-            dir.node.errors = 1;
-            return dir;
-        }
-    };
-
-    let mut subdirs = Vec::new();
-    let mut files = 0;
-    let mut bytes = 0;
-    for entry in entries {
-        // On Windows the entry's type and metadata come from the directory listing itself
-        // (FindNextFileW), so this costs no extra system call per file.
-        let entry_info = entry.and_then(|entry| {
-            let file_type = entry.file_type()?;
-            Ok((entry, file_type))
-        });
-        let (entry, file_type) = match entry_info {
-            Ok(info) => info,
-            Err(err) => {
-                dir.node.error.get_or_insert_with(|| err.to_string());
-                continue;
+/// A file with several names (hard links) takes disk space once. The first name in walk order
+/// keeps its size on disk; the others show 0, so no folder total counts the data twice. Files are
+/// matched on file id and size together, because not every file system hands out reliable ids.
+fn count_hard_links_once(root: &mut Owned) {
+    fn collect(dir: &Owned, ids: &mut Vec<(u64, u64)>) {
+        for child in &dir.children {
+            if child.node.kind == Kind::File && child.file_id != 0 {
+                ids.push((child.file_id, child.node.size));
             }
-        };
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if state.ignore_junk && is_junk(&name, file_type.is_dir()) {
-            continue;
+            collect(child, ids);
         }
-        if file_type.is_symlink() {
-            dir.children.push(Owned::leaf(name, Kind::Link, 0, false));
-        } else if file_type.is_dir() {
-            subdirs.push((entry.path(), name));
-        } else {
-            match entry.metadata() {
-                Ok(metadata) => {
-                    files += 1;
-                    bytes += metadata.len();
-                    let cloud = is_cloud_placeholder(&metadata);
-                    let mut leaf = Owned::leaf(name, Kind::File, metadata.len(), cloud);
-                    leaf.node.modified_ms = metadata
-                        .modified()
-                        .ok()
-                        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|since| u64::try_from(since.as_millis()).unwrap_or(u64::MAX));
-                    dir.children.push(leaf);
-                }
-                Err(err) => {
-                    dir.node.error.get_or_insert_with(|| err.to_string());
+    }
+    fn zero_repeats(
+        dir: &mut Owned,
+        repeated: &HashSet<(u64, u64)>,
+        seen: &mut HashSet<(u64, u64)>,
+    ) {
+        for child in &mut dir.children {
+            if child.node.kind == Kind::File && child.file_id != 0 {
+                let key = (child.file_id, child.node.size);
+                if repeated.contains(&key) && !seen.insert(key) {
+                    child.node.disk = 0;
                 }
             }
+            zero_repeats(child, repeated, seen);
         }
     }
-    state.files.fetch_add(files, Ordering::Relaxed);
-    state.bytes.fetch_add(bytes, Ordering::Relaxed);
 
-    let subdirs: Vec<Owned> = subdirs
-        .into_par_iter()
-        .map(|(path, name)| scan_dir(&path, name, state))
+    let mut ids = Vec::new();
+    collect(root, &mut ids);
+    ids.sort_unstable();
+    let repeated: HashSet<(u64, u64)> = ids
+        .windows(2)
+        .filter(|pair| pair[0] == pair[1])
+        .map(|pair| pair[0])
         .collect();
-    dir.children.extend(subdirs);
+    if !repeated.is_empty() {
+        zero_repeats(root, &repeated, &mut HashSet::new());
+    }
+}
 
+/// Adds every child into its folder and sorts each folder's children, largest first.
+fn total_up(dir: &mut Owned) {
+    let own_error = u64::from(dir.node.error.is_some());
+    for child in &mut dir.children {
+        total_up(child);
+    }
     let node = &mut dir.node;
-    node.errors = u64::from(node.error.is_some());
+    node.errors = own_error;
     for child in &dir.children {
         node.size += child.node.size;
+        node.disk += child.node.disk;
         node.files += child.node.files;
         node.dirs += child.node.dirs + u64::from(child.node.kind == Kind::Dir);
         node.cloud_files += child.node.cloud_files;
@@ -414,6 +400,61 @@ fn scan_dir(path: &Path, name: String, state: &ScanState) -> Owned {
             .cmp(&a.node.size)
             .then_with(|| a.node.name.cmp(&b.node.name))
     });
+}
+
+fn scan_dir(path: &Path, name: String, state: &ScanState) -> Owned {
+    let mut dir = Owned {
+        node: Node::new(name, Kind::Dir),
+        children: Vec::new(),
+        file_id: 0,
+    };
+    if state.cancel.is_cancelled() {
+        return dir;
+    }
+    state.dirs.fetch_add(1, Ordering::Relaxed);
+    if let Ok(mut current) = state.current.try_lock() {
+        *current = path.display().to_string();
+    }
+
+    let listing = match list_dir(path) {
+        Ok(listing) => listing,
+        Err(err) => {
+            dir.node.error = Some(err.to_string());
+            dir.node.error_code = err.raw_os_error();
+            dir.node.errors = 1;
+            return dir;
+        }
+    };
+    if let Some(err) = &listing.error {
+        dir.node.error = Some(err.to_string());
+        dir.node.error_code = err.raw_os_error();
+    }
+
+    let mut subdirs = Vec::new();
+    let mut files = 0;
+    let mut bytes = 0;
+    for entry in listing.entries {
+        if state.ignore_junk && is_junk(&entry.name, entry.kind == Kind::Dir) {
+            continue;
+        }
+        if entry.kind == Kind::Dir {
+            subdirs.push((path.join(&entry.name), entry.name));
+        } else {
+            if entry.kind == Kind::File {
+                files += 1;
+                bytes += entry.size;
+            }
+            dir.children.push(Owned::leaf(entry));
+        }
+    }
+    state.files.fetch_add(files, Ordering::Relaxed);
+    state.bytes.fetch_add(bytes, Ordering::Relaxed);
+
+    let subdirs: Vec<Owned> = subdirs
+        .into_par_iter()
+        .map(|(path, name)| scan_dir(&path, name, state))
+        .collect();
+    dir.children.extend(subdirs);
     dir
 }
 
@@ -445,26 +486,6 @@ pub fn is_junk(name: &str, is_dir: bool) -> bool {
         "thumbs.db" | "ehthumbs.db" | "desktop.ini" | ".ds_store"
     ) || name.starts_with("~$")
         || name.ends_with(".tmp")
-}
-
-/// OneDrive and other cloud providers mark online-only files with these attributes. Reading the
-/// metadata never downloads them.
-#[cfg(windows)]
-fn is_cloud_placeholder(metadata: &fs::Metadata) -> bool {
-    use std::os::windows::fs::MetadataExt;
-    const FILE_ATTRIBUTE_OFFLINE: u32 = 0x1000;
-    const FILE_ATTRIBUTE_RECALL_ON_OPEN: u32 = 0x4_0000;
-    const FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS: u32 = 0x40_0000;
-    metadata.file_attributes()
-        & (FILE_ATTRIBUTE_OFFLINE
-            | FILE_ATTRIBUTE_RECALL_ON_OPEN
-            | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS)
-        != 0
-}
-
-#[cfg(not(windows))]
-fn is_cloud_placeholder(_metadata: &fs::Metadata) -> bool {
-    false
 }
 
 #[cfg(test)]
@@ -635,6 +656,71 @@ mod tests {
         let link = tree.child_by_name(0, "link").unwrap();
         assert_eq!(tree.node(link).kind, Kind::Link);
         assert_eq!(tree.node(link).size, 0);
+    }
+
+    #[test]
+    fn size_on_disk_is_whole_clusters_and_never_below_the_data() {
+        let temp = tempfile::tempdir().unwrap();
+        write(&temp.path().join("big.bin"), 100_000);
+        write(&temp.path().join("sub/other.bin"), 70_000);
+
+        let tree = scan_ok(temp.path());
+        let big = tree.node(tree.child_by_name(0, "big.bin").unwrap());
+        assert_eq!(big.size, 100_000);
+        assert!(
+            big.disk >= big.size,
+            "disk {} < size {}",
+            big.disk,
+            big.size
+        );
+        assert!(big.disk < big.size + 64 * 1024, "disk {}", big.disk);
+        assert_eq!(tree.root().size, 170_000);
+        assert!(tree.root().disk >= 170_000);
+        let sub = tree.node(tree.child_by_name(0, "sub").unwrap());
+        assert_eq!(tree.root().disk, big.disk + sub.disk);
+    }
+
+    #[test]
+    fn hard_links_take_disk_space_once() {
+        let temp = tempfile::tempdir().unwrap();
+        write(&temp.path().join("a/original.bin"), 200_000);
+        fs::hard_link(
+            temp.path().join("a/original.bin"),
+            temp.path().join("b-link.bin"),
+        )
+        .unwrap();
+
+        let tree = scan_ok(temp.path());
+        let one = tree
+            .node(
+                tree.child_by_name(tree.child_by_name(0, "a").unwrap(), "original.bin")
+                    .unwrap(),
+            )
+            .disk;
+        let two = tree.node(tree.child_by_name(0, "b-link.bin").unwrap()).disk;
+        // Logical sizes add up (two names), the disk is spent once.
+        assert_eq!(tree.root().size, 400_000);
+        assert!(one >= 200_000 || two >= 200_000);
+        assert_eq!(tree.root().disk, one + two);
+        assert!(
+            one == 0 || two == 0,
+            "one name must be free: {one} and {two}"
+        );
+    }
+
+    #[test]
+    fn removing_an_item_also_lowers_the_disk_total() {
+        let temp = tempfile::tempdir().unwrap();
+        write(&temp.path().join("keep.bin"), 50_000);
+        write(&temp.path().join("drop/big.bin"), 90_000);
+
+        let mut tree = scan_ok(temp.path());
+        let before = tree.root().disk;
+        let drop = tree.child_by_name(0, "drop").unwrap();
+        let dropped = tree.node(drop).disk;
+        assert!(dropped >= 90_000);
+        assert!(tree.remove(drop));
+        assert_eq!(tree.root().disk, before - dropped);
     }
 
     #[cfg(unix)]
