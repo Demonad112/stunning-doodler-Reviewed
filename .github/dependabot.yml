@@ -20,6 +20,26 @@ updates:
         patterns:
           - '*'
 
+  - package-ecosystem: npm
+    directory: /V2.0
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      v2-frontend-dependencies:
+        patterns:
+          - '*'
+
+  - package-ecosystem: cargo
+    directory: /V2.0/src-tauri
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      v2-rust-dependencies:
+        patterns:
+          - '*'
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
