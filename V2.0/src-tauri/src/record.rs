@@ -15,8 +15,8 @@ use transfer_core::run::Selection;
 use transfer_core::store::{self, RunStore};
 use transfer_core::watch::{WatchControl, WatchOptions};
 use transfer_core::{
-    ConflictPolicy, ItemResult, ItemStatus, Phase, RunSummary, TransferMode, TransferProgress,
-    TransferSettings, TransferSink, VerifyLevel,
+    ConflictPolicy, FailureReason, ItemResult, ItemStatus, Phase, RunSummary, TransferMode,
+    TransferProgress, TransferSettings, TransferSink, VerifyLevel,
 };
 
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
@@ -47,6 +47,11 @@ impl RecordState {
 
     fn control(&self) -> Option<WatchControl> {
         self.0.lock().ok().and_then(|job| job.clone())
+    }
+
+    /// True while a record is running (the app must not exit under it).
+    pub fn is_running(&self) -> bool {
+        self.control().is_some()
     }
 }
 
@@ -97,6 +102,8 @@ pub struct RunDetails {
     preflight: Option<PreflightReport>,
     /// The first [`MAX_NOT_COPIED_ROWS`] not-copied rows, folders and files.
     not_copied: Vec<ItemResult>,
+    /// Client, ticket and technician typed when it started.
+    job: report_core::JobInfo,
     /// Where the run's files are kept.
     folder: String,
 }
@@ -114,6 +121,7 @@ fn load(run_id: &str) -> Result<RunDetails, String> {
         summary: store.summary().map_err(to_text)?,
         preflight: store.preflight().ok(),
         not_copied,
+        job: report_core::record_job(&store),
         folder: store.dir().display().to_string(),
     })
 }
@@ -180,6 +188,9 @@ where
 pub struct RecordOptions {
     ignore_junk: bool,
     download_cloud: bool,
+    /// Client, ticket and technician for the report.
+    #[serde(default)]
+    job: report_core::JobInfo,
 }
 
 /// Lists the source, then copies it or watches the destination. Returns when the record ends:
@@ -206,12 +217,17 @@ pub async fn record_start(
         ignore_junk: options.ignore_junk,
         download_cloud: options.download_cloud,
     };
+    let job_info = options.job;
     job(&state, move |control| {
         let root = transfer_core::records_root();
         let mut sink = ChannelSink::new(&on_event);
         let (summary, preflight) =
             transfer_core::prepare::prepare(&root, settings, &control.cancel, &mut sink)
                 .map_err(to_text)?;
+        if !job_info.is_empty() {
+            // The record still runs if this can't be saved; the report then has no job details.
+            let _ = report_core::save_record_job(&root, &summary.id, &job_info);
+        }
         if mode == TransferMode::Copy {
             if let Some(error) = &preflight.write_error {
                 return Err(format!(
@@ -250,14 +266,12 @@ pub async fn record_retry(
     state: State<'_, RecordState>,
     run_id: String,
     paths: Vec<String>,
+    reason: Option<FailureReason>,
     on_event: Channel<TransferProgress>,
 ) -> Result<RunDetails, String> {
     job(&state, move |control| {
         let mut sink = ChannelSink::new(&on_event);
-        let selection = Selection {
-            paths,
-            reason: None,
-        };
+        let selection = Selection { paths, reason };
         let finished = transfer_core::run::retry(
             &transfer_core::records_root(),
             &run_id,

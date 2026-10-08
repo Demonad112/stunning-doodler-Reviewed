@@ -3,8 +3,9 @@
 
 mod os;
 mod protect;
+pub mod quick;
 
-pub use os::{delete_permanently, drives, recycle, Drive};
+pub use os::{delete_permanently, drives, is_elevated, recycle, Drive};
 pub use protect::Protected;
 
 use scan_core::{Kind, NodeId, Tree};

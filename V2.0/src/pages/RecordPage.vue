@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowLeftRight, Copy, Eye, LoaderCircle, TriangleAlert } fro
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
+import JobFields from '@/components/JobFields.vue'
 import PathField from '@/components/PathField.vue'
 import { errorMessage, ignoreJunk, loadPaths, pickFolder, savePaths } from '@/lib/compare'
 import { formatBytes, formatCount, plural } from '@/lib/format'
@@ -297,6 +298,7 @@ function when(ms: number): string {
         />
         Download OneDrive online-only files (off: they are listed as not copied)
       </label>
+      <JobFields class="mt-4" />
       <p
         v-if="mode === 'watch'"
         class="mt-3 text-[13px] text-muted"

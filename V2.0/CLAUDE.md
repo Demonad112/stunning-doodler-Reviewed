@@ -57,6 +57,19 @@ CI: `.github/workflows/v2.yml`, only when `V2.0/**` changes.
   `TreemapView.vue` (squarified, one level, `src/lib/treemap.ts`) and `DriveTiles.vue` (also on
   Home). The scan lives in `cleanupJob` (`src/lib/cleanup.ts`) so it survives leaving the page.
   File-type colours are the `--app-type-*` tokens; groups in `src/lib/fileTypes.ts`.
+  Quick cleanups (`cleanup_core::quick`): a fixed allow-list of throw-away places (user and
+  Windows temp, browser caches, Windows Update downloads, Recycle Bin, Downloads setup files over
+  90 days, recycled). `Places::targets` names the folders; nothing outside them is touched, the
+  folders themselves stay, temp files under a day old stay. The system ones need admin:
+  `app_restart_admin` relaunches elevated (`ShellExecuteW` "runas").
+- `src-tauri/crates/report-core`: saved reports. Compare and Disk Cleanup results (scan, and the
+  quick cleanups) are JSON files in `%LOCALAPPDATA%\DeepServer2\Reports`
+  (`DEEPSERVER2_REPORTS_DIR` overrides it), saved automatically; records stay in their run
+  folders, with the job details in `job.json`. `list` merges both for the Reports page. Every
+  report becomes a `Document` (tiles + tables) that renders as standalone HTML (branded with the
+  company name from Settings) or CSV (first table, BOM, formulas defused). Commands:
+  `src-tauri/src/reports.rs`; UI `ReportsPage.vue`. Client / Ticket / Technician
+  (`JobFields.vue`, `src/lib/job.ts`) are typed once and sent with every run.
 - Commands live in one file per area (`src-tauri/src/compare.rs`). Long jobs are `async` +
   `spawn_blocking`, stream progress over a `tauri::ipc::Channel` every 100 ms, and keep big
   results in managed state: the UI fetches one folder level at a time (`compare_children`), never

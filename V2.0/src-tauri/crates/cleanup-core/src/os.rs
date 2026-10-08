@@ -190,10 +190,87 @@ mod win {
         ) -> i32;
     }
 
+    #[repr(C)]
+    pub struct ShQueryRbInfo {
+        pub size_of: u32,
+        pub size: i64,
+        pub items: i64,
+    }
+
     #[link(name = "shell32")]
     extern "system" {
         pub fn SHFileOperationW(operation: *mut ShFileOpStructW) -> i32;
+        pub fn SHQueryRecycleBinW(root: *const u16, info: *mut ShQueryRbInfo) -> i32;
+        pub fn SHEmptyRecycleBinW(hwnd: *mut c_void, root: *const u16, flags: u32) -> i32;
+        pub fn IsUserAnAdmin() -> i32;
     }
+}
+
+/// Bytes and items in the Recycle Bin on every drive.
+#[cfg(windows)]
+pub fn recycle_bin_size() -> crate::quick::Cleaned {
+    let mut info = win::ShQueryRbInfo {
+        size_of: std::mem::size_of::<win::ShQueryRbInfo>() as u32,
+        size: 0,
+        items: 0,
+    };
+    // SAFETY: a null root means every drive; `info` is initialised with its size.
+    let result = unsafe { win::SHQueryRecycleBinW(std::ptr::null(), &mut info) };
+    if result != 0 {
+        return crate::quick::Cleaned::default();
+    }
+    crate::quick::Cleaned {
+        freed: u64::try_from(info.size).unwrap_or(0),
+        removed: u64::try_from(info.items).unwrap_or(0),
+        skipped: 0,
+    }
+}
+
+#[cfg(not(windows))]
+pub fn recycle_bin_size() -> crate::quick::Cleaned {
+    crate::quick::Cleaned::default()
+}
+
+/// Empties the Recycle Bin on every drive, without Windows' own prompt or sound.
+#[cfg(windows)]
+pub fn empty_recycle_bin() -> Result<(), String> {
+    const SHERB_NOCONFIRMATION: u32 = 0x1;
+    const SHERB_NOPROGRESSUI: u32 = 0x2;
+    const SHERB_NOSOUND: u32 = 0x4;
+    // Returned when the bin is already empty.
+    const E_UNEXPECTED: i32 = 0x8000_FFFF_u32 as i32;
+    // SAFETY: null window and root (every drive); flags only.
+    let result = unsafe {
+        win::SHEmptyRecycleBinW(
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND,
+        )
+    };
+    if result == 0 || result == E_UNEXPECTED {
+        Ok(())
+    } else {
+        Err(format!(
+            "Windows could not empty the Recycle Bin (code {result:#x})."
+        ))
+    }
+}
+
+#[cfg(not(windows))]
+pub fn empty_recycle_bin() -> Result<(), String> {
+    Err("The Recycle Bin is only on Windows.".into())
+}
+
+/// True when DeepServer runs as administrator.
+#[cfg(windows)]
+pub fn is_elevated() -> bool {
+    // SAFETY: no arguments.
+    unsafe { win::IsUserAnAdmin() != 0 }
+}
+
+#[cfg(not(windows))]
+pub fn is_elevated() -> bool {
+    false
 }
 
 #[cfg(test)]

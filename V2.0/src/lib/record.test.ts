@@ -22,6 +22,7 @@ import {
   formatTimeLeft,
   isCancelled,
   reasonTitle,
+  retryRecord,
   startRecord,
   timeLeftMs,
   type ItemResult,
@@ -69,10 +70,31 @@ describe('record commands', () => {
       destination: 'D:\\dst',
       mode: 'watch',
       verify: 'hash',
-      options: { ignoreJunk: true, downloadCloud: false },
+      options: {
+        ignoreJunk: true,
+        downloadCloud: false,
+        job: { client: '', ticket: '', technician: '' },
+      },
       onEvent: core.channels[0],
     })
     expect(seen).toEqual([{ phase: 'watching', filesDone: 3 }])
+  })
+
+  it('retries by reason, by path, or everything', async () => {
+    core.invoke.mockResolvedValue({})
+
+    await retryRecord('r1', [], () => undefined, 'fileLocked')
+    expect(core.invoke).toHaveBeenLastCalledWith('record_retry', {
+      runId: 'r1',
+      paths: [],
+      reason: 'fileLocked',
+      onEvent: core.channels[0],
+    })
+    await retryRecord('r1', ['a.txt'], () => undefined)
+    expect(core.invoke).toHaveBeenLastCalledWith(
+      'record_retry',
+      expect.objectContaining({ paths: ['a.txt'], reason: null }),
+    )
   })
 
   it('recognises the cancelled error', () => {

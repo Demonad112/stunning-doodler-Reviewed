@@ -3,6 +3,9 @@ import {
   ArrowLeft,
   CircleCheck,
   ClipboardList,
+  ExternalLink,
+  FileSpreadsheet,
+  FileText,
   FolderInput,
   FolderOpen,
   LoaderCircle,
@@ -14,6 +17,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import { copyText } from '@/lib/clipboard'
 import { errorMessage, pickFolder } from '@/lib/compare'
 import { formatBytes, formatCount, plural } from '@/lib/format'
+import { exportReport, openReport, type ExportFormat } from '@/lib/reports'
 import {
   cancelRecord,
   countByReason,
@@ -21,6 +25,7 @@ import {
   isCancelled,
   loadRecord,
   reasonTitle,
+  type FailureReason,
   recordJob,
   recoverRecord,
   retryRecord,
@@ -58,6 +63,38 @@ const finishedOk = computed(
 )
 const busy = computed(() => job.running || recovering.value)
 
+async function openInBrowser(): Promise<void> {
+  try {
+    await openReport({ kind: 'record', id: props.id })
+  } catch (err) {
+    error.value = errorMessage(err)
+  }
+}
+
+async function saveAs(format: ExportFormat): Promise<void> {
+  const run = summary.value
+  if (!run) {
+    return
+  }
+  try {
+    const path = await exportReport(
+      {
+        kind: 'record',
+        id: props.id,
+        title: run.settings.mode === 'watch' ? 'Watched copy' : 'Copy for me',
+        createdAtMs: run.createdAtMs,
+        job: details.value?.job ?? { client: '', ticket: '', technician: '' },
+      },
+      format,
+    )
+    if (path) {
+      notice.value = `Saved ${path}`
+    }
+  } catch (err) {
+    error.value = errorMessage(err)
+  }
+}
+
 const stateText = computed(() => {
   switch (summary.value?.state) {
     case 'completed':
@@ -79,7 +116,7 @@ function when(ms: number | null | undefined): string {
     : '—'
 }
 
-async function retry(): Promise<void> {
+async function retry(reason: FailureReason | null = null): Promise<void> {
   notice.value = ''
   error.value = ''
   job.running = true
@@ -89,7 +126,7 @@ async function retry(): Promise<void> {
   job.finishing = false
   try {
     const before = totals.value?.notCopied ?? 0
-    details.value = await retryRecord(props.id, [], (progress) => (job.progress = progress))
+    details.value = await retryRecord(props.id, [], (progress) => (job.progress = progress), reason)
     const fixed = before - details.value.summary.totals.notCopied
     notice.value =
       details.value.summary.totals.notCopied === 0
@@ -200,6 +237,44 @@ function sourcePath(relativePath: string): string {
     </p>
 
     <template v-if="summary && totals">
+      <div class="mb-3 flex justify-end gap-2">
+        <button
+          type="button"
+          class="flex h-8 items-center gap-1.5 rounded-md border border-stroke bg-card px-3 text-[13px] hover:bg-card-hover"
+          title="Open in the browser to read, print or save as PDF"
+          @click="openInBrowser"
+        >
+          <ExternalLink
+            class="size-4"
+            :stroke-width="1.75"
+          />
+          Open report
+        </button>
+        <button
+          type="button"
+          class="flex h-8 items-center gap-1.5 rounded-md border border-stroke bg-card px-3 text-[13px] hover:bg-card-hover"
+          title="Save as a web page for the client"
+          @click="saveAs('html')"
+        >
+          <FileText
+            class="size-4"
+            :stroke-width="1.75"
+          />
+          Export HTML
+        </button>
+        <button
+          type="button"
+          class="flex h-8 items-center gap-1.5 rounded-md border border-stroke bg-card px-3 text-[13px] hover:bg-card-hover"
+          title="Save the not-copied list as CSV for Excel"
+          @click="saveAs('csv')"
+        >
+          <FileSpreadsheet
+            class="size-4"
+            :stroke-width="1.75"
+          />
+          Export CSV
+        </button>
+      </div>
       <dl class="grid grid-cols-2 gap-3 tabular-nums lg:grid-cols-4">
         <div class="rounded-lg border border-stroke bg-card px-4 py-3">
           <dt class="text-[13px] text-muted">In the source</dt>
@@ -269,7 +344,7 @@ function sourcePath(relativePath: string): string {
             type="button"
             class="inline-flex h-8 items-center gap-1.5 rounded-md bg-accent px-4 font-semibold text-on-accent hover:bg-accent-hover disabled:opacity-50"
             :disabled="busy"
-            @click="retry"
+            @click="retry()"
           >
             <RotateCcw class="size-4" />
             Retry missed
@@ -327,9 +402,17 @@ function sourcePath(relativePath: string): string {
           <li
             v-for="group in reasons"
             :key="group.reason"
-            class="rounded-full border border-danger/30 px-3 py-0.5 text-danger"
           >
-            {{ reasonTitle(group.reason) }}: {{ formatCount(group.count) }}
+            <button
+              type="button"
+              class="rounded-full border border-danger/30 px-3 py-0.5 text-danger hover:bg-danger-bg disabled:opacity-50"
+              :disabled="busy"
+              :title="`Retry only: ${reasonTitle(group.reason)}`"
+              @click="retry(group.reason)"
+            >
+              {{ reasonTitle(group.reason) }}: {{ formatCount(group.count) }}
+              <RotateCcw class="mb-0.5 ml-1 inline size-3" />
+            </button>
           </li>
         </ul>
 
@@ -389,7 +472,8 @@ function sourcePath(relativePath: string): string {
           >.
         </p>
         <p class="mt-2 text-[13px] text-muted">
-          Double-click a row to show the source file in Explorer.
+          Double-click a row to show the source file in Explorer. Click a reason above to retry only
+          those files.
           <template v-if="summary.settings.mode === 'watch'">
             In Watch mode the reason is DeepServer's best guess, since another program did the copy.
           </template>

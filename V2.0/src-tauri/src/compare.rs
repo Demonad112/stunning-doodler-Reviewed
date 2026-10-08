@@ -1,6 +1,7 @@
 //! Compare commands: scan both folders in parallel, stream progress over a channel, keep the
 //! result in memory and hand it to the UI one folder level at a time.
 
+use report_core::{Body, CompareReport, JobInfo};
 use scan_core::{
     check_pair, clean_path, compare, scan, CancelToken, DiffRow, DiffSummary, DiffTree,
     ScanProgress, ScanState, Side,
@@ -50,6 +51,42 @@ pub struct CompareResult {
     summary: DiffSummary,
     rows: Vec<DiffRow>,
     elapsed_ms: u64,
+    /// The saved report on the Reports page; `None` when it could not be saved.
+    report_id: Option<String>,
+}
+
+/// Most missing paths a saved compare report keeps.
+const REPORT_MISSING_LIMIT: usize = 50_000;
+
+/// Saves the compare on the Reports page. A failed save doesn't fail the compare.
+fn save_report(
+    left: &Path,
+    right: &Path,
+    diff: &DiffTree,
+    elapsed_ms: u64,
+    job: JobInfo,
+) -> Option<String> {
+    let summary = diff.summary();
+    let mut missing_paths = diff.missing_paths();
+    missing_paths.truncate(REPORT_MISSING_LIMIT);
+    let report = CompareReport {
+        source: left.display().to_string(),
+        destination: right.display().to_string(),
+        source_size: summary.left.size,
+        source_files: summary.left.files,
+        destination_size: summary.right.size,
+        destination_files: summary.right.files,
+        missing: summary.missing,
+        missing_bytes: summary.missing_bytes,
+        different: summary.different,
+        extra: summary.extra,
+        unreadable: summary.left_errors + summary.right_errors,
+        elapsed_ms,
+        missing_paths,
+    };
+    report_core::save(&report_core::reports_root(), job, Body::Compare(report))
+        .map(|saved| saved.id)
+        .ok()
 }
 
 #[tauri::command]
@@ -58,6 +95,7 @@ pub async fn compare_start(
     left: String,
     right: String,
     ignore_junk: bool,
+    job: JobInfo,
     on_event: Channel<CompareEvent>,
 ) -> Result<CompareResult, String> {
     let left = clean_path(&left);
@@ -88,10 +126,12 @@ pub async fn compare_start(
         return Err(CANCELLED.to_string());
     }
 
+    let elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     let result = CompareResult {
         summary: diff.summary().clone(),
         rows: diff.children(0).unwrap_or_default(),
-        elapsed_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+        elapsed_ms,
+        report_id: save_report(&left, &right, &diff, elapsed_ms, job),
     };
     *state.result.lock().map_err(|err| err.to_string())? = Some(Compared { left, right, diff });
     Ok(result)

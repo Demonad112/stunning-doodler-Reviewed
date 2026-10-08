@@ -1,6 +1,7 @@
 mod cleanup;
 mod compare;
 mod record;
+mod reports;
 
 use serde::Serialize;
 use tauri::window::{Effect, EffectsBuilder};
@@ -62,6 +63,13 @@ pub fn run() {
             cleanup::cleanup_path,
             cleanup::cleanup_reveal,
             cleanup::cleanup_delete,
+            cleanup::cleanup_quick_list,
+            cleanup::cleanup_quick_clean,
+            cleanup::app_restart_admin,
+            reports::reports_list,
+            reports::report_delete,
+            reports::report_export,
+            reports::report_open,
             compare::compare_start,
             compare::compare_children,
             compare::compare_cancel,

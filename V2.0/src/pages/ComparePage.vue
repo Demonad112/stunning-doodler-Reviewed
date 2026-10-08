@@ -9,6 +9,7 @@ import {
   CircleCheck,
   ClipboardList,
   Copy,
+  FileText,
   FolderOpen,
   History,
   Info,
@@ -27,6 +28,7 @@ import {
 } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CompareTable from '@/components/CompareTable.vue'
+import JobFields from '@/components/JobFields.vue'
 import ContextMenu, { type MenuItem } from '@/components/ContextMenu.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import PathField from '@/components/PathField.vue'
@@ -64,6 +66,7 @@ import {
   type SortKey,
 } from '@/lib/diffRows'
 import { formatBytes, formatDuration, plural } from '@/lib/format'
+import { openReport } from '@/lib/reports'
 import { sections } from '@/router'
 
 const section = sections.find((candidate) => candidate.path === '/compare')
@@ -244,6 +247,17 @@ async function copyPath(row: DiffRow, side: Side): Promise<void> {
   try {
     await copyText(await rowPath(row.id, side))
     showToast('Path copied')
+  } catch (err) {
+    showToast(errorMessage(err))
+  }
+}
+
+async function openCompareReport(): Promise<void> {
+  if (!result.value?.reportId) {
+    return
+  }
+  try {
+    await openReport({ kind: 'compare', id: result.value.reportId })
   } catch (err) {
     showToast(errorMessage(err))
   }
@@ -457,6 +471,10 @@ function shortPath(path: string): string {
       />
       Ignore system and temp files (Thumbs.db, desktop.ini, ~$ Office lock files, .tmp)
     </label>
+    <JobFields
+      class="mt-3"
+      :disabled="running"
+    />
 
     <p
       v-if="error"
@@ -580,6 +598,19 @@ function shortPath(path: string): string {
           {{ finishedAt?.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) }}
           in {{ formatDuration(result.elapsedMs) }}
         </p>
+        <button
+          v-if="result.reportId"
+          type="button"
+          class="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-stroke bg-card px-3 text-[13px] hover:bg-card-hover"
+          title="Open the saved report in the browser (print or save as PDF from there). Export it from Reports."
+          @click="openCompareReport"
+        >
+          <FileText
+            class="size-4"
+            :stroke-width="1.75"
+          />
+          Report
+        </button>
         <button
           v-if="result.summary.missing > 0"
           type="button"

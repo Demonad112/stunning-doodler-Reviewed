@@ -1,6 +1,7 @@
 import { Channel, invoke } from '@tauri-apps/api/core'
 import { reactive } from 'vue'
 import { formatBytes, plural } from './format'
+import { currentJob, type JobInfo } from './job'
 
 /** Copy: DeepServer copies. Watch: another program copies and DeepServer checks what arrives. */
 export type RecordMode = 'copy' | 'watch'
@@ -109,6 +110,8 @@ export interface RunDetails {
   preflight: PreflightReport | null
   /** The first 10,000 not-copied rows; `summary.totals` counts all of them. */
   notCopied: ItemResult[]
+  /** Client, ticket and technician typed when it started. */
+  job: JobInfo
   folder: string
 }
 
@@ -157,18 +160,19 @@ export function startRecord(
     destination,
     mode,
     verify,
-    options,
+    options: { ...options, job: currentJob() },
     onEvent: channel(onProgress),
   })
 }
 
-/** Copies the not-copied files again: `paths`, or all of them when empty. */
+/** Copies the not-copied files again: `paths` and/or one `reason`, or all of them when neither. */
 export function retryRecord(
   runId: string,
   paths: string[],
   onProgress: (progress: RecordProgress) => void,
+  reason: FailureReason | null = null,
 ): Promise<RunDetails> {
-  return invoke<RunDetails>('record_retry', { runId, paths, onEvent: channel(onProgress) })
+  return invoke<RunDetails>('record_retry', { runId, paths, reason, onEvent: channel(onProgress) })
 }
 
 /** Watch mode: stop watching and check every file that has not arrived. */

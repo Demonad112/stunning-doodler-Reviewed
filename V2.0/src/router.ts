@@ -4,7 +4,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import CleanupPage from './pages/CleanupPage.vue'
 import ComparePage from './pages/ComparePage.vue'
 import HomePage from './pages/HomePage.vue'
-import PlaceholderPage from './pages/PlaceholderPage.vue'
+import ReportsPage from './pages/ReportsPage.vue'
 import RecordPage from './pages/RecordPage.vue'
 import RecordReportPage from './pages/RecordReportPage.vue'
 import SettingsPage from './pages/SettingsPage.vue'
@@ -55,11 +55,7 @@ export const router = createRouter({
     { path: '/compare/record', component: RecordPage },
     { path: '/compare/record/:id', component: RecordReportPage, props: true },
     { path: '/cleanup', component: CleanupPage },
-    ...sections.slice(3).map((section) => ({
-      path: section.path,
-      component: PlaceholderPage,
-      props: { section },
-    })),
+    { path: '/reports', component: ReportsPage },
     { path: '/settings', component: SettingsPage },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
