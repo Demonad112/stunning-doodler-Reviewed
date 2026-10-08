@@ -20,7 +20,8 @@ pub struct Row {
     pub id: NodeId,
     pub name: String,
     pub kind: Kind,
-    /// Space on this disk: online-only (cloud) files count as 0.
+    /// Size on disk (whole clusters, compression and sparse aware, hard links once):
+    /// online-only (cloud) files count as 0.
     pub size: u64,
     pub files: u64,
     pub dirs: u64,
@@ -40,7 +41,7 @@ impl Row {
             id,
             name: node.name.clone(),
             kind: node.kind,
-            size: node.size.saturating_sub(node.cloud_bytes),
+            size: node.disk,
             files: node.files,
             dirs: node.dirs,
             cloud_files: node.cloud_files,
@@ -113,12 +114,12 @@ pub fn overview(tree: &Tree) -> Overview {
                 Kind::Link => {}
                 Kind::File if node.cloud_files > 0 => {}
                 Kind::File => {
-                    largest.push(Reverse((node.size, child)));
+                    largest.push(Reverse((node.disk, child)));
                     if largest.len() > LARGEST_FILES {
                         largest.pop();
                     }
                     let entry = types.entry(extension(&node.name)).or_default();
-                    entry.0 += node.size;
+                    entry.0 += node.disk;
                     entry.1 += 1;
                 }
             }
@@ -195,10 +196,11 @@ mod tests {
     #[test]
     fn overview_lists_largest_files_and_types() {
         let temp = tempfile::tempdir().unwrap();
-        write(&temp.path().join("a.mp4"), 50);
-        write(&temp.path().join("sub/b.MP4"), 30);
-        write(&temp.path().join("sub/c.txt"), 5);
-        write(&temp.path().join("sub/deeper/notes"), 1);
+        // Sizes are space on disk, so use files well above one cluster.
+        write(&temp.path().join("a.mp4"), 500_000);
+        write(&temp.path().join("sub/b.MP4"), 300_000);
+        write(&temp.path().join("sub/c.txt"), 100_000);
+        write(&temp.path().join("sub/deeper/notes"), 40_000);
 
         let mut tree = scan(temp.path(), &ScanState::default()).unwrap();
         let view = overview(&tree);
@@ -212,23 +214,21 @@ mod tests {
             view.largest_files[1].folder,
             temp.path().join("sub").display().to_string()
         );
-        assert_eq!(
-            view.file_types[0],
-            TypeRow {
-                extension: "mp4".into(),
-                size: 80,
-                files: 2
-            }
-        );
+        let mp4 = &view.file_types[0];
+        assert_eq!((mp4.extension.as_str(), mp4.files), ("mp4", 2));
+        assert!(mp4.size >= 800_000);
         assert_eq!(view.file_types.len(), 3);
-        assert_eq!(view.root.size, 86);
+        let total: u64 = view.file_types.iter().map(|kind| kind.size).sum();
+        assert_eq!(view.root.size, total);
+        assert!(view.root.size >= 940_000);
+        let a_size = view.largest_files[0].size;
 
         // After a delete the lists and the folder listing leave it out.
         let sub = tree.child_by_name(0, "sub").unwrap();
         assert!(tree.remove(sub));
         let view = overview(&tree);
         assert_eq!(view.largest_files.len(), 1);
-        assert_eq!(view.root.size, 50);
+        assert_eq!(view.root.size, a_size);
         assert!(rows(&tree, 0).iter().all(|row| row.name != "sub"));
         assert!(rows(&tree, sub).is_empty());
     }

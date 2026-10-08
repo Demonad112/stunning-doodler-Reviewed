@@ -9,5 +9,8 @@ description = "Folder size tree scanner and size-based folder comparison for Dee
 rayon = "1.12"
 serde = { version = "1.0.228", features = ["derive"] }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem"] }
+
 [dev-dependencies]
 tempfile = "3.27"
