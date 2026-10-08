@@ -3,6 +3,9 @@ import {
   ArrowLeft,
   CircleCheck,
   ClipboardList,
+  ExternalLink,
+  FileSpreadsheet,
+  FileText,
   FolderInput,
   FolderOpen,
   LoaderCircle,
@@ -14,6 +17,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import { copyText } from '@/lib/clipboard'
 import { errorMessage, pickFolder } from '@/lib/compare'
 import { formatBytes, formatCount, plural } from '@/lib/format'
+import { exportReport, openReport, type ExportFormat } from '@/lib/reports'
 import {
   cancelRecord,
   countByReason,
@@ -57,6 +61,38 @@ const finishedOk = computed(
   () => summary.value?.state === 'completed' && totals.value?.notCopied === 0,
 )
 const busy = computed(() => job.running || recovering.value)
+
+async function openInBrowser(): Promise<void> {
+  try {
+    await openReport({ kind: 'record', id: props.id })
+  } catch (err) {
+    error.value = errorMessage(err)
+  }
+}
+
+async function saveAs(format: ExportFormat): Promise<void> {
+  const run = summary.value
+  if (!run) {
+    return
+  }
+  try {
+    const path = await exportReport(
+      {
+        kind: 'record',
+        id: props.id,
+        title: run.settings.mode === 'watch' ? 'Watched copy' : 'Copy for me',
+        createdAtMs: run.createdAtMs,
+        job: details.value?.job ?? { client: '', ticket: '', technician: '' },
+      },
+      format,
+    )
+    if (path) {
+      notice.value = `Saved ${path}`
+    }
+  } catch (err) {
+    error.value = errorMessage(err)
+  }
+}
 
 const stateText = computed(() => {
   switch (summary.value?.state) {
@@ -200,6 +236,44 @@ function sourcePath(relativePath: string): string {
     </p>
 
     <template v-if="summary && totals">
+      <div class="mb-3 flex justify-end gap-2">
+        <button
+          type="button"
+          class="flex h-8 items-center gap-1.5 rounded-md border border-stroke bg-card px-3 text-[13px] hover:bg-card-hover"
+          title="Open in the browser to read, print or save as PDF"
+          @click="openInBrowser"
+        >
+          <ExternalLink
+            class="size-4"
+            :stroke-width="1.75"
+          />
+          Open report
+        </button>
+        <button
+          type="button"
+          class="flex h-8 items-center gap-1.5 rounded-md border border-stroke bg-card px-3 text-[13px] hover:bg-card-hover"
+          title="Save as a web page for the client"
+          @click="saveAs('html')"
+        >
+          <FileText
+            class="size-4"
+            :stroke-width="1.75"
+          />
+          Export HTML
+        </button>
+        <button
+          type="button"
+          class="flex h-8 items-center gap-1.5 rounded-md border border-stroke bg-card px-3 text-[13px] hover:bg-card-hover"
+          title="Save the not-copied list as CSV for Excel"
+          @click="saveAs('csv')"
+        >
+          <FileSpreadsheet
+            class="size-4"
+            :stroke-width="1.75"
+          />
+          Export CSV
+        </button>
+      </div>
       <dl class="grid grid-cols-2 gap-3 tabular-nums lg:grid-cols-4">
         <div class="rounded-lg border border-stroke bg-card px-4 py-3">
           <dt class="text-[13px] text-muted">In the source</dt>

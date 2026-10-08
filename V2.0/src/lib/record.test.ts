@@ -69,7 +69,11 @@ describe('record commands', () => {
       destination: 'D:\\dst',
       mode: 'watch',
       verify: 'hash',
-      options: { ignoreJunk: true, downloadCloud: false },
+      options: {
+        ignoreJunk: true,
+        downloadCloud: false,
+        job: { client: '', ticket: '', technician: '' },
+      },
       onEvent: core.channels[0],
     })
     expect(seen).toEqual([{ phase: 'watching', filesDone: 3 }])

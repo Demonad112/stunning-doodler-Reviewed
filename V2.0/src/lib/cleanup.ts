@@ -1,6 +1,7 @@
 import { Channel, invoke, isTauri } from '@tauri-apps/api/core'
 import { reactive, ref } from 'vue'
 import { errorMessage, type EntryKind, type ScanProgress } from './compare'
+import { currentJob } from './job'
 
 export interface Drive {
   /** "C:\". */
@@ -54,6 +55,7 @@ interface ScanResult {
   overview: Overview
   rows: CleanupRow[]
   elapsedMs: number
+  reportId: string | null
 }
 
 /**
@@ -75,6 +77,8 @@ export const cleanupJob = reactive({
   rows: [] as CleanupRow[],
   error: '',
   notice: '',
+  /** The scan's saved report on the Reports page. */
+  reportId: null as string | null,
 })
 
 /** This PC's drives, for the drive tiles on Home and Disk Cleanup. */
@@ -106,19 +110,25 @@ export async function runScan(path: string): Promise<void> {
     rows: [],
     error: '',
     notice: '',
+    reportId: null,
   })
   const onProgress = new Channel<ScanProgress>()
   onProgress.onmessage = (progress) => {
     cleanupJob.progress = progress
   }
   try {
-    const result = await invoke<ScanResult>('cleanup_scan', { path, onProgress })
+    const result = await invoke<ScanResult>('cleanup_scan', {
+      path,
+      job: currentJob(),
+      onProgress,
+    })
     Object.assign(cleanupJob, {
       path: result.path,
       overview: result.overview,
       trail: [result.overview.root],
       rows: result.rows,
       elapsedMs: result.elapsedMs,
+      reportId: result.reportId,
       finishedAt: new Date(),
     })
   } catch (err) {
@@ -195,4 +205,57 @@ export function scanPercent(bytes: number, drive: Drive | undefined): number | n
     return null
   }
   return Math.min(99, Math.floor((bytes / used) * 100))
+}
+
+export type QuickId =
+  'userTemp' | 'windowsTemp' | 'browserCache' | 'updateCache' | 'recycleBin' | 'oldInstallers'
+
+/** A quick cleanup card. */
+export interface QuickWin {
+  id: QuickId
+  title: string
+  description: string
+  needsAdmin: boolean
+  /** What it would free now. */
+  size: number
+  files: number
+}
+
+export interface QuickList {
+  /** Running as administrator, so the system cleanups can run. */
+  elevated: boolean
+  items: QuickWin[]
+}
+
+export interface CleanedItem {
+  title: string
+  freed: number
+  removedFiles: number
+  skippedFiles: number
+  error: string | null
+}
+
+export interface QuickResult {
+  report: { items: CleanedItem[] }
+  reportId: string | null
+}
+
+/** Measures every quick cleanup; takes a few seconds on a big profile. */
+export function loadQuickWins(): Promise<QuickList> {
+  return invoke<QuickList>('cleanup_quick_list')
+}
+
+/** Runs the chosen quick cleanups and saves a report of what they freed. */
+export function runQuickClean(ids: QuickId[]): Promise<QuickResult> {
+  return invoke<QuickResult>('cleanup_quick_clean', { ids, job: currentJob() })
+}
+
+/** Restarts DeepServer as administrator; Windows asks first. */
+export function restartAsAdmin(): Promise<void> {
+  return invoke('app_restart_admin')
+}
+
+/** Which cards can be ticked: something to free, and admin rights when needed. */
+export function canClean(item: QuickWin, elevated: boolean): boolean {
+  return item.size > 0 && (!item.needsAdmin || elevated)
 }

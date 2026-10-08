@@ -54,6 +54,7 @@ describe('compare commands', () => {
       left: 'C:\\a',
       right: 'D:\\b',
       ignoreJunk: true,
+      job: { client: '', ticket: '', technician: '' },
       onEvent: core.channels[0],
     })
     const progress = { files: 1, dirs: 1, bytes: 5, current: 'C:\\a' }

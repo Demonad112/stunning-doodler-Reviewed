@@ -1,7 +1,12 @@
 //! Disk Cleanup commands: scan one folder or drive with streamed progress, keep the tree in
 //! memory, hand the UI one folder level at a time, and recycle or delete items from it.
 
+use cleanup_core::quick::{self, Places, QuickId, QuickWin};
 use cleanup_core::{Drive, Overview, Protected, Row};
+use report_core::{
+    Body, CleanReport, CleanedItem, FileItem, FolderItem, JobInfo, Removed, Saved, TypeItem,
+    UsageReport,
+};
 use scan_core::{clean_path, scan, CancelToken, NodeId, ScanProgress, ScanState, Tree};
 use serde::Serialize;
 use std::path::PathBuf;
@@ -20,6 +25,8 @@ const NO_RESULT: &str = "That scan is no longer available. Scan again.";
 pub struct CleanupState {
     cancel: Mutex<Option<CancelToken>>,
     tree: Mutex<Option<Tree>>,
+    /// The scan's saved report; deletes are added to it.
+    report: Mutex<Option<Saved>>,
 }
 
 #[derive(Serialize)]
@@ -29,6 +36,7 @@ pub struct ScanResult {
     overview: Overview,
     rows: Vec<Row>,
     elapsed_ms: u64,
+    report_id: Option<String>,
 }
 
 #[tauri::command]
@@ -42,6 +50,7 @@ pub async fn cleanup_drives() -> Result<Vec<Drive>, String> {
 pub async fn cleanup_scan(
     state: State<'_, CleanupState>,
     path: String,
+    job: JobInfo,
     on_progress: Channel<ScanProgress>,
 ) -> Result<ScanResult, String> {
     let path = clean_path(&path);
@@ -79,14 +88,81 @@ pub async fn cleanup_scan(
     }
     let tree = tree.map_err(|err| err.to_string())?;
 
+    let overview = cleanup_core::overview(&tree);
+    let rows = cleanup_core::rows(&tree, 0);
+    let elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    let report = usage_report(&path, &tree, &overview, &rows, elapsed_ms);
+    let saved = report_core::save(&report_core::reports_root(), job, Body::DiskUsage(report)).ok();
     let result = ScanResult {
         path: path.display().to_string(),
-        overview: cleanup_core::overview(&tree),
-        rows: cleanup_core::rows(&tree, 0),
-        elapsed_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+        overview,
+        rows,
+        elapsed_ms,
+        report_id: saved.as_ref().map(|saved| saved.id.clone()),
     };
     *lock(&state.tree)? = Some(tree);
+    *lock(&state.report)? = saved;
     Ok(result)
+}
+
+/// Lines kept per list in a saved disk usage report.
+const REPORT_ROWS: usize = 25;
+
+fn usage_report(
+    path: &std::path::Path,
+    tree: &Tree,
+    overview: &Overview,
+    rows: &[Row],
+    elapsed_ms: u64,
+) -> UsageReport {
+    let root = &overview.root;
+    let drive = cleanup_core::drives().into_iter().find(|drive| {
+        drive
+            .path
+            .trim_end_matches('\\')
+            .eq_ignore_ascii_case(path.display().to_string().trim_end_matches(['\\', '/']))
+    });
+    UsageReport {
+        path: path.display().to_string(),
+        size: root.size,
+        files: root.files,
+        dirs: root.dirs,
+        unreadable: root.errors,
+        cloud_files: root.cloud_files,
+        cloud_bytes: root.cloud_bytes,
+        drive_total: drive.as_ref().map(|drive| drive.total),
+        drive_free: drive.as_ref().map(|drive| drive.free),
+        elapsed_ms,
+        top_folders: rows
+            .iter()
+            .take(REPORT_ROWS)
+            .map(|row| FolderItem {
+                name: tree.path(row.id).display().to_string(),
+                size: row.size,
+                files: row.files,
+            })
+            .collect(),
+        largest_files: overview
+            .largest_files
+            .iter()
+            .take(REPORT_ROWS)
+            .map(|file| FileItem {
+                path: tree.path(file.id).display().to_string(),
+                size: file.size,
+            })
+            .collect(),
+        types: overview
+            .file_types
+            .iter()
+            .take(REPORT_ROWS)
+            .map(|kind| TypeItem {
+                extension: kind.extension.clone(),
+                size: kind.size,
+                files: kind.files,
+            })
+            .collect(),
+        removed: Vec::new(),
+    }
 }
 
 #[tauri::command]
@@ -124,11 +200,16 @@ pub async fn cleanup_delete(
     id: NodeId,
     permanent: bool,
 ) -> Result<Overview, String> {
-    let (path, root) = with_tree(&state, |tree| {
+    let (path, root, size) = with_tree(&state, |tree| {
         if id == 0 || !tree.is_live(id) {
             return Err("That item is already gone. Scan again to refresh.".to_string());
         }
-        Ok((tree.path(id), tree.path(0)))
+        let node = tree.node(id);
+        Ok((
+            tree.path(id),
+            tree.path(0),
+            node.size.saturating_sub(node.cloud_bytes),
+        ))
     })?;
     Protected::for_this_pc().check(&path, &root)?;
 
@@ -150,6 +231,17 @@ pub async fn cleanup_delete(
     // A new scan may have replaced the tree while Windows was deleting.
     if gone && tree.is_live(id) && tree.path(id) == path {
         tree.remove(id);
+        if let Some(saved) = lock(&state.report)?.as_mut() {
+            if let Body::DiskUsage(report) = &mut saved.body {
+                report.removed.push(Removed {
+                    path: path.display().to_string(),
+                    size,
+                    permanent,
+                });
+                // The delete happened; a report that can't be updated isn't worth an error.
+                let _ = report_core::write(&report_core::reports_root(), saved);
+            }
+        }
     }
     if !gone {
         outcome?;
@@ -181,4 +273,132 @@ fn item_path(state: &CleanupState, id: NodeId) -> Result<PathBuf, String> {
             Err("That item is no longer there.".into())
         }
     })
+}
+
+/// The quick cleanup cards, measured now.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuickList {
+    /// Running as administrator: the system cleanups can run.
+    elevated: bool,
+    items: Vec<QuickWin>,
+}
+
+#[tauri::command]
+pub async fn cleanup_quick_list() -> Result<QuickList, String> {
+    tauri::async_runtime::spawn_blocking(|| QuickList {
+        elevated: cleanup_core::is_elevated(),
+        items: quick::list(&Places::for_this_pc()),
+    })
+    .await
+    .map_err(|err| err.to_string())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuickResult {
+    report: CleanReport,
+    report_id: Option<String>,
+}
+
+/// Runs the chosen quick cleanups one after another and saves what they freed as a report.
+#[tauri::command]
+pub async fn cleanup_quick_clean(ids: Vec<QuickId>, job: JobInfo) -> Result<QuickResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let places = Places::for_this_pc();
+        let elevated = cleanup_core::is_elevated();
+        let items = ids
+            .into_iter()
+            .map(|id| {
+                if id.needs_admin() && !elevated {
+                    return CleanedItem {
+                        title: id.title().into(),
+                        error: Some("needs administrator".into()),
+                        ..CleanedItem::default()
+                    };
+                }
+                match quick::clean(&places, id) {
+                    Ok(cleaned) => CleanedItem {
+                        title: id.title().into(),
+                        freed: cleaned.freed,
+                        removed_files: cleaned.removed,
+                        skipped_files: cleaned.skipped,
+                        error: None,
+                    },
+                    Err(error) => CleanedItem {
+                        title: id.title().into(),
+                        error: Some(error),
+                        ..CleanedItem::default()
+                    },
+                }
+            })
+            .collect();
+        let report = CleanReport { items };
+        let report_id = report_core::save(
+            &report_core::reports_root(),
+            job,
+            Body::Cleanup(report.clone()),
+        )
+        .map(|saved| saved.id)
+        .ok();
+        QuickResult { report, report_id }
+    })
+    .await
+    .map_err(|err| err.to_string())
+}
+
+/// Starts DeepServer again as administrator (Windows asks first), then closes this copy.
+#[tauri::command]
+pub fn app_restart_admin(
+    app: tauri::AppHandle,
+    record: tauri::State<'_, crate::record::RecordState>,
+) -> Result<(), String> {
+    if record.is_running() {
+        return Err("A record is running. Finish or cancel it before restarting.".into());
+    }
+    run_as_admin()?;
+    app.exit(0);
+    Ok(())
+}
+
+#[cfg(windows)]
+fn run_as_admin() -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    #[link(name = "shell32")]
+    extern "system" {
+        fn ShellExecuteW(
+            hwnd: *mut std::ffi::c_void,
+            verb: *const u16,
+            file: *const u16,
+            parameters: *const u16,
+            directory: *const u16,
+            show: i32,
+        ) -> isize;
+    }
+    const SW_SHOWNORMAL: i32 = 1;
+    let exe = std::env::current_exe().map_err(|err| err.to_string())?;
+    let wide = |text: &std::ffi::OsStr| -> Vec<u16> { text.encode_wide().chain([0]).collect() };
+    let verb = wide("runas".as_ref());
+    let file = wide(exe.as_os_str());
+    // SAFETY: null-terminated strings that outlive the call; null window, parameters and folder.
+    let result = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            file.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    // Values up to 32 are errors, including "the user said no".
+    if result <= 32 {
+        return Err("DeepServer was not restarted as administrator.".into());
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn run_as_admin() -> Result<(), String> {
+    Err("Only on Windows.".into())
 }

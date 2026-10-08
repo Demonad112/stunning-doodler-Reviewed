@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Copy,
   File,
+  FileText,
   Folder,
   FolderOpen,
   Info,
@@ -17,7 +18,9 @@ import { useRoute, useRouter } from 'vue-router'
 import ContextMenu, { type MenuItem } from '@/components/ContextMenu.vue'
 import DriveTiles from '@/components/DriveTiles.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import JobFields from '@/components/JobFields.vue'
 import PathField from '@/components/PathField.vue'
+import QuickWins from '@/components/QuickWins.vue'
 import TreemapView from '@/components/TreemapView.vue'
 import {
   cancelScan,
@@ -36,6 +39,7 @@ import {
 } from '@/lib/cleanup'
 import { copyText } from '@/lib/clipboard'
 import { cleanPath, errorMessage, pickFolder } from '@/lib/compare'
+import { openReport } from '@/lib/reports'
 import { categoryLabels, categoryOfExtension, type Category } from '@/lib/fileTypes'
 import { formatBytes, formatDuration, plural } from '@/lib/format'
 
@@ -122,6 +126,17 @@ async function goUp(index: number): Promise<void> {
   try {
     await openTrail(index)
     picked.value = null
+  } catch (err) {
+    showToast(errorMessage(err))
+  }
+}
+
+async function openScanReport(): Promise<void> {
+  if (!job.reportId) {
+    return
+  }
+  try {
+    await openReport({ kind: 'diskUsage', id: job.reportId })
   } catch (err) {
     showToast(errorMessage(err))
   }
@@ -294,6 +309,19 @@ onBeforeUnmount(() => {
         v-else-if="job.overview"
         class="mt-1.5 flex shrink-0 gap-2"
       >
+        <button
+          v-if="job.reportId"
+          type="button"
+          class="flex h-8 items-center gap-1.5 rounded-md border border-stroke bg-card px-4 hover:bg-card-hover"
+          title="Open the saved report in the browser, with what you removed"
+          @click="openScanReport"
+        >
+          <FileText
+            class="size-4"
+            :stroke-width="1.75"
+          />
+          Report
+        </button>
         <button
           type="button"
           class="h-8 rounded-md border border-stroke bg-card px-4 hover:bg-card-hover"
@@ -670,6 +698,7 @@ onBeforeUnmount(() => {
       v-else
       class="flex flex-col gap-6"
     >
+      <JobFields />
       <section v-if="drives.length > 0">
         <h2 class="mb-2 text-[13px] font-semibold text-muted">Drives on this PC</h2>
         <DriveTiles
@@ -702,6 +731,7 @@ onBeforeUnmount(() => {
           Delete permanently.
         </p>
       </section>
+      <QuickWins @cleaned="refreshDrives" />
     </div>
 
     <dialog

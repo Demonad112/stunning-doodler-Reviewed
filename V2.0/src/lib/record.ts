@@ -1,6 +1,7 @@
 import { Channel, invoke } from '@tauri-apps/api/core'
 import { reactive } from 'vue'
 import { formatBytes, plural } from './format'
+import { currentJob, type JobInfo } from './job'
 
 /** Copy: DeepServer copies. Watch: another program copies and DeepServer checks what arrives. */
 export type RecordMode = 'copy' | 'watch'
@@ -109,6 +110,8 @@ export interface RunDetails {
   preflight: PreflightReport | null
   /** The first 10,000 not-copied rows; `summary.totals` counts all of them. */
   notCopied: ItemResult[]
+  /** Client, ticket and technician typed when it started. */
+  job: JobInfo
   folder: string
 }
 
@@ -157,7 +160,7 @@ export function startRecord(
     destination,
     mode,
     verify,
-    options,
+    options: { ...options, job: currentJob() },
     onEvent: channel(onProgress),
   })
 }

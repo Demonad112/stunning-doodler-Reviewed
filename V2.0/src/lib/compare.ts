@@ -2,6 +2,7 @@ import { Channel, invoke, isTauri } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { ref, watch } from 'vue'
 import { formatBytes, plural } from './format'
+import { currentJob } from './job'
 
 const ignoreJunkKey = 'deepserver2-ignore-junk'
 
@@ -90,6 +91,8 @@ export interface CompareResult {
   /** Rows directly below the two compared folders. */
   rows: DiffRow[]
   elapsedMs: number
+  /** The saved report on the Reports page; null when it could not be saved. */
+  reportId: string | null
 }
 
 type CompareEvent = { kind: 'progress' } & CompareProgress
@@ -124,7 +127,13 @@ export async function startCompare(
       rightDone: event.rightDone,
     })
   }
-  return invoke<CompareResult>('compare_start', { left, right, ignoreJunk, onEvent })
+  return invoke<CompareResult>('compare_start', {
+    left,
+    right,
+    ignoreJunk,
+    job: currentJob(),
+    onEvent,
+  })
 }
 
 /** Rows below one folder of the last compare. */

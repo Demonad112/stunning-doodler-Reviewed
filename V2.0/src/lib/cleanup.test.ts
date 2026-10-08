@@ -25,6 +25,9 @@ import {
   removeItem,
   runScan,
   scanPercent,
+  canClean,
+  runQuickClean,
+  type QuickWin,
   type CleanupRow,
   type Drive,
   type Overview,
@@ -74,6 +77,7 @@ describe('cleanup scan', () => {
     await runScan('C:\\')
 
     expect(core.invoke).toHaveBeenCalledWith('cleanup_scan', {
+      job: { client: '', ticket: '', technician: '' },
       path: 'C:\\',
       onProgress: core.channels[0],
     })
@@ -117,6 +121,33 @@ describe('cleanup scan', () => {
     expect(cleanupJob.overview?.root.size).toBe(40)
     expect(cleanupJob.trail.map((folder) => folder.name)).toEqual(['C:\\', 'Users'])
     expect(cleanupJob.rows.map((item) => item.name)).toEqual(['Public'])
+  })
+})
+
+describe('quick cleanups', () => {
+  const card: QuickWin = {
+    id: 'windowsTemp',
+    title: 'Windows temporary files',
+    description: '',
+    needsAdmin: true,
+    size: 10,
+    files: 1,
+  }
+
+  it('can be ticked only with something to free and the rights it needs', () => {
+    expect(canClean(card, true)).toBe(true)
+    expect(canClean(card, false)).toBe(false)
+    expect(canClean({ ...card, needsAdmin: false }, false)).toBe(true)
+    expect(canClean({ ...card, size: 0 }, true)).toBe(false)
+  })
+
+  it('sends the chosen cleanups with the job details', async () => {
+    core.invoke.mockResolvedValueOnce({ report: { items: [] }, reportId: 'cleanup-1' })
+    await runQuickClean(['userTemp', 'recycleBin'])
+    expect(core.invoke).toHaveBeenCalledWith('cleanup_quick_clean', {
+      ids: ['userTemp', 'recycleBin'],
+      job: { client: '', ticket: '', technician: '' },
+    })
   })
 })
 

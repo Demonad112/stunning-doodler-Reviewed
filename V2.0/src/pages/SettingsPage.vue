@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Monitor, Moon, Palette, Sun } from '@lucide/vue'
+import { Building2, Monitor, Moon, Palette, Sun } from '@lucide/vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { appInfo } from '@/lib/appInfo'
+import { brand } from '@/lib/job'
 import { setThemeChoice, themeChoice, type ThemeChoice } from '@/lib/theme'
 
 const themes: { value: ThemeChoice; label: string; icon: typeof Sun }[] = [
@@ -49,6 +50,26 @@ const themes: { value: ThemeChoice; label: string; icon: typeof Sun }[] = [
         </button>
       </div>
     </section>
+    <label class="mt-3 flex items-center gap-4 rounded-lg border border-stroke bg-card px-5 py-4">
+      <Building2
+        class="size-5 shrink-0"
+        :stroke-width="1.5"
+      />
+      <span class="flex-1">
+        <span class="block">Company name on reports</span>
+        <span class="block text-xs text-muted">
+          Shown at the top of every exported report. Empty: "DeepServer".
+        </span>
+      </span>
+      <input
+        v-model="brand"
+        type="text"
+        spellcheck="false"
+        autocomplete="organization"
+        placeholder="Your company"
+        class="h-8 w-60 rounded-md border border-stroke border-b-stroke-strong bg-card px-2.5 text-[13px] outline-none placeholder:text-faint focus:border-b-2 focus:border-b-accent"
+      />
+    </label>
     <p class="mt-6 text-xs text-faint">DeepServer {{ appInfo.version }}</p>
   </div>
 </template>
