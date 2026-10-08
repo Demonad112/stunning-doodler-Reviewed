@@ -8,7 +8,8 @@ Two tracks: (1) finish V1: cut rc5, owner re-checks, tag `v1.0.0`. (2) Build Dee
 
 ## State
 
-- `main` at `e2308af`: V2 Batch 1 Compare (#38, #39), Batch 2 Record (#40) and the Record fixes (#41) are merged. Latest release **v1.0.0-rc4**; rc5 not cut. No open PRs.
+- `main` at `afee64c`: V2 Batch 1 Compare (#38, #39), Batch 2 Record (#40), Record fixes (#41) and **Batch 3 Disk Cleanup (#42)** are merged. Batch 3 not yet tried by the owner in the real app. Latest release **v1.0.0-rc4**; rc5 not cut.
+- Open PRs (2026-10-08), all Dependabot, none merged because CI is red: #43 `download-artifact` 7->8 (e2e `page.goto` timeouts, unrelated to the bump; failed jobs re-run once), #44 Rust group (breaks: `ureq::AgentBuilder` gone in remote-core, needs a ureq 3 migration), #45 npm group (breaks: typescript-eslint does not support TS 7.0, hold `typescript` below 7). `.github/dependabot.yml` does not cover `V2.0/`.
 - The repo is **public** for now (owner's choice, 2026-10-03): the private repo's Actions minutes ran out ("recent account payments have failed").
 - Worktrees `.claude/worktrees/v2-batch-2` and `v2-record-fixes`: both merged, can go.
 
@@ -22,12 +23,13 @@ Two tracks: (1) finish V1: cut rc5, owner re-checks, tag `v1.0.0`. (2) Build Dee
 
 ## Next
 
-1. Owner tries #41 in the app: Copy for me on a OneDrive folder (online-only files listed, not downloaded), and the new check boxes at 175% scaling and in dark mode.
-2. On "go": V2 Batch 3, Disk Cleanup (drive tiles, scan with progress, treemap, lists, file types, recycle/delete). Reuse `scan-core`.
-3. Batch 4 (Reports) also gets: client/ticket/tech fields on records and compares, per-reason retry (the backend `Selection.reason` already exists), re-checking an old record against its manifest, importing a robocopy log.
-4. Batch 5 (Installer) also gets portable mode, with records saved next to the exe.
-5. A new Batch 6, "Field tools": "Copy missing only" from a Compare result, a pre-flight review screen plus the conflict choice, reading protected files with admin/backup rights, signing in to a share, the CLI for RMM tools, the Explorer right-click.
-6. V1: `/release-rc v1.0.0-rc5`, owner checks it, then tag `v1.0.0`. Leftovers: Docs/Support links (`src/app/appMeta.ts`), delete rc1/rc2.
+1. Owner tries #41 and #42 in the app: Copy for me on a OneDrive folder (online-only files listed, not downloaded); Disk Cleanup scan of `C:\` and recycling one file; check boxes at 175% scaling and in dark mode.
+2. Owner said "go" (2026-10-08) for: Batch A housekeeping (this handoff, Dependabot triage, Repo maintenance dry run), then V2 Batch 4 (Reports + quick wins), with V1 rc5 alongside.
+3. Dependabot: #44 needs a ureq 3 migration in `remote-core`; #45 needs `typescript` held below 7; add `V2.0/` ecosystems to `dependabot.yml`.
+4. Batch 4 (Reports + quick-win cleanups) also gets: client/ticket/tech fields on records and compares, per-reason retry (the backend `Selection.reason` already exists), re-checking an old record against its manifest, importing a robocopy log.
+5. Batch 5 (Installer) also gets portable mode, with records saved next to the exe.
+6. A new Batch 6, "Field tools": "Copy missing only" from a Compare result, a pre-flight review screen plus the conflict choice, reading protected files with admin/backup rights, signing in to a share, the CLI for RMM tools, the Explorer right-click.
+7. V1: `/release-rc v1.0.0-rc5`, owner checks it, then tag `v1.0.0`. Leftovers: Docs/Support links (`src/app/appMeta.ts`), delete rc1/rc2.
 
 ## Open questions for the owner
 
