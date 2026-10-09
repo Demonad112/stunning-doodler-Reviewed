@@ -13,4 +13,4 @@ serde_json.workspace = true
 sha2 = "0.11"
 ssh2 = "0.9.5"
 suppaftp = { version = "12.1.1", default-features = false, features = ["native-tls", "deprecated"] }
-ureq = "2.12.1"
+ureq = "3.4.2"
