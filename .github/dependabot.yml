@@ -29,6 +29,10 @@ updates:
       v2-frontend-dependencies:
         patterns:
           - '*'
+    ignore:
+      # vue-tsc 3.x needs the JS compiler; TypeScript 7 (native) breaks `vue-tsc`.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: cargo
     directory: /V2.0/src-tauri
