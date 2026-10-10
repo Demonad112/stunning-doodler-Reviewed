@@ -36,6 +36,8 @@ impl RecordState {
         if job.is_some() {
             return Err("A record is already running. Finish or cancel it first.".into());
         }
+        // Copying may use backup rights to keep permissions and owner; scans never do.
+        transfer_core::secure::enable_privileges();
         let control = WatchControl::default();
         *job = Some(control.clone());
         Ok(control)

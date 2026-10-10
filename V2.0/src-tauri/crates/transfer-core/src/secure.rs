@@ -10,6 +10,7 @@ use crate::meta::PreserveOptions;
 use std::fs::File;
 use std::io;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Which of the privileges that matter for copying security were switched on for this process.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -24,9 +25,22 @@ pub struct Privileges {
     pub take_ownership: bool,
 }
 
-/// Switches on every privilege the process token holds, once, and returns what it got.
+static ENABLED: AtomicBool = AtomicBool::new(false);
+
+/// Lets copies use the process token's backup, restore and security privileges. The app calls
+/// this when a record run starts; until then (scans, unit tests) nothing is switched on, so
+/// access checks behave as they do for any program.
+pub fn enable_privileges() {
+    ENABLED.store(true, Ordering::Relaxed);
+}
+
+/// The privileges in use: none until [`enable_privileges`], then every one the token holds.
 pub fn privileges() -> Privileges {
-    imp::privileges()
+    if ENABLED.load(Ordering::Relaxed) {
+        imp::privileges()
+    } else {
+        Privileges::default()
+    }
 }
 
 /// Opens a source file for reading; with the backup privilege this reads files whose ACL denies
@@ -153,11 +167,18 @@ mod imp {
     }
 
     pub fn open_source(path: &Path) -> io::Result<File> {
-        privileges();
-        OpenOptions::new()
-            .read(true)
-            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
-            .open(path)
+        // A plain open first, so a file another program holds open is still reported as in use
+        // (backup rights would read it mid-write). Only an access-denied open is retried with
+        // backup semantics, like Robocopy /ZB.
+        match File::open(path) {
+            Err(error) if error.raw_os_error() == Some(5) && super::privileges().backup => {
+                OpenOptions::new()
+                    .read(true)
+                    .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+                    .open(path)
+            }
+            other => other,
+        }
     }
 
     /// `C:\` or `\\server\share\` of an absolute path.
@@ -280,7 +301,7 @@ mod imp {
         options: &PreserveOptions,
     ) -> Vec<String> {
         let mut warnings = Vec::new();
-        let held = privileges();
+        let held = super::privileges();
         let mut info = 0u32;
         if options.acl {
             info |= DACL;
