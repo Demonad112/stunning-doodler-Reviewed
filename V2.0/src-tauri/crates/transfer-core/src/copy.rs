@@ -10,6 +10,7 @@
 
 use crate::meta::{self, PreserveOptions};
 use crate::reason::{classify, FailureReason, Side};
+use crate::secure;
 use crate::CancelToken;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
@@ -185,7 +186,8 @@ pub fn copy_file(
     if cancel.is_cancelled() {
         return Err(CopyFailure::cancelled());
     }
-    let mut input = File::open(source).map_err(|error| CopyFailure::io(&error, Side::Source))?;
+    let mut input =
+        secure::open_source(source).map_err(|error| CopyFailure::io(&error, Side::Source))?;
     let source_meta = input
         .metadata()
         .map_err(|error| CopyFailure::io(&error, Side::Source))?;
@@ -266,7 +268,7 @@ pub fn copy_file(
 
     verify(destination, bytes, source_time, hash.as_deref())?;
     let warnings = wanted_meta
-        .map(|wanted| meta::apply(destination, &wanted, &options.preserve))
+        .map(|wanted| meta::apply(source, destination, &wanted, &options.preserve))
         .unwrap_or_default();
     Ok(CopyOutcome::Copied {
         bytes,

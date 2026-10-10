@@ -10,8 +10,19 @@ export type VerifyLevel = 'sizeAndTime' | 'hash'
 export interface PreserveOptions {
   timestamps: boolean
   attributes: boolean
+  acl: boolean
+  owner: boolean
+  audit: boolean
+  streams: boolean
 }
-export const defaultPreserve: PreserveOptions = { timestamps: true, attributes: true }
+export const defaultPreserve: PreserveOptions = {
+  timestamps: true,
+  attributes: true,
+  acl: true,
+  owner: true,
+  audit: false,
+  streams: true,
+}
 export type RunState = 'prepared' | 'running' | 'watching' | 'completed' | 'cancelled' | 'failed'
 export type Phase = 'scanning' | 'copying' | 'watching' | 'finishing' | 'done'
 

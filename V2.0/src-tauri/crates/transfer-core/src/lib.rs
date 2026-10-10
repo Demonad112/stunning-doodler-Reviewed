@@ -17,6 +17,7 @@ pub mod prepare;
 pub mod reason;
 pub mod recovery;
 pub mod run;
+pub mod secure;
 pub mod store;
 mod volume;
 mod walk;
