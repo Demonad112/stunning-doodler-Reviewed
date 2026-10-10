@@ -40,6 +40,6 @@ Rule: if a manual item can be scripted without hardware, move it down a layer (a
 ## Keeping the automation sharp
 
 - After each manual pass, list items that needed no human judgement and move them to `Test-Installer.ps1` or `.claude/agents/laptop-check.md`.
-- Keep `docs/HANDOFF.md` current with `/handoff`; start each checkpoint in a new chat.
+- Keep `docs/HANDOFF.md` current by hand; start each checkpoint in a new chat.
 - Token rules: low effort, `git`/`gh` via `scripts/gh-status.sh`, Haiku agents for waiting and checking, no root-level reference files.
 - Once `v1.0.0` ships, the same loop applies to patch releases: CI, `laptop-check`, then only the by-area passes the diff touches.

@@ -1,6 +1,6 @@
 # Handoff
 
-Session state for the next Claude session. Update with `/handoff`; keep it short.
+Session state for the next Claude session. Update it by hand at the end of a work block; keep it short.
 
 ## Goal
 

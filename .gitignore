@@ -37,6 +37,7 @@ src-tauri/gen/schemas/
 !.claude/skills/
 !.claude/agents/
 !.claude/hooks/
+!.claude/rules/
 
 # Native engine build output
 native/diskusage/build/
