@@ -1,6 +1,9 @@
 //! Disk Cleanup commands: scan one folder or drive with streamed progress, keep the tree in
 //! memory, hand the UI one folder level at a time, and recycle or delete items from it.
 
+use cleanup_core::bulk::{self, ItemResult, Outcome, Preview, PreviewStatus, Target};
+use cleanup_core::junk::{self, JunkGroup};
+use cleanup_core::log::{self, LogEntry};
 use cleanup_core::quick::{self, Places, QuickId, QuickWin};
 use cleanup_core::{Drive, Overview, Protected, Row};
 use report_core::{
@@ -201,6 +204,9 @@ pub async fn cleanup_delete(
     id: NodeId,
     permanent: bool,
 ) -> Result<Overview, String> {
+    if permanent && !cleanup_core::is_elevated() {
+        return Err(NEEDS_ADMIN.into());
+    }
     let (path, root, size) = with_tree(&state, |tree| {
         if id == 0 || !tree.is_live(id) {
             return Err("That item is already gone. Scan again to refresh.".to_string());
@@ -248,6 +254,135 @@ pub async fn cleanup_delete(
         ));
     }
     Ok(cleanup_core::overview(tree))
+}
+
+const NEEDS_ADMIN: &str =
+    "Deleting several items or deleting permanently needs administrator. Restart as administrator first.";
+
+/// True when DeepServer runs as administrator.
+#[tauri::command]
+pub fn app_elevated() -> bool {
+    cleanup_core::is_elevated()
+}
+
+/// Junk the scan found, in groups. Nothing is selected for the user.
+#[tauri::command]
+pub async fn cleanup_junk(state: State<'_, CleanupState>) -> Result<Vec<JunkGroup>, String> {
+    with_tree(&state, |tree| {
+        Ok(junk::find(
+            tree,
+            &Protected::for_this_pc(),
+            transfer_core::now_ms(),
+        ))
+    })
+}
+
+/// A dry run: what deleting `ids` would do to each item. Touches nothing.
+#[tauri::command]
+pub fn cleanup_delete_preview(
+    state: State<'_, CleanupState>,
+    ids: Vec<NodeId>,
+) -> Result<Preview, String> {
+    with_tree(&state, |tree| {
+        Ok(bulk::preview(tree, &Protected::for_this_pc(), &ids))
+    })
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteManyResult {
+    results: Vec<ItemResult>,
+    overview: Overview,
+}
+
+/// Recycles (or, when `permanent`, deletes) the items one by one and reports each result.
+/// More than one item, or a permanent delete, needs administrator.
+#[tauri::command]
+pub async fn cleanup_delete_many(
+    state: State<'_, CleanupState>,
+    ids: Vec<NodeId>,
+    permanent: bool,
+) -> Result<DeleteManyResult, String> {
+    let elevated = cleanup_core::is_elevated();
+    if !elevated && (permanent || ids.len() > 1) {
+        return Err(NEEDS_ADMIN.into());
+    }
+    let (targets, root) = with_tree(&state, |tree| {
+        let protected = Protected::for_this_pc();
+        let preview = bulk::preview(tree, &protected, &ids);
+        let targets: Vec<Target> = preview
+            .items
+            .iter()
+            .filter(|item| item.status == PreviewStatus::Go)
+            .map(|item| Target {
+                id: item.id,
+                path: PathBuf::from(&item.path),
+                size: item.size,
+            })
+            .collect();
+        Ok((targets, tree.path(0)))
+    })?;
+    if targets.is_empty() {
+        return Err("Nothing in the selection can be deleted.".into());
+    }
+
+    let job_targets = targets.clone();
+    let job_root = root.clone();
+    let results = tauri::async_runtime::spawn_blocking(move || {
+        bulk::run(
+            &job_targets,
+            permanent,
+            &Protected::for_this_pc(),
+            &job_root,
+        )
+    })
+    .await
+    .map_err(|err| err.to_string())?;
+
+    let now = transfer_core::now_ms();
+    let user = transfer_core::user_name();
+    let method = if permanent { "permanent" } else { "recycle" };
+    let entries: Vec<LogEntry> = results
+        .iter()
+        .map(|result| LogEntry {
+            time: transfer_core::format_utc(now),
+            time_ms: now,
+            user: user.clone(),
+            elevated,
+            path: result.path.clone(),
+            size: result.size,
+            method: method.into(),
+            result: result.outcome.code().into(),
+            detail: result.message.clone(),
+        })
+        .collect();
+    // The deletes happened; a log that can't be written is not worth failing the call.
+    let _ = log::append(&report_core::logs_root(), &entries);
+
+    let mut guard = lock(&state.tree)?;
+    let tree = guard.as_mut().ok_or(NO_RESULT)?;
+    let mut removed = Vec::new();
+    for result in results.iter().filter(|r| r.outcome == Outcome::Done) {
+        // A new scan may have replaced the tree while Windows was deleting.
+        if tree.is_live(result.id) && tree.path(result.id).display().to_string() == result.path {
+            tree.remove(result.id);
+        }
+        removed.push(Removed {
+            path: result.path.clone(),
+            size: result.size,
+            permanent,
+        });
+    }
+    if let Some(saved) = lock(&state.report)?.as_mut() {
+        if let Body::DiskUsage(report) = &mut saved.body {
+            report.removed.extend(removed);
+            let _ = report_core::write(&report_core::reports_root(), saved);
+        }
+    }
+    Ok(DeleteManyResult {
+        results,
+        overview: cleanup_core::overview(tree),
+    })
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> Result<std::sync::MutexGuard<'_, T>, String> {

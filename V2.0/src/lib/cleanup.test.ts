@@ -27,6 +27,17 @@ import {
   scanPercent,
   canClean,
   runQuickClean,
+  appAdmin,
+  canDelete,
+  deleteSentence,
+  loadJunk,
+  needsAdmin,
+  outcomeLabel,
+  previewDelete,
+  refreshElevated,
+  removeMany,
+  summarize,
+  type ItemResult,
   type QuickWin,
   type CleanupRow,
   type Drive,
@@ -148,6 +159,87 @@ describe('quick cleanups', () => {
       ids: ['userTemp', 'recycleBin'],
       job: { client: '', ticket: '', technician: '' },
     })
+  })
+})
+
+describe('delete gating', () => {
+  it('lets anyone recycle one item and asks for admin for the rest', () => {
+    expect(needsAdmin(1, false)).toBe(false)
+    expect(needsAdmin(2, false)).toBe(true)
+    expect(needsAdmin(1, true)).toBe(true)
+    expect(canDelete(1, false, false)).toBe(true)
+    expect(canDelete(3, false, false)).toBe(false)
+    expect(canDelete(1, true, false)).toBe(false)
+    expect(canDelete(3, true, true)).toBe(true)
+    expect(canDelete(0, false, true)).toBe(false)
+  })
+
+  it('says plainly where the items are going', () => {
+    expect(deleteSentence(1, false)).toBe('1 item will be moved to the Recycle Bin.')
+    expect(deleteSentence(4, true)).toBe(
+      '4 items will be deleted permanently. This cannot be undone.',
+    )
+  })
+
+  it('reads the elevation once and keeps it off when the call fails', async () => {
+    core.invoke.mockResolvedValueOnce(true)
+    await refreshElevated()
+    expect(appAdmin.elevated).toBe(true)
+    appAdmin.elevated = false
+    core.invoke.mockRejectedValueOnce('nope')
+    await refreshElevated()
+    expect(appAdmin.elevated).toBe(false)
+  })
+})
+
+describe('bulk delete calls', () => {
+  const result = (id: number, outcome: ItemResult['outcome'], size: number): ItemResult => ({
+    id,
+    path: `C:\\x${String(id)}`,
+    size,
+    outcome,
+    message: null,
+  })
+
+  it('asks for suggestions and previews without deleting', async () => {
+    core.invoke.mockResolvedValueOnce([])
+    await loadJunk()
+    expect(core.invoke).toHaveBeenLastCalledWith('cleanup_junk')
+
+    core.invoke.mockResolvedValueOnce({ items: [], goCount: 0, goSize: 0 })
+    await previewDelete([4, 5])
+    expect(core.invoke).toHaveBeenLastCalledWith('cleanup_delete_preview', { ids: [4, 5] })
+    expect(core.invoke).not.toHaveBeenCalledWith('cleanup_delete_many', expect.anything())
+  })
+
+  it('refreshes the totals and the shown folder, and returns the per-item results', async () => {
+    cleanupJob.trail = [row(0, 'C:\\', 100), row(1, 'Users', 100)]
+    const results = [result(2, 'done', 60), result(3, 'inUse', 10)]
+    core.invoke
+      .mockResolvedValueOnce({ results, overview: overview(40) })
+      .mockResolvedValueOnce([row(5, 'Public', 40)])
+
+    const got = await removeMany([2, 3], false)
+
+    expect(core.invoke).toHaveBeenNthCalledWith(1, 'cleanup_delete_many', {
+      ids: [2, 3],
+      permanent: false,
+    })
+    expect(core.invoke).toHaveBeenNthCalledWith(2, 'cleanup_children', { id: 1 })
+    expect(got).toEqual(results)
+    expect(cleanupJob.overview?.root.size).toBe(40)
+    expect(cleanupJob.rows.map((item) => item.name)).toEqual(['Public'])
+  })
+
+  it('counts what went and what did not', () => {
+    const summary = summarize([
+      result(1, 'done', 50),
+      result(2, 'done', 25),
+      result(3, 'inUse', 99),
+      result(4, 'accessDenied', 1),
+    ])
+    expect(summary).toEqual({ done: 2, failed: 2, freed: 75 })
+    expect(outcomeLabel('inUse')).toBe('In use')
   })
 })
 

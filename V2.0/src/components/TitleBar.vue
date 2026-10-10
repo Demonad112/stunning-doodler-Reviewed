@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { Copy, Minus, Monitor, Square, X } from '@lucide/vue'
+import { Copy, Minus, Monitor, ShieldCheck, Square, X } from '@lucide/vue'
 import { isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { onMounted, ref } from 'vue'
 import logo from '@/assets/logo.png'
 import { appInfo } from '@/lib/appInfo'
+import { appAdmin, refreshElevated } from '@/lib/cleanup'
 
 const maximized = ref(false)
 const win = isTauri() ? getCurrentWindow() : null
 
 onMounted(async () => {
+  void refreshElevated()
   if (!win) {
     return
   }
@@ -38,6 +40,14 @@ onMounted(async () => {
     >
       <Monitor class="size-3" />
       {{ appInfo.machine }}
+    </span>
+    <span
+      v-if="appAdmin.elevated"
+      class="pointer-events-none ml-2 flex items-center gap-1.5 rounded-full bg-accent px-2.5 py-0.5 text-xs text-on-accent"
+      title="DeepServer is running as administrator"
+    >
+      <ShieldCheck class="size-3" />
+      Administrator
     </span>
     <div
       class="flex-1 self-stretch"

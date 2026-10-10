@@ -37,6 +37,17 @@ pub fn reports_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("Reports"))
 }
 
+/// Where the deletion log lives: `Logs` next to `Reports` (`DEEPSERVER2_LOGS_DIR` overrides it).
+pub fn logs_root() -> PathBuf {
+    if let Some(dir) = std::env::var_os("DEEPSERVER2_LOGS_DIR").filter(|value| !value.is_empty()) {
+        return PathBuf::from(dir);
+    }
+    reports_root()
+        .parent()
+        .map(|parent| parent.join("Logs"))
+        .unwrap_or_else(|| PathBuf::from("Logs"))
+}
+
 /// Who the work was for, typed on the Compare, Record and Disk Cleanup pages.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]

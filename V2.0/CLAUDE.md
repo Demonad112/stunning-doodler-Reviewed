@@ -70,6 +70,19 @@ installers (`build-v2-windows.yml`, reusable). Releases: `release-v2.yml` for `v
   90 days, recycled). `Places::targets` names the folders; nothing outside them is touched, the
   folders themselves stay, temp files under a day old stay. The system ones need admin:
   `app_restart_admin` relaunches elevated (`ShellExecuteW` "runas").
+  Junk finder (`junk.rs`, `cleanup_junk`): suggests temp files, crash dumps, old logs,
+  thumbnails, installers, dev caches and empty folders from the scanned tree; never ticked for
+  the user, `Protected` applies. Bulk delete (`bulk.rs`): `cleanup_delete_preview` is a dry run
+  (statuses go / protected / reparse / gone / inside; never deletes), `cleanup_delete_many`
+  deletes one by one and returns an `ItemResult` each (done, inUse, accessDenied, notFound,
+  skipped, failed); junctions and symlinks are refused. Every result is appended to
+  `<data dir>\Logs\deletions.jsonl` (`log.rs`, `report_core::logs_root`) and counted in
+  `UsageReport.removed`. Admin gating: one item to the Recycle Bin is open to everyone;
+  several items or any permanent delete return `NEEDS_ADMIN` unless `app_elevated`. The UI
+  mirrors it with `canDelete` (`src/lib/cleanup.ts`): disabled buttons offer "Restart as
+  administrator", and `TitleBar.vue` shows an Administrator pill. UI: `BulkDeleteDialog.vue`
+  (preview, confirm with the exact list and total, per-item results; Recycle Bin is the default,
+  "Delete permanently" is a separate red button) and `JunkPanel.vue`.
 - `src-tauri/crates/report-core`: saved reports. Compare and Disk Cleanup results (scan, and the
   quick cleanups) are JSON files in `%LOCALAPPDATA%\DeepServer2\Reports`
   (`DEEPSERVER2_REPORTS_DIR` overrides it), saved automatically; records stay in their run
