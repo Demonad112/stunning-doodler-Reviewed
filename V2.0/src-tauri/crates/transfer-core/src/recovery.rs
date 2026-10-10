@@ -253,6 +253,7 @@ mod tests {
             conflict: ConflictPolicy::Skip,
             ignore_junk: false,
             download_cloud: false,
+            preserve: Default::default(),
         };
         let token = CancelToken::default();
         let (summary, _) = prepare(&dir.path("runs"), settings, &token, &mut NullSink).unwrap();

@@ -101,7 +101,7 @@ impl FailureReason {
             }
             FailureReason::DiskFull => "The destination ran out of free space.",
             FailureReason::PathTooLong => {
-                "The full path is longer than many Windows programs can handle (260 characters)."
+                "The full path is longer than 260 characters. DeepServer copies it, but Explorer and many older programs cannot open it."
             }
             FailureReason::InvalidName => {
                 "The name is reserved on Windows or ends with a dot or space."
