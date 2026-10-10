@@ -4,37 +4,45 @@ Session state for the next Claude session. Update with `/handoff`; keep it short
 
 ## Goal
 
-DeepServer 2.0 (`V2.0/`: Compare, Record, Disk Cleanup) **replaces** V1. V1 gets no more releases. Plan: `V2.0/docs/plan.md`; install details: `V2.0/docs/install.md`.
+DeepServer 2.0 (`V2.0/`: Compare, Record, Disk Cleanup) **replaces** V1. V1 gets no more releases. Plan: `V2.0/docs/plan.md`; install details: `V2.0/docs/install.md`. Current work: copies keep dates, attributes, permissions, owner, audit rules, streams and long names, like `robocopy /COPY:DATSO /DCOPY:DAT` (plan: `~/.claude/plans/all-tests-have-come-fizzy-raven.md`).
 
-## State (2026-10-08)
+## State (2026-10-10)
 
-- `main`: V2 Batches 0-5 merged (#54). **v2.0.0-rc1** is released (pre-release) and installed on the owner's laptop over V1 (V1 leftovers gone). The app has not been launched there yet: owner test pending.
-- Open PR **`v2/scan-accuracy`** (this session), not merged until CI is green and the owner says so:
-  - **Scanner**: `scan-core/src/list.rs` lists folders with `NtQueryDirectoryFile` in bulk (std `read_dir` fallback). New `Node.disk` = size on disk (clusters, compressed/sparse/WOF via `GetCompressedFileSizeW`, hard links once, cloud files 0). `Node.size` stays logical for Compare/Record. Disk Cleanup (`cleanup-core`, `src-tauri/src/cleanup.rs`) now shows `disk`. Written fresh from the WinDirStat fork's approach (`native/diskusage/windirstat/FinderBasic.cpp`); no source copied (fork is GPL-2, V2 is Apache-2.0).
-  - **Reports**: shared HTML renderer (`report-core/src/doc.rs`) redesigned: gradient header, verdict pill, tile accents, "found at destination" bar for Compare (`Document.share`), row counts, zebra rows, dark mode, phone width, print styles. CSV unchanged.
-  - Not done: no 1440px / 390px screenshots (no browser tool in that session). Open `Document::html` output in a browser before merging. No real-disk comparison against WinDirStat yet.
+- `main`: 5a6157c at last fetch (includes #66). Latest release **v2.0.0-rc4** (pre-release).
+- **#66** (PR A, merged): `PreserveOptions`, created/accessed/modified times, attributes, folder dating, `longPathAware` manifest, short temp name for long file names, Record UI.
+- **#67** (PR B, branch `v2/meta-fidelity-b`, head c93d995): CI green, mergeable, not merged. Adds `transfer-core/src/secure.rs` (privileges, backup-semantics open, ACL/owner/audit, alternate data streams), recovery script `/COPY:DATSO /DCOPY:DAT`, six "What to keep" checkboxes. Check: `scripts/gh-status.sh pr 67`.
+- Open Dependabot PRs: #50, #51, #58, #59.
+- Worktrees `.claude/worktrees/meta-a` and `meta-b` can go after #67 merges.
 
-## Next (suggested order)
+## Done this session
 
-1. Owner: launch rc1, scan a real drive and compare the total with WinDirStat / Explorer "Size on disk"; merge the PR if good; cut rc2.
-2. Scanner follow-ups:
-   - Optional MFT fast path for admin runs (the fork's `FinderNtfs.cpp` shows the technique; re-implement, don't copy). Cleanup already has an admin relaunch.
-   - UI toggle "Size on disk / Size" in Disk Cleanup, and a hardlink marker on rows (the data exists: repeat links have `disk` 0).
-   - Show "N hard links, M compressed files" in the Cleanup report note.
-   - Perf check: `cargo test -p scan-core --release --test perf -- --ignored --nocapture` (2x100k files < 5 s) was not re-run after the rewrite.
-3. Reports: Disk Cleanup report with a proportional bar per top folder; Record report with a copied/missed bar; CSV sizes as raw bytes; prune old reports and `%TEMP%\DeepServer2 reports`.
-4. Batch 6 "Field tools": Copy missing only from Compare, pre-flight review + conflict choice, admin/backup-rights reads, share sign-in, RMM CLI, Explorer right-click, re-check a record against its manifest, robocopy log import.
-5. Product polish: new logo (icon is still V1's), code signing (`scripts/windows/sign.ps1` hook exists; builds are unsigned), Settings page (default verify level, report folder), in-app "check for update".
+- PR A merged as #66 (fc97210).
+- PR B built, reviewed and fixed: SDDL round-trip, owner failure no longer loses the DACL (separate steps), security set through the handle (`SetKernelObjectSecurity`, no inheritance re-propagation), FAT sources treated as "no streams".
+- CI fix c93d995: backup rights are enabled only inside a record run (`RecordState::begin`) and used only after an access-denied open, so locked files and unreadable folders still report as errors on the elevated runner.
+
+## Next
+
+1. Owner: merge #67, then cut rc5.
+2. Owner manual check on the laptop, elevated and not: custom ACL + different owner, backdated file, hidden+system file, `Set-Content -Stream x`, 300-character path. Compare with `Get-Acl`, `Get-Item | fl *Time*,Attributes`, `Get-Item -Stream *`.
+3. Fix dates/permissions on files skipped as identical (Robocopy `/SECFIX` `/TIMFIX`): "Re-check" option.
+4. Re-date folders that already existed or were created implicitly.
+5. "Kept / Not kept" section in the Record report; metadata comparison in verify; `created_ms` / `attributes` manifest fields; `/ZB` in recovery scripts when elevated.
+6. Edge cases: UNC paths with forward slashes and `\\.\` device paths only warn.
+7. Older backlog: MFT fast path, "Size on disk / Size" toggle, new logo, code signing, Settings page.
 
 ## Needs the owner
 
-- Dependabot PRs #50-#53, #55 (review/merge).
+- Merge #67: `gh pr merge 67 --merge` (or the GitHub UI).
+- Dependabot PRs #50, #51, #58, #59.
 - Stray folder `C:\Dev\projects\DeepServerV1.0\--clobber\` (untracked, delete with approval).
-- Repo maintenance workflow (`dry_run: true` first): merged branches incl. `v2/batch-5-installer`, V1 rc1/rc2 releases. Archive `open-diff` and `altWinDirStat` only after the owner confirms.
-- CI long term: stay public, fix billing, org trial, or self-hosted runner.
+- Repo maintenance workflow (`dry_run: true` first) for merged branches.
 
 ## Notes
 
-- Windows Application Control blocks the `deepserver_lib` test binary locally (os error 4551): use `cargo test --workspace --no-fail-fast`; CI covers the app crate.
-- Local cargo from a worktree: `CARGO_TARGET_DIR=C:/Dev/projects/DeepServerV1.0/V2.0/src-tauri/target`. `windows-sys` `CreateFileW` needs the `Win32_Security` feature.
+- Apply order after rename: streams, times, attributes, security. A metadata failure is a per-file warning in `ItemResult.message`; the file still counts as Copied.
+- The "AI" (auto-inherited) SDDL marker is not carried over.
+- New stored fields need `#[serde(default)]`.
+- Windows Application Control blocks fresh test binaries locally (os error 4551): retry, or `cargo test --workspace --no-fail-fast`; CI covers the app crate and runs elevated.
+- Local cargo from a worktree: `CARGO_TARGET_DIR=C:/Dev/projects/DeepServerV1.0/V2.0/src-tauri/target`.
+- One unreproduced flaky `report-core` test failure was seen once; mentioned in the #67 body.
 - Clippy (1.98) flags `chunks_exact(const)`: use `as_chunks`.
