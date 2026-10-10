@@ -5,10 +5,12 @@
 //! and CSV exports are made from.
 
 mod doc;
+pub mod explorer;
 mod kinds;
 mod recovery;
 
 pub use doc::{Document, Table, Tile, Tone};
+pub use explorer::Explorer;
 pub use kinds::{
     CleanReport, CleanedItem, CompareReport, FileItem, FolderItem, MissingFile, Removed, TypeItem,
     UsageReport,
@@ -146,7 +148,14 @@ pub fn save(root: &Path, job: JobInfo, body: Body) -> Result<Saved, String> {
 /// Replaces a saved report (Disk Cleanup adds removed items to its scan report).
 pub fn write(root: &Path, saved: &Saved) -> Result<(), String> {
     let path = report_path(root, &saved.id)?;
-    let json = serde_json::to_vec_pretty(saved).map_err(|err| err.to_string())?;
+    // A disk usage report with an explorer is a few MB; skip the indentation for those.
+    let big = matches!(&saved.body, Body::DiskUsage(report) if report.explorer.is_some());
+    let json = if big {
+        serde_json::to_vec(saved)
+    } else {
+        serde_json::to_vec_pretty(saved)
+    }
+    .map_err(|err| err.to_string())?;
     fs::write(&path, json).map_err(|err| format!("Could not save the report: {err}"))
 }
 

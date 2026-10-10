@@ -3,6 +3,8 @@ use base64::Engine;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+use crate::explorer;
+
 /// Longest list drawn in the HTML page; the CSV always has every row.
 pub const MAX_HTML_ROWS: usize = 5_000;
 /// Rows a printed table keeps before "see the CSV".
@@ -32,6 +34,9 @@ pub struct Document {
     pub sections: Vec<Section>,
     /// Machine-readable data for the page script, embedded as a JSON island.
     pub data: Option<serde_json::Value>,
+    /// Draw the disk usage explorer (folder drill-down and type filter) from `data`. It has its
+    /// own script and styles, so the shared ones stay as they are.
+    pub explorer: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -166,13 +171,18 @@ impl Document {
         out.push_str("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n");
         out.push_str(&format!(
             "<meta http-equiv=\"Content-Security-Policy\" content=\"{}\">\n",
-            csp()
+            csp_for(self.explorer)
         ));
         out.push_str("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n");
         out.push_str(&format!(
-            "<title>{} - {}</title>\n<style>{STYLE}</style>\n</head>\n<body>\n<main>\n",
+            "<title>{} - {}</title>\n<style>{STYLE}</style>\n{}</head>\n<body>\n<main>\n",
             esc(&self.title),
-            esc(brand)
+            esc(brand),
+            if self.explorer {
+                format!("<style>{}</style>\n", explorer::STYLE)
+            } else {
+                String::new()
+            }
         ));
         let verdict = match self.verdict {
             Some(Verdict::Bad) => Some(("bad", "Needs attention")),
@@ -226,6 +236,10 @@ impl Document {
         for note in &self.notes {
             out.push_str(&format!("<p class=\"note\">{}</p>\n", esc(note)));
         }
+        if self.explorer {
+            // Built by the explorer script; without scripts the flat tables below say it all.
+            out.push_str("<section class=\"card explorer\" id=\"x\" data-js hidden></section>\n");
+        }
         let mut ids = 0;
         for table in &self.tables {
             render_table(&mut out, table, &mut ids);
@@ -240,8 +254,13 @@ impl Document {
             ));
         }
         out.push_str(&format!(
-            "<footer><span>Made with DeepServer 2.0</span><span>{}</span></footer>\n</main>\n<script>{SCRIPT}</script>\n</body>\n</html>\n",
-            esc(generated)
+            "<footer><span>Made with DeepServer 2.0</span><span>{}</span></footer>\n</main>\n<script>{SCRIPT}</script>\n{}</body>\n</html>\n",
+            esc(generated),
+            if self.explorer {
+                format!("<script>{}</script>\n", explorer::SCRIPT)
+            } else {
+                String::new()
+            }
         ));
         out
     }
@@ -444,12 +463,20 @@ fn render_recovery(out: &mut String, rec: &Recovery) {
     out.push_str("</section>\n");
 }
 
-/// The policy for the page: styles inline, images from data, and no script but ours.
-pub fn csp() -> String {
-    let hash = STANDARD.encode(Sha256::digest(SCRIPT.as_bytes()));
-    format!(
-        "default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-{hash}'; img-src data:"
-    )
+/// The policy for a plain page: styles inline, images from data, and no script but ours.
+#[cfg(test)]
+fn csp() -> String {
+    csp_for(false)
+}
+
+/// The policy for a page; an explorer page also allows its own script, by hash.
+fn csp_for(explorer: bool) -> String {
+    let hash = |script: &str| STANDARD.encode(Sha256::digest(script.as_bytes()));
+    let mut scripts = format!("'sha256-{}'", hash(SCRIPT));
+    if explorer {
+        scripts.push_str(&format!(" 'sha256-{}'", hash(explorer::SCRIPT)));
+    }
+    format!("default-src 'none'; style-src 'unsafe-inline'; script-src {scripts}; img-src data:")
 }
 
 /// JSON safe to put inside a `<script>` element.
@@ -754,6 +781,31 @@ mod tests {
         assert!(html.contains(&format!("<script>{SCRIPT}</script>")));
         // One executable script only; the JSON island is data.
         assert_eq!(html.matches("<script>").count(), 1);
+    }
+
+    #[test]
+    fn explorer_pages_allow_exactly_two_scripts_by_hash() {
+        let mut doc = sample();
+        doc.explorer = true;
+        doc.data = Some(serde_json::json!({ "x": { "nodes": [] } }));
+        let html = doc.html("Acme", "x");
+        let policy = csp_for(true);
+        assert!(html.contains(&format!("content=\"{policy}\"")));
+        assert_eq!(policy.matches("'sha256-").count(), 2);
+        assert!(!policy.contains("unsafe-eval") && !policy.contains("script-src 'unsafe-inline'"));
+        assert!(html.contains(&format!("<script>{SCRIPT}</script>")));
+        assert!(html.contains(&format!("<script>{}</script>", explorer::SCRIPT)));
+        assert!(html.contains("id=\"x\" data-js hidden"));
+        // Two executable scripts and the JSON island; nothing else.
+        assert_eq!(html.matches("<script>").count(), 2);
+        assert_eq!(html.matches("<script").count(), 3);
+        // The flat tables stay for readers without scripts.
+        assert!(html.contains("Missing at destination"));
+        // A plain page is unchanged: one script, one hash, no explorer styles.
+        let plain = sample().html("Acme", "x");
+        assert_eq!(csp().matches("'sha256-").count(), 1);
+        assert_eq!(plain.matches("<script>").count(), 1);
+        assert!(!plain.contains("class=\"xcols\"") && !plain.contains(".xcols"));
     }
 
     #[test]
