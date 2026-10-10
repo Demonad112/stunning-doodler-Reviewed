@@ -1,6 +1,9 @@
 //! Disk Cleanup: what the UI shows of a scanned [`Tree`] (one folder level, the largest files,
 //! space by file type), which paths may never be deleted, and the drive list and delete calls.
 
+pub mod bulk;
+pub mod junk;
+pub mod log;
 mod os;
 mod protect;
 pub mod quick;

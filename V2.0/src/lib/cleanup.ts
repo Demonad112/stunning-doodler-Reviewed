@@ -259,3 +259,145 @@ export function restartAsAdmin(): Promise<void> {
 export function canClean(item: QuickWin, elevated: boolean): boolean {
   return item.size > 0 && (!item.needsAdmin || elevated)
 }
+
+/** Whether DeepServer runs as administrator; read once at start. */
+export const appAdmin = reactive({ elevated: false })
+
+export async function refreshElevated(): Promise<void> {
+  if (!isTauri()) {
+    return
+  }
+  try {
+    appAdmin.elevated = await invoke<boolean>('app_elevated')
+  } catch {
+    // Treated as not elevated: the admin-only buttons stay disabled.
+  }
+}
+
+export type JunkKind =
+  | 'tempFiles'
+  | 'crashDumps'
+  | 'oldLogs'
+  | 'thumbnails'
+  | 'installers'
+  | 'devCaches'
+  | 'emptyFolders'
+
+export interface JunkItem {
+  id: number
+  name: string
+  path: string
+  size: number
+  files: number
+  isFolder: boolean
+  modifiedMs: number | null
+}
+
+export interface JunkGroup {
+  kind: JunkKind
+  title: string
+  description: string
+  /** Every match, including those past the listed items. */
+  size: number
+  count: number
+  items: JunkItem[]
+}
+
+export type PreviewStatus = 'go' | 'protected' | 'reparse' | 'gone' | 'inside'
+
+export interface PreviewItem {
+  id: number
+  name: string
+  path: string
+  size: number
+  files: number
+  isFolder: boolean
+  status: PreviewStatus
+  reason: string | null
+}
+
+export interface DeletePreview {
+  items: PreviewItem[]
+  goCount: number
+  goSize: number
+}
+
+export type Outcome = 'done' | 'inUse' | 'accessDenied' | 'notFound' | 'skipped' | 'failed'
+
+export interface ItemResult {
+  id: number
+  path: string
+  size: number
+  outcome: Outcome
+  message: string | null
+}
+
+export interface DeleteManyResult {
+  results: ItemResult[]
+  overview: Overview
+}
+
+/** Suggested junk on the scanned tree; nothing is ticked for the user. */
+export function loadJunk(): Promise<JunkGroup[]> {
+  return invoke<JunkGroup[]>('cleanup_junk')
+}
+
+/** Dry run: what a delete of these items would do. Removes nothing. */
+export function previewDelete(ids: number[]): Promise<DeletePreview> {
+  return invoke<DeletePreview>('cleanup_delete_preview', { ids })
+}
+
+/**
+ * Deletes the items one by one, then refreshes the totals and the shown folder. Resolves with
+ * a result for each item that went ahead.
+ */
+export async function removeMany(ids: number[], permanent: boolean): Promise<ItemResult[]> {
+  const done = await invoke<DeleteManyResult>('cleanup_delete_many', { ids, permanent })
+  cleanupJob.overview = done.overview
+  cleanupJob.trail = [done.overview.root, ...cleanupJob.trail.slice(1)]
+  const shown = cleanupJob.trail.at(-1)
+  if (shown) {
+    cleanupJob.rows = await invoke<CleanupRow[]>('cleanup_children', { id: shown.id })
+  }
+  return done.results
+}
+
+/** Several items or a permanent delete need administrator; one item to the Recycle Bin does not. */
+export function needsAdmin(count: number, permanent: boolean): boolean {
+  return permanent || count > 1
+}
+
+export function canDelete(count: number, permanent: boolean, elevated: boolean): boolean {
+  return count > 0 && (elevated || !needsAdmin(count, permanent))
+}
+
+/** The sentence under the dialog's totals. */
+export function deleteSentence(count: number, permanent: boolean): string {
+  const noun = count === 1 ? 'item' : 'items'
+  return permanent
+    ? `${String(count)} ${noun} will be deleted permanently. This cannot be undone.`
+    : `${String(count)} ${noun} will be moved to the Recycle Bin.`
+}
+
+const OUTCOME_LABELS: Record<Outcome, string> = {
+  done: 'Deleted',
+  inUse: 'In use',
+  accessDenied: 'Access denied',
+  notFound: 'Already gone',
+  skipped: 'Skipped',
+  failed: 'Failed',
+}
+
+export function outcomeLabel(outcome: Outcome): string {
+  return OUTCOME_LABELS[outcome]
+}
+
+/** Counts and freed space for the result list. */
+export function summarize(results: ItemResult[]): { done: number; failed: number; freed: number } {
+  const done = results.filter((result) => result.outcome === 'done')
+  return {
+    done: done.length,
+    failed: results.length - done.length,
+    freed: done.reduce((sum, result) => sum + result.size, 0),
+  }
+}

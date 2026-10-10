@@ -180,6 +180,69 @@ mod tests {
         assert!(check(r"\\?\C:\Windows\System32", r"C:\").is_err());
     }
 
+    fn wide() -> Protected {
+        Protected::new(
+            &[
+                r"C:\Windows",
+                r"C:\Program Files",
+                r"C:\Program Files (x86)",
+                r"C:\Recovery",
+                r"C:\Users\Sam\AppData\Local\DeepServer2",
+            ],
+            &[
+                r"C:\ProgramData",
+                r"C:\Users\Public",
+                r"C:\Users\Sam",
+                r"C:\Users\Sam\AppData",
+                r"C:\Users\Sam\AppData\Local",
+                r"C:\Users\Sam\Downloads",
+            ],
+            &[r"C:\Users"],
+        )
+    }
+
+    fn wide_check(path: &str) -> Result<(), String> {
+        wide().check(Path::new(path), Path::new(r"C:\"))
+    }
+
+    #[test]
+    fn other_users_profile_roots_are_kept_but_their_files_are_not_blanket_protected() {
+        assert!(wide_check(r"C:\Users\Alex").is_err());
+        assert!(wide_check(r"C:\USERS\alex\").is_err());
+        assert!(wide_check(r"C:\Users\Default").is_err());
+        assert!(wide_check(r"C:\Users\Alex\Downloads\old.iso").is_ok());
+        assert!(wide_check(r"C:\Users\Sam\Downloads").is_err());
+        assert!(wide_check(r"C:\Users\Sam\Downloads\old.iso").is_ok());
+    }
+
+    #[test]
+    fn app_and_system_folders_are_kept_with_everything_inside() {
+        for path in [
+            r"C:\Program Files (x86)\Vendor\app.exe",
+            r"C:\Recovery\WindowsRE",
+            r"C:\Users\Sam\AppData\Local\DeepServer2",
+            r"C:\Users\Sam\AppData\Local\DeepServer2\Records\run1\report.json",
+            r"C:\ProgramData",
+            r"C:\Users\Public",
+            r"C:\Users\Sam\AppData\Local",
+            r"C:\Users\Sam\AppData",
+        ] {
+            assert!(wide_check(path).is_err(), "{path} should be kept");
+        }
+        // Siblings that only share a prefix are ordinary.
+        assert!(wide_check(r"C:\Program Files Old\x").is_ok());
+        assert!(wide_check(r"C:\ProgramData\Vendor\cache").is_ok());
+        assert!(wide_check(r"C:\Users\Sam\AppData\Local\Temp\x.tmp").is_ok());
+        assert!(wide_check(r"C:\Users\Sam\AppData\Local\DeepServer2Old\x").is_ok());
+    }
+
+    #[test]
+    fn system_names_are_kept_at_any_depth() {
+        assert!(wide_check(r"C:\Data\$Recycle.Bin").is_err());
+        assert!(wide_check(r"C:\Data\hiberfil.sys").is_err());
+        assert!(wide_check(r"C:\Data\System Volume Information").is_err());
+    }
+
     #[test]
     fn this_pc_has_its_windows_folder_protected() {
         let this_pc = Protected::for_this_pc();

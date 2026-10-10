@@ -10,19 +10,24 @@ import {
   Info,
   LoaderCircle,
   RotateCw,
+  ShieldAlert,
   Trash2,
   TriangleAlert,
 } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import BulkDeleteDialog from '@/components/BulkDeleteDialog.vue'
 import ContextMenu, { type MenuItem } from '@/components/ContextMenu.vue'
 import DriveTiles from '@/components/DriveTiles.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import JobFields from '@/components/JobFields.vue'
+import JunkPanel from '@/components/JunkPanel.vue'
 import PathField from '@/components/PathField.vue'
 import QuickWins from '@/components/QuickWins.vue'
 import TreemapView from '@/components/TreemapView.vue'
 import {
+  appAdmin,
+  canDelete,
   cancelScan,
   cleanupJob,
   driveFor,
@@ -32,6 +37,7 @@ import {
   openTrail,
   refreshDrives,
   removeItem,
+  restartAsAdmin,
   revealItem,
   runScan,
   scanPercent,
@@ -168,6 +174,10 @@ function askDelete(item: Picked | null, permanent: boolean): void {
   if (!item || deleting.value) {
     return
   }
+  if (!canDelete(1, permanent, appAdmin.elevated)) {
+    showToast('Deleting permanently needs administrator. Use Restart as administrator first.')
+    return
+  }
   pending.value = { item, permanent }
   confirmEl.value?.showModal()
 }
@@ -194,6 +204,44 @@ async function confirmDelete(): Promise<void> {
   }
 }
 
+// Several items at once: tick rows, then review the dry run in the bulk dialog.
+const checked = ref(new Set<number>())
+const bulkEl = ref<InstanceType<typeof BulkDeleteDialog> | null>(null)
+const junkEl = ref<InstanceType<typeof JunkPanel> | null>(null)
+watch(
+  () => [job.overview, job.trail.length],
+  () => {
+    checked.value = new Set()
+  },
+)
+
+function toggleChecked(id: number): void {
+  const next = new Set(checked.value)
+  if (!next.delete(id)) {
+    next.add(id)
+  }
+  checked.value = next
+}
+
+function reviewIds(ids: number[]): void {
+  void bulkEl.value?.show(ids)
+}
+
+function onBulkFinished(): void {
+  checked.value = new Set()
+  picked.value = null
+  void refreshDrives()
+  void junkEl.value?.reload()
+}
+
+async function restartAdmin(): Promise<void> {
+  try {
+    await restartAsAdmin()
+  } catch (err) {
+    showToast(errorMessage(err))
+  }
+}
+
 const menu = ref<{ item: Picked; x: number; y: number } | null>(null)
 function openMenu(row: CleanupRow, x: number, y: number): void {
   pick(row)
@@ -211,7 +259,11 @@ const menuItems = computed<(MenuItem | null)[]>(() => {
     { label: 'Copy path', icon: Copy, action: () => void copyPath(item.id) },
     null,
     { label: 'Move to Recycle Bin', icon: Trash2, action: () => askDelete(item, false) },
-    { label: 'Delete permanently…', action: () => askDelete(item, true) },
+    {
+      label: appAdmin.elevated ? 'Delete permanently…' : 'Delete permanently (needs administrator)',
+      disabled: !appAdmin.elevated,
+      action: () => askDelete(item, true),
+    },
   ]
 })
 
@@ -261,6 +313,9 @@ function onKeydown(event: KeyboardEvent): void {
   }
   const typing = event.target instanceof HTMLInputElement
   if (typing || menu.value || confirmEl.value?.open || !job.overview) {
+    return
+  }
+  if (document.querySelector('dialog[open]')) {
     return
   }
   if (event.key === 'Delete') {
@@ -492,6 +547,33 @@ onBeforeUnmount(() => {
             {{ formatBytes(shownSize) }}
           </span>
         </nav>
+        <template v-if="checked.size > 0">
+          <button
+            v-if="!canDelete(checked.size, false, appAdmin.elevated)"
+            type="button"
+            class="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-stroke bg-card px-3 text-[13px] hover:bg-card-hover"
+            title="Deleting several items needs administrator. Windows asks first."
+            @click="restartAdmin"
+          >
+            <ShieldAlert
+              class="size-4"
+              :stroke-width="1.75"
+            />
+            Restart as administrator
+          </button>
+          <button
+            type="button"
+            class="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-danger/40 bg-card px-3 text-[13px] text-danger hover:bg-danger-bg disabled:opacity-50"
+            :disabled="!canDelete(checked.size, false, appAdmin.elevated)"
+            @click="reviewIds([...checked])"
+          >
+            <Trash2
+              class="size-4"
+              :stroke-width="1.75"
+            />
+            Delete selected ({{ checked.size }})
+          </button>
+        </template>
         <template v-if="picked">
           <button
             type="button"
@@ -535,10 +617,18 @@ onBeforeUnmount(() => {
           <li
             v-for="row in job.rows"
             :key="row.id"
+            class="flex items-center"
           >
+            <input
+              type="checkbox"
+              class="ml-3 shrink-0"
+              :checked="checked.has(row.id)"
+              :aria-label="`Select ${row.name}`"
+              @change="toggleChecked(row.id)"
+            />
             <button
               type="button"
-              class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] hover:bg-subtle"
+              class="flex min-w-0 flex-1 items-center gap-2 px-3 py-1.5 text-left text-[13px] hover:bg-subtle"
               :class="{ 'bg-accent/12 hover:bg-accent/16': picked?.id === row.id }"
               :title="row.error ? `${row.name}: ${row.error}` : row.name"
               @click="pick(row)"
@@ -691,6 +781,12 @@ onBeforeUnmount(() => {
           </li>
         </ul>
       </div>
+
+      <JunkPanel
+        ref="junkEl"
+        class="mt-6"
+        @review="reviewIds"
+      />
     </div>
 
     <!-- Start: pick a drive or folder -->
@@ -787,6 +883,11 @@ onBeforeUnmount(() => {
         </div>
       </template>
     </dialog>
+
+    <BulkDeleteDialog
+      ref="bulkEl"
+      @finished="onBulkFinished"
+    />
 
     <ContextMenu
       v-if="menu"
