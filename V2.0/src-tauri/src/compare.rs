@@ -29,6 +29,29 @@ struct Compared {
     left: PathBuf,
     right: PathBuf,
     diff: DiffTree,
+    ignore_junk: bool,
+}
+
+/// What "Copy missing files" needs from the last compare.
+pub struct MissingToCopy {
+    pub source: PathBuf,
+    pub destination: PathBuf,
+    pub paths: Vec<String>,
+    pub ignore_junk: bool,
+}
+
+impl CompareState {
+    /// The last compare's missing paths with its two folders, for a Record copy job.
+    pub fn missing_to_copy(&self) -> Result<MissingToCopy, String> {
+        let result = self.result.lock().map_err(|err| err.to_string())?;
+        let compared = result.as_ref().ok_or(NO_RESULT)?;
+        Ok(MissingToCopy {
+            source: compared.left.clone(),
+            destination: compared.right.clone(),
+            paths: compared.diff.missing_paths(),
+            ignore_junk: compared.ignore_junk,
+        })
+    }
 }
 
 const NO_RESULT: &str = "That compare result is no longer available. Compare again.";
@@ -140,7 +163,12 @@ pub async fn compare_start(
         elapsed_ms,
         report_id: save_report(&left, &right, &diff, elapsed_ms, job),
     };
-    *state.result.lock().map_err(|err| err.to_string())? = Some(Compared { left, right, diff });
+    *state.result.lock().map_err(|err| err.to_string())? = Some(Compared {
+        left,
+        right,
+        diff,
+        ignore_junk,
+    });
     Ok(result)
 }
 

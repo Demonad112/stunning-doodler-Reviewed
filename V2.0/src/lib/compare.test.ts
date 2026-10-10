@@ -28,7 +28,9 @@ import {
   loadChildren,
   loadPaths,
   loadRecent,
+  missingDelta,
   pickFolder,
+  resetMissingDelta,
   rememberRecent,
   revealRow,
   rowPath,
@@ -166,5 +168,34 @@ describe('recent compares', () => {
   it('ignores corrupt values', () => {
     localStorage.setItem('deepserver2-compare-recent', '{"a":1}')
     expect(loadRecent()).toEqual([])
+  })
+})
+
+describe('missingDelta', () => {
+  const pair = { left: 'C:\\A', right: 'D:\\B' }
+
+  beforeEach(() => {
+    resetMissingDelta()
+  })
+
+  it('says nothing for the first compare of a pair', () => {
+    expect(missingDelta(pair, 612)).toBeNull()
+  })
+
+  it('shows before and after on a re-check', () => {
+    missingDelta(pair, 612)
+    expect(missingDelta({ left: 'c:\\a', right: 'd:\\b' }, 4)).toBe('612 → 4 still missing')
+  })
+
+  it('reports an all-clear and an unchanged count', () => {
+    missingDelta(pair, 3)
+    expect(missingDelta(pair, 3)).toBe('3 still missing, no change since the last compare')
+    expect(missingDelta(pair, 0)).toBe('All 3 missing files are now at the destination')
+    expect(missingDelta(pair, 0)).toBeNull()
+  })
+
+  it('starts over for a different pair', () => {
+    missingDelta(pair, 9)
+    expect(missingDelta({ left: 'C:\\A', right: 'E:\\Other' }, 2)).toBeNull()
   })
 })

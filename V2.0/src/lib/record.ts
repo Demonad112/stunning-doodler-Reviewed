@@ -165,6 +165,18 @@ export function startRecord(
   })
 }
 
+/** Compare's "Copy missing files": copies what the last compare found missing, as a record. */
+export function copyMissingRecord(
+  verify: VerifyLevel,
+  onProgress: (progress: RecordProgress) => void,
+): Promise<RunDetails> {
+  return invoke<RunDetails>('record_copy_missing', {
+    verify,
+    job: currentJob(),
+    onEvent: channel(onProgress),
+  })
+}
+
 /** Copies the not-copied files again: `paths` and/or one `reason`, or all of them when neither. */
 export function retryRecord(
   runId: string,

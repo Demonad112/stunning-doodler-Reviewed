@@ -81,12 +81,66 @@ pub struct PreflightReport {
     pub issues: Vec<PreflightIssue>,
 }
 
+/// A subset of the source to copy, from a compare's missing list: the listed files, empty
+/// folders, and the folders on the way to them. Everything else is left out of the run.
+#[derive(Debug, Default)]
+pub struct OnlyPaths {
+    files: HashSet<String>,
+    dirs: HashSet<String>,
+}
+
+impl OnlyPaths {
+    /// `paths` are relative to the source with `\` or `/`; a trailing separator marks an empty
+    /// folder. Names compare case-insensitively, like Windows.
+    pub fn new<'a>(paths: impl IntoIterator<Item = &'a str>) -> Self {
+        let mut only = Self::default();
+        for path in paths {
+            let is_dir = path.ends_with(['\\', '/']);
+            let key = path.replace('\\', "/").trim_matches('/').to_lowercase();
+            if key.is_empty() {
+                continue;
+            }
+            let mut end = 0;
+            while let Some(slash) = key[end..].find('/') {
+                end += slash;
+                only.dirs.insert(key[..end].to_owned());
+                end += 1;
+            }
+            if is_dir {
+                only.dirs.insert(key);
+            } else {
+                only.files.insert(key);
+            }
+        }
+        only
+    }
+
+    fn has_file(&self, relative_path: &str) -> bool {
+        self.files.contains(&relative_path.to_lowercase())
+    }
+
+    fn has_dir(&self, relative_path: &str) -> bool {
+        self.dirs.contains(&relative_path.to_lowercase())
+    }
+}
+
 /// Lists the source and runs the pre-flight check into a new run folder under `root`.
 /// Blocked files and unreadable folders are written to the results straight away, so they
 /// show in the "Not copied" list before the copy starts.
 pub fn prepare(
     root: &Path,
     settings: TransferSettings,
+    cancel: &CancelToken,
+    sink: &mut dyn TransferSink,
+) -> Result<(RunSummary, PreflightReport)> {
+    prepare_only(root, settings, None, cancel, sink)
+}
+
+/// [`prepare`], limited to `only` when given.
+pub fn prepare_only(
+    root: &Path,
+    settings: TransferSettings,
+    only: Option<&OnlyPaths>,
     cancel: &CancelToken,
     sink: &mut dyn TransferSink,
 ) -> Result<(RunSummary, PreflightReport)> {
@@ -132,6 +186,7 @@ pub fn prepare(
         &settings,
         &source,
         &destination,
+        only,
         cancel,
         sink,
         &mut report,
@@ -226,14 +281,17 @@ fn check_roots(source: &Path, destination: &Path) -> Result<()> {
 struct ScanState<'a> {
     settings: &'a TransferSettings,
     destination: &'a Path,
+    only: Option<&'a OnlyPaths>,
     seen: HashSet<String>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn scan_source(
     store: &RunStore,
     settings: &TransferSettings,
     source: &Path,
     destination: &Path,
+    only: Option<&OnlyPaths>,
     cancel: &CancelToken,
     sink: &mut dyn TransferSink,
     report: &mut PreflightReport,
@@ -256,6 +314,7 @@ fn scan_source(
     let mut state = ScanState {
         settings,
         destination,
+        only,
         seen: HashSet::new(),
     };
     let mut manifest = store.manifest_writer()?;
@@ -284,6 +343,9 @@ impl ScanState<'_> {
     ) -> (Option<ManifestEntry>, Option<ItemResult>, bool) {
         match entry {
             Entry::Folder { relative_path } => {
+                if self.only.is_some_and(|only| !only.has_dir(&relative_path)) {
+                    return (None, None, false);
+                }
                 report.folders += 1;
                 let blocked = self.check_name(&relative_path, report);
                 let result = blocked.map(|reason| {
@@ -306,6 +368,9 @@ impl ScanState<'_> {
                 modified_ms: modified_at_ms,
                 cloud,
             } => {
+                if self.only.is_some_and(|only| !only.has_file(&relative_path)) {
+                    return (None, None, false);
+                }
                 report.files += 1;
                 report.bytes += size;
                 let blocked = self.check_name(&relative_path, report).or_else(|| {
@@ -619,6 +684,47 @@ mod tests {
         .unwrap();
         assert_eq!((report.files, report.bytes), (1, 1));
         assert!(summary.settings.ignore_junk, "kept for the report");
+    }
+
+    #[test]
+    fn only_paths_match_any_separator_and_case_and_include_ancestors() {
+        let only = OnlyPaths::new(["Sub\\Deep\\B.txt", "top.txt", "Empty\\Folder\\"]);
+        assert!(only.has_file("sub/deep/b.txt"));
+        assert!(only.has_file("TOP.txt"));
+        assert!(!only.has_file("sub/other.txt"));
+        assert!(only.has_dir("Sub"));
+        assert!(only.has_dir("sub/deep"));
+        assert!(only.has_dir("empty/folder"));
+        assert!(only.has_dir("empty"));
+        assert!(!only.has_dir("elsewhere"));
+    }
+
+    #[test]
+    fn prepare_only_lists_just_the_chosen_files() {
+        let dir = TempDir::new("prepare-only");
+        dir.write("src/a.txt", b"aaaa");
+        dir.write("src/sub/b.txt", b"bb");
+        dir.write("src/sub/c.txt", b"c");
+        dir.write("src/other/d.txt", b"dddd");
+        let source = dir.path("src");
+        let destination = dir.path("dst");
+        let only = OnlyPaths::new(["sub\\b.txt", "a.txt"]);
+
+        let (summary, report) = prepare_only(
+            &dir.path("runs"),
+            settings(&source, &destination),
+            Some(&only),
+            &CancelToken::default(),
+            &mut NullSink,
+        )
+        .unwrap();
+
+        assert_eq!((report.files, report.bytes), (2, 6));
+        assert_eq!(report.folders, 1);
+        let store = RunStore::open(&dir.path("runs"), &summary.id).unwrap();
+        let rows: Vec<ManifestEntry> = store.manifest().unwrap().map(|row| row.unwrap()).collect();
+        let paths: Vec<&str> = rows.iter().map(|row| row.relative_path.as_str()).collect();
+        assert_eq!(paths, vec!["a.txt", "sub", "sub/b.txt"]);
     }
 
     #[test]

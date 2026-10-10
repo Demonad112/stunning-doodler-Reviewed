@@ -2,6 +2,7 @@
 //! (Watch mode), streaming progress over a channel. Runs are stored by `transfer-core`, so a
 //! finished record can be reopened as a report.
 
+use crate::compare::CompareState;
 use scan_core::{check_pair, clean_path};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -9,7 +10,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
 use tauri::State;
-use transfer_core::prepare::PreflightReport;
+use transfer_core::prepare::{OnlyPaths, PreflightReport};
 use transfer_core::recovery::RecoveryResult;
 use transfer_core::run::Selection;
 use transfer_core::store::{self, RunStore};
@@ -229,18 +230,7 @@ pub async fn record_start(
             let _ = report_core::save_record_job(&root, &summary.id, &job_info);
         }
         if mode == TransferMode::Copy {
-            if let Some(error) = &preflight.write_error {
-                return Err(format!(
-                    "DeepServer can't write to the destination: {error}"
-                ));
-            }
-            if !preflight.enough_space {
-                return Err(format!(
-                    "Not enough space at the destination: the copy needs {} bytes and {} are free.",
-                    preflight.bytes_needed,
-                    preflight.free_bytes.unwrap_or_default()
-                ));
-            }
+            check_copy_preflight(&preflight)?;
         }
         let finished = match mode {
             TransferMode::Copy => {
@@ -254,6 +244,71 @@ pub async fn record_start(
                 &mut sink,
             ),
         };
+        sink.flush();
+        finished.map(|summary| summary.id).map_err(to_text)
+    })
+    .await
+}
+
+/// Refuses a copy that can't write to the destination or won't fit.
+fn check_copy_preflight(preflight: &PreflightReport) -> Result<(), String> {
+    if let Some(error) = &preflight.write_error {
+        return Err(format!(
+            "DeepServer can't write to the destination: {error}"
+        ));
+    }
+    if !preflight.enough_space {
+        return Err(format!(
+            "Not enough space at the destination: the copy needs {} bytes and {} are free.",
+            preflight.bytes_needed,
+            preflight.free_bytes.unwrap_or_default()
+        ));
+    }
+    Ok(())
+}
+
+/// Compare's "Copy missing files": a Copy record limited to what the last compare found missing
+/// at the destination. Same progress, verify, report and retry as any record.
+#[tauri::command]
+pub async fn record_copy_missing(
+    state: State<'_, RecordState>,
+    compare: State<'_, CompareState>,
+    verify: VerifyLevel,
+    job: report_core::JobInfo,
+    on_event: Channel<TransferProgress>,
+) -> Result<RunDetails, String> {
+    let missing = compare.missing_to_copy()?;
+    if missing.paths.is_empty() {
+        return Err("Nothing is missing at the destination.".into());
+    }
+    check_pair(&missing.source, &missing.destination)?;
+    let settings = TransferSettings {
+        source: missing.source.display().to_string(),
+        destination: missing.destination.display().to_string(),
+        mode: TransferMode::Copy,
+        verify,
+        conflict: ConflictPolicy::Skip,
+        ignore_junk: missing.ignore_junk,
+        download_cloud: false,
+    };
+    self::job(&state, move |control| {
+        let root = transfer_core::records_root();
+        let mut sink = ChannelSink::new(&on_event);
+        let only = OnlyPaths::new(missing.paths.iter().map(String::as_str));
+        let (summary, preflight) = transfer_core::prepare::prepare_only(
+            &root,
+            settings,
+            Some(&only),
+            &control.cancel,
+            &mut sink,
+        )
+        .map_err(to_text)?;
+        if !job.is_empty() {
+            let _ = report_core::save_record_job(&root, &summary.id, &job);
+        }
+        check_copy_preflight(&preflight)?;
+        let finished =
+            transfer_core::run::run_copy(&root, &summary.id, None, &control.cancel, &mut sink);
         sink.flush();
         finished.map(|summary| summary.id).map_err(to_text)
     })
