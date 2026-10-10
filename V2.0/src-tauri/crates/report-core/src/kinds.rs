@@ -1,13 +1,15 @@
 //! What each kind of report holds, its row on the Reports page, and its export layout.
 
-use crate::doc::{Document, Share, Table, Tile, Tone, Verdict};
+use crate::doc::{Document, Section, Share, Table, Tile, Tone, Verdict};
 use crate::{
     format_bytes, format_count, plural, record_job, Body, Entry, JobInfo, ReportKind, Saved,
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use transfer_core::store::RunStore;
-use transfer_core::{format_local, ItemStatus, RunState, RunSummary, TransferMode};
+use transfer_core::{
+    format_local, ItemResult, ItemStatus, RunState, RunSummary, TransferMode, VerifyLevel,
+};
 
 /// A finished compare: totals and the missing files.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -547,6 +549,70 @@ pub(crate) fn record_document(records: &Path, id: &str) -> Result<Document, Stri
             ]
         })
         .collect();
+    let verify = run.settings.verify;
+    let arrived_items: Vec<_> = results
+        .values()
+        .filter(|item| item.status != ItemStatus::NotCopied)
+        .collect();
+    let arrived_rows: Vec<Vec<String>> = arrived_items
+        .iter()
+        .map(|item| {
+            vec![
+                item.relative_path.clone(),
+                format_bytes(item.size),
+                check_label(item, verify).into(),
+            ]
+        })
+        .collect();
+    let arrived_table = Table {
+        heading: "Arrived".into(),
+        columns: vec![
+            "Path (relative to the source)".into(),
+            "Size".into(),
+            "Check".into(),
+        ],
+        numeric: vec![false, true, false],
+        rows: arrived_rows,
+        size_col: Some(1),
+        row_bytes: arrived_items.iter().map(|item| item.size).collect(),
+        ..Table::default()
+    }
+    .toned(Tone::Good);
+    // Every file with its status: the CSV holds the whole record, not just the failures.
+    let all_items: Vec<_> = results.values().collect();
+    let csv_table = Table {
+        heading: "All files".into(),
+        columns: vec![
+            "Path (relative to the source)".into(),
+            "Size".into(),
+            "Status".into(),
+            "Check or reason".into(),
+            "Details".into(),
+        ],
+        numeric: vec![false, true, false, false, false],
+        rows: all_items
+            .iter()
+            .map(|item| {
+                let (status, note) = if item.status == ItemStatus::NotCopied {
+                    let reason = item.reason.map_or("Other error", |reason| reason.title());
+                    ("Not copied", reason)
+                } else {
+                    (status_label(item.status), check_label(item, verify))
+                };
+                vec![
+                    item.relative_path.clone(),
+                    format_bytes(item.size),
+                    status.into(),
+                    note.into(),
+                    item.message.clone().unwrap_or_default(),
+                ]
+            })
+            .collect(),
+        size_col: Some(1),
+        row_bytes: all_items.iter().map(|item| item.size).collect(),
+        ..Table::default()
+    };
+    let arrived_count = arrived_items.len();
     let totals = &run.totals;
     let job = record_job(&store);
     let arrived = match run.settings.mode {
@@ -617,8 +683,38 @@ pub(crate) fn record_document(records: &Path, id: &str) -> Result<Document, Stri
             ..Table::default()
         }
         .toned(Tone::Bad)],
+        csv_table: Some(csv_table),
+        sections: vec![Section::Details {
+            summary: format!("Arrived ({})", format_count(arrived_count as u64)),
+            open: false,
+            body: vec![Section::Table(arrived_table)],
+        }],
         ..Document::default()
     })
+}
+
+fn status_label(status: ItemStatus) -> &'static str {
+    match status {
+        ItemStatus::Copied => "Copied",
+        ItemStatus::Arrived => "Arrived",
+        ItemStatus::SkippedIdentical => "Already there",
+        ItemStatus::NotCopied => "Not copied",
+    }
+}
+
+/// How an arrived file was checked. A hash is shown only when both sides were hashed and agree;
+/// a differing hash is a `NotCopied` item with its own reason, never listed as arrived.
+fn check_label(item: &ItemResult, verify: VerifyLevel) -> &'static str {
+    match item.status {
+        ItemStatus::SkippedIdentical => "Already there",
+        _ if verify == VerifyLevel::Hash
+            && item.source_hash.is_some()
+            && item.source_hash == item.dest_hash =>
+        {
+            "Content verified (BLAKE3)"
+        }
+        _ => "Size + date match",
+    }
 }
 
 /// "All clear" only when the run finished and every file made it: a run that failed or was
@@ -718,6 +814,33 @@ mod tests {
         assert_eq!(row.subject, "Temporary files, Browser caches");
         assert_eq!(document(&saved).tables[0].rows.len(), 2);
         assert_eq!(document(&saved).verdict, Some(Verdict::Good));
+    }
+
+    #[test]
+    fn check_label_follows_verify_level_and_hashes() {
+        let mut item = ItemResult::done("a.txt", 1, ItemStatus::Copied);
+        assert_eq!(
+            check_label(&item, VerifyLevel::SizeAndTime),
+            "Size + date match"
+        );
+        // Hash level but nothing hashed (e.g. a file that was already there): no claim.
+        assert_eq!(check_label(&item, VerifyLevel::Hash), "Size + date match");
+        item.source_hash = Some("abc".into());
+        item.dest_hash = Some("abc".into());
+        assert_eq!(
+            check_label(&item, VerifyLevel::Hash),
+            "Content verified (BLAKE3)"
+        );
+        // A size-and-time run never claims content was verified.
+        assert_eq!(
+            check_label(&item, VerifyLevel::SizeAndTime),
+            "Size + date match"
+        );
+        item.dest_hash = Some("def".into());
+        assert_eq!(check_label(&item, VerifyLevel::Hash), "Size + date match");
+        let same = ItemResult::done("b.txt", 1, ItemStatus::SkippedIdentical);
+        assert_eq!(check_label(&same, VerifyLevel::Hash), "Already there");
+        assert_eq!(status_label(ItemStatus::SkippedIdentical), "Already there");
     }
 
     #[test]
