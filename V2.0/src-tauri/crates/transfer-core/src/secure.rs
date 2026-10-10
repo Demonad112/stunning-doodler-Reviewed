@@ -56,18 +56,16 @@ mod imp {
     use std::io;
     use std::os::windows::ffi::{OsStrExt, OsStringExt};
     use std::os::windows::fs::OpenOptionsExt;
+    use std::os::windows::io::AsRawHandle;
     use std::path::Path;
     use std::sync::OnceLock;
     use windows_sys::Win32::Foundation::{
         CloseHandle, GetLastError, LocalFree, ERROR_NOT_ALL_ASSIGNED, HANDLE, INVALID_HANDLE_VALUE,
     };
-    use windows_sys::Win32::Security::Authorization::{
-        GetNamedSecurityInfoW, SetNamedSecurityInfoW, SE_FILE_OBJECT,
-    };
+    use windows_sys::Win32::Security::Authorization::{GetNamedSecurityInfoW, SE_FILE_OBJECT};
     use windows_sys::Win32::Security::{
-        AdjustTokenPrivileges, GetSecurityDescriptorControl, LookupPrivilegeValueW,
-        LUID_AND_ATTRIBUTES, SE_PRIVILEGE_ENABLED, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES,
-        TOKEN_QUERY,
+        AdjustTokenPrivileges, LookupPrivilegeValueW, SetKernelObjectSecurity, LUID_AND_ATTRIBUTES,
+        SE_PRIVILEGE_ENABLED, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES, TOKEN_QUERY,
     };
     use windows_sys::Win32::Storage::FileSystem::{
         FindClose, FindFirstStreamW, FindNextStreamW, GetVolumeInformationW, WIN32_FIND_STREAM_DATA,
@@ -78,16 +76,13 @@ mod imp {
     const FILE_PERSISTENT_ACLS: u32 = 0x8;
     const FILE_NAMED_STREAMS: u32 = 0x0004_0000;
 
+    const WRITE_DAC: u32 = 0x0004_0000;
+    const WRITE_OWNER: u32 = 0x0008_0000;
+    const ACCESS_SYSTEM_SECURITY: u32 = 0x0100_0000;
     const OWNER: u32 = 0x1;
     const GROUP: u32 = 0x2;
     const DACL: u32 = 0x4;
     const SACL: u32 = 0x8;
-    const PROTECTED_DACL: u32 = 0x8000_0000;
-    const UNPROTECTED_DACL: u32 = 0x2000_0000;
-    const PROTECTED_SACL: u32 = 0x4000_0000;
-    const UNPROTECTED_SACL: u32 = 0x1000_0000;
-    const CONTROL_DACL_PROTECTED: u16 = 0x1000;
-    const CONTROL_SACL_PROTECTED: u16 = 0x2000;
 
     fn wide(path: &Path) -> Vec<u16> {
         let mut text: Vec<u16> = extended_path(path).as_os_str().encode_wide().collect();
@@ -220,9 +215,9 @@ mod imp {
         };
         if handle == INVALID_HANDLE_VALUE {
             let error = io::Error::last_os_error();
-            // 38 = end of file: a folder or a file with no stream list at all.
+            // 38 = no more streams; 1 and 87 = a drive that has none (FAT, exFAT, some shares).
             return match error.raw_os_error() {
-                Some(38) => Ok(Vec::new()),
+                Some(1 | 38 | 87) => Ok(Vec::new()),
                 _ => Err(error),
             };
         }
@@ -315,7 +310,6 @@ mod imp {
         }
 
         let from = wide(source);
-        let to = wide(destination);
         let mut owner = std::ptr::null_mut();
         let mut group = std::ptr::null_mut();
         let mut dacl = std::ptr::null_mut();
@@ -343,57 +337,48 @@ mod imp {
             return warnings;
         }
 
-        // Keep "inheritance blocked" as it was; without this the destination folder's own
-        // inheritable entries would be merged in or the flag lost.
-        let mut control = 0u16;
-        let mut revision = 0u32;
-        // SAFETY: `descriptor` is the live descriptor from above.
-        let have_control =
-            unsafe { GetSecurityDescriptorControl(descriptor, &mut control, &mut revision) } != 0;
-        let mut set = info;
-        if have_control {
-            if info & DACL != 0 {
-                set |= if control & CONTROL_DACL_PROTECTED != 0 {
-                    PROTECTED_DACL
+        // The source descriptor is applied as it is (its "inheritance blocked" bits included)
+        // through the file handle. That, unlike SetNamedSecurityInfoW, does not re-propagate
+        // inherited entries to everything below a folder. Permissions and audit rules go first and
+        // the owner separately, so an owner that can't be set doesn't lose the permissions.
+        let _ = (owner, group, dacl, sacl);
+        let mut steps: Vec<(u32, u32, &str)> = Vec::new();
+        if info & (DACL | SACL) != 0 {
+            let access = WRITE_DAC
+                | if info & SACL != 0 {
+                    ACCESS_SYSTEM_SECURITY
                 } else {
-                    UNPROTECTED_DACL
+                    0
                 };
-            }
-            if info & SACL != 0 {
-                set |= if control & CONTROL_SACL_PROTECTED != 0 {
-                    PROTECTED_SACL
-                } else {
-                    UNPROTECTED_SACL
-                };
-            }
+            steps.push((info & (DACL | SACL), access, "Permissions or audit rules"));
         }
-        let pass = |ptr: *mut core::ffi::c_void, wanted: u32| {
-            if info & wanted != 0 {
-                ptr
+        if info & (OWNER | GROUP) != 0 {
+            let note = if held.restore || held.take_ownership {
+                "Owner"
             } else {
-                std::ptr::null_mut()
-            }
-        };
-        // SAFETY: `to` is NUL-terminated; the SIDs and ACLs point into `descriptor`, alive here.
-        let code = unsafe {
-            SetNamedSecurityInfoW(
-                to.as_ptr(),
-                SE_FILE_OBJECT,
-                set,
-                pass(owner, OWNER),
-                pass(group, GROUP),
-                pass(dacl.cast(), DACL).cast(),
-                pass(sacl.cast(), SACL).cast(),
-            )
-        };
-        if code != 0 {
-            let error = io::Error::from_raw_os_error(code as i32);
-            let what = if options.owner && !(held.restore || held.take_ownership) {
-                "Permissions or owner were not kept (run as Administrator to keep the owner)"
-            } else {
-                "Permissions or owner were not kept"
+                "Owner (run as Administrator to keep it)"
             };
-            warnings.push(format!("{what}: {error}"));
+            steps.push((info & (OWNER | GROUP), WRITE_OWNER, note));
+        }
+        for (part, access, what) in steps {
+            let result = OpenOptions::new()
+                .access_mode(access)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+                .open(extended_path(destination))
+                .and_then(|file| {
+                    // SAFETY: the handle is open for the duration of the call and `descriptor`
+                    // is the live descriptor from above.
+                    let ok =
+                        unsafe { SetKernelObjectSecurity(file.as_raw_handle(), part, descriptor) };
+                    if ok == 0 {
+                        Err(io::Error::last_os_error())
+                    } else {
+                        Ok(())
+                    }
+                });
+            if let Err(error) = result {
+                warnings.push(format!("{what} not kept: {error}"));
+            }
         }
         // SAFETY: `descriptor` was allocated by GetNamedSecurityInfoW for LocalFree.
         unsafe { LocalFree(descriptor) };
@@ -547,7 +532,9 @@ mod tests {
         let warnings = copy_security(&source, &target, &PreserveOptions::default());
 
         assert!(warnings.is_empty(), "{warnings:?}");
-        assert_eq!(sddl(&source), sddl(&target));
+        // The "auto-inherited" marker (AI) only records that inheritance ran once; the entries,
+        // owner and the blocked-inheritance flag (P) are what must match.
+        assert_eq!(sddl(&source).replace("D:PAI", "D:P"), sddl(&target));
         assert!(sddl(&target).contains("D:P"), "inheritance block was lost");
         let _ = Command::new("icacls")
             .arg(&dir)
