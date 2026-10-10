@@ -82,6 +82,7 @@ pub fn run() {
             compare::compare_missing,
             record::record_start,
             record::record_retry,
+            record::record_copy_missing,
             record::record_finish,
             record::record_cancel,
             record::record_recover,

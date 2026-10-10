@@ -256,6 +256,35 @@ export function loadRecent(): ComparePaths[] {
   }
 }
 
+/** The missing count of the last finished compare, to show the change on a re-check. */
+let lastMissing: { left: string; right: string; missing: number } | null = null
+
+/** What changed since the last compare of the same pair ("612 → 4 still missing"), or null. */
+export function missingDelta(pair: ComparePaths, missing: number): string | null {
+  const before =
+    lastMissing &&
+    lastMissing.left.toLowerCase() === pair.left.toLowerCase() &&
+    lastMissing.right.toLowerCase() === pair.right.toLowerCase()
+      ? lastMissing.missing
+      : null
+  lastMissing = { left: pair.left, right: pair.right, missing }
+  if (before === null || before === 0) {
+    return null
+  }
+  if (missing === 0) {
+    return `All ${String(before)} missing files are now at the destination`
+  }
+  if (missing === before) {
+    return `${String(missing)} still missing, no change since the last compare`
+  }
+  return `${String(before)} → ${String(missing)} still missing`
+}
+
+/** Forgets the last compare (tests). */
+export function resetMissingDelta(): void {
+  lastMissing = null
+}
+
 export function rememberRecent(pair: ComparePaths): ComparePaths[] {
   const same = (item: ComparePaths): boolean =>
     item.left.toLowerCase() === pair.left.toLowerCase() &&

@@ -45,6 +45,7 @@ import {
   loadMissing,
   loadPaths,
   loadRecent,
+  missingDelta,
   pickFolder,
   rememberRecent,
   revealRow,
@@ -66,6 +67,12 @@ import {
   type SortKey,
 } from '@/lib/diffRows'
 import { formatBytes, formatDuration, plural } from '@/lib/format'
+import {
+  copyMissingRecord,
+  isCancelled as isRecordCancelled,
+  recordJob,
+  type RecordProgress,
+} from '@/lib/record'
 import { openReport } from '@/lib/reports'
 import { sections } from '@/router'
 
@@ -134,6 +141,7 @@ async function runCompare(pair?: ComparePaths): Promise<void> {
   paths.left = left
   paths.right = right
   running.value = true
+  confirmingCopy.value = false
   error.value = ''
   notice.value = ''
   progress.value = null
@@ -155,6 +163,7 @@ async function runCompare(pair?: ComparePaths): Promise<void> {
     compared.value = { left, right }
     finishedAt.value = new Date()
     filter.value = result.value.summary.missing > 0 ? 'missing' : 'all'
+    notice.value = missingDelta({ left, right }, result.value.summary.missing) ?? ''
     recent.value = rememberRecent({ left, right })
     await nextTick()
     resultsEl.value?.scrollIntoView({ block: 'start', behavior: 'smooth' })
@@ -260,6 +269,43 @@ async function openCompareReport(): Promise<void> {
     await openReport({ kind: 'compare', id: result.value.reportId })
   } catch (err) {
     showToast(errorMessage(err))
+  }
+}
+
+const confirmingCopy = ref(false)
+
+/** Copies the missing files as a Record; shows its live panel, then opens its report. */
+async function copyMissingFiles(): Promise<void> {
+  confirmingCopy.value = false
+  if (recordJob.running) {
+    showToast('A record is already running. Finish or cancel it first.')
+    return
+  }
+  recordJob.running = true
+  recordJob.mode = 'copy'
+  recordJob.progress = null
+  recordJob.copyStartedAt = 0
+  recordJob.finishing = false
+  await router.push('/compare/record')
+  try {
+    const details = await copyMissingRecord('sizeAndTime', (update: RecordProgress) => {
+      if (update.phase === 'done') {
+        return
+      }
+      if (update.phase !== 'scanning' && recordJob.copyStartedAt === 0) {
+        recordJob.copyStartedAt = Date.now()
+      }
+      recordJob.progress = update
+    })
+    if (route.path.startsWith('/compare')) {
+      await router.push(`/compare/record/${details.summary.id}`)
+    }
+  } catch (err) {
+    if (!isRecordCancelled(err)) {
+      showToast(errorMessage(err))
+    }
+  } finally {
+    recordJob.running = false
   }
 }
 
@@ -623,6 +669,57 @@ function shortPath(path: string): string {
             :stroke-width="1.75"
           />
           Copy missing list
+        </button>
+        <button
+          v-if="result.summary.missing > 0"
+          type="button"
+          class="flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-accent px-3 text-[13px] text-white hover:opacity-90"
+          title="Copy the missing files to the destination as a record, with progress, a report and retry"
+          @click="confirmingCopy = true"
+        >
+          <Copy
+            class="size-4"
+            :stroke-width="1.75"
+          />
+          Copy missing files
+        </button>
+        <button
+          type="button"
+          class="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-stroke bg-card px-3 text-[13px] hover:bg-card-hover"
+          title="Compare the same two folders again and see what changed"
+          @click="runCompare(compared)"
+        >
+          <History
+            class="size-4"
+            :stroke-width="1.75"
+          />
+          Re-check
+        </button>
+      </div>
+      <div
+        v-if="confirmingCopy"
+        class="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-stroke bg-card px-4 py-3 text-[13px]"
+      >
+        <p class="min-w-0 flex-1">
+          Copy {{ plural(result.summary.missing, 'missing file') }} ({{
+            formatBytes(result.summary.missingBytes)
+          }}) from <strong class="break-all">{{ compared.left }}</strong> to
+          <strong class="break-all">{{ compared.right }}</strong
+          >? Files already there are never overwritten.
+        </p>
+        <button
+          type="button"
+          class="h-8 rounded-md bg-accent px-3 text-white hover:opacity-90"
+          @click="copyMissingFiles"
+        >
+          Copy
+        </button>
+        <button
+          type="button"
+          class="h-8 rounded-md border border-stroke px-3 hover:bg-card-hover"
+          @click="confirmingCopy = false"
+        >
+          Cancel
         </button>
       </div>
 
