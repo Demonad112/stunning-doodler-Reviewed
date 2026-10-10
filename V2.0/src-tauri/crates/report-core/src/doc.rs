@@ -26,6 +26,8 @@ pub struct Document {
     pub share: Option<Share>,
     /// The first table is the one exported as CSV.
     pub tables: Vec<Table>,
+    /// Exported as the CSV instead of the first table (Record: every file with its status).
+    pub csv_table: Option<Table>,
     /// Drawn after the tables: collapsible blocks, code blocks.
     pub sections: Vec<Section>,
     /// Machine-readable data for the page script, embedded as a JSON island.
@@ -223,11 +225,11 @@ impl Document {
         out
     }
 
-    /// The first table as CSV for Excel: UTF-8 with a BOM, CRLF line ends. A table with a size
+    /// `csv_table`, or else the first table, as CSV for Excel: UTF-8 with a BOM, CRLF line ends. A table with a size
     /// column gets a raw "Bytes" column after it.
     pub fn csv(&self) -> String {
         let mut out = String::from("\u{feff}");
-        let Some(table) = self.tables.first() else {
+        let Some(table) = self.csv_table.as_ref().or(self.tables.first()) else {
             return out;
         };
         let mut line = |cells: &[String]| {
