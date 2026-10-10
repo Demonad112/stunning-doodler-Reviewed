@@ -1,7 +1,7 @@
 //! Compare commands: scan both folders in parallel, stream progress over a channel, keep the
 //! result in memory and hand it to the UI one folder level at a time.
 
-use report_core::{Body, CompareReport, JobInfo};
+use report_core::{Body, CompareReport, JobInfo, MissingFile};
 use scan_core::{
     check_pair, clean_path, compare, scan, CancelToken, DiffRow, DiffSummary, DiffTree,
     ScanProgress, ScanState, Side,
@@ -67,8 +67,15 @@ fn save_report(
     job: JobInfo,
 ) -> Option<String> {
     let summary = diff.summary();
-    let mut missing_paths = diff.missing_paths();
-    missing_paths.truncate(REPORT_MISSING_LIMIT);
+    let missing_paths: Vec<MissingFile> = diff
+        .missing_entries()
+        .into_iter()
+        .take(REPORT_MISSING_LIMIT)
+        .map(|entry| MissingFile {
+            path: entry.path,
+            size: entry.size,
+        })
+        .collect();
     let report = CompareReport {
         source: left.display().to_string(),
         destination: right.display().to_string(),

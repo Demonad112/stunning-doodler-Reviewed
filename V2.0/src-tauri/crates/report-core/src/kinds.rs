@@ -1,10 +1,12 @@
 //! What each kind of report holds, its row on the Reports page, and its export layout.
 
 use crate::doc::{Document, Section, Share, Table, Tile, Tone, Verdict};
+use crate::recovery::{Options, Plan};
 use crate::{
     format_bytes, format_count, plural, record_job, Body, Entry, JobInfo, ReportKind, Saved,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::path::Path;
 use transfer_core::store::RunStore;
 use transfer_core::{
@@ -29,7 +31,37 @@ pub struct CompareReport {
     pub unreadable: u64,
     pub elapsed_ms: u64,
     /// Relative to the source; may be cut short (see [`CompareReport::missing`]).
-    pub missing_paths: Vec<String>,
+    pub missing_paths: Vec<MissingFile>,
+}
+
+/// A source file the destination lacks. Reports saved before sizes were kept hold bare path
+/// strings; they load with a size of 0.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "MissingRepr")]
+pub struct MissingFile {
+    /// Relative to the source; an empty folder ends with a separator.
+    pub path: String,
+    pub size: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum MissingRepr {
+    Path(String),
+    Full {
+        path: String,
+        #[serde(default)]
+        size: u64,
+    },
+}
+
+impl From<MissingRepr> for MissingFile {
+    fn from(repr: MissingRepr) -> Self {
+        match repr {
+            MissingRepr::Path(path) => Self { path, size: 0 },
+            MissingRepr::Full { path, size } => Self { path, size },
+        }
+    }
 }
 
 /// A Disk Cleanup scan, and what was deleted from it afterwards.
@@ -247,6 +279,24 @@ pub(crate) fn document(saved: &Saved) -> Document {
                     plural(report.unreadable, "folder")
                 ));
             }
+            let plan = Plan::new(
+                &report.source,
+                &report.destination,
+                &report.missing_paths,
+                Options::default(),
+            );
+            let intro = format!(
+                "Open PowerShell on a PC that can reach both folders, paste the command and press Enter. It copies {} again{}.",
+                plan.as_ref().map_or_else(
+                    || "the missing files".to_string(),
+                    |plan| plural(plan.files, "missing file")
+                ),
+                if listed < report.missing {
+                    format!(" (only the {} listed here)", format_count(listed))
+                } else {
+                    String::new()
+                }
+            );
             Document {
                 title: "Compare".into(),
                 subtitle: format!("{} → {}", report.source, report.destination),
@@ -311,13 +361,15 @@ pub(crate) fn document(saved: &Saved) -> Document {
                 }),
                 tables: vec![Table {
                     heading: "Missing at destination".into(),
-                    columns: vec!["Path (relative to the source)".into()],
-                    numeric: vec![false],
+                    columns: vec!["Path (relative to the source)".into(), "Size".into()],
+                    numeric: vec![false, true],
                     rows: report
                         .missing_paths
                         .iter()
-                        .map(|path| vec![path.clone()])
+                        .map(|file| vec![file.path.clone(), format_bytes(file.size)])
                         .collect(),
+                    size_col: Some(1),
+                    row_bytes: report.missing_paths.iter().map(|file| file.size).collect(),
                     footnote: if listed < report.missing {
                         format!(
                             "The first {} of {} are listed.",
@@ -330,6 +382,11 @@ pub(crate) fn document(saved: &Saved) -> Document {
                     ..Table::default()
                 }
                 .toned(Tone::Bad)],
+                sections: plan
+                    .iter()
+                    .map(|plan| plan.section(intro.clone()))
+                    .collect(),
+                data: plan.as_ref().map(|plan| json!({ "rec": plan.data() })),
                 ..Document::default()
             }
         }
@@ -754,7 +811,16 @@ mod tests {
             destination: r"E:\Data".into(),
             missing: 3,
             missing_bytes: 2048,
-            missing_paths: vec!["a.txt".into(), "b.txt".into()],
+            missing_paths: vec![
+                MissingFile {
+                    path: "a.txt".into(),
+                    size: 1024,
+                },
+                MissingFile {
+                    path: r"sub\b.txt".into(),
+                    size: 0,
+                },
+            ],
             ..CompareReport::default()
         };
         let saved = saved(Body::Compare(report));
@@ -763,10 +829,75 @@ mod tests {
         assert_eq!(row.headline, "3 files missing (2.00 KB)");
         let doc = document(&saved);
         assert_eq!(doc.tables[0].rows.len(), 2);
+        assert_eq!(doc.tables[0].rows[0][1], "1.00 KB");
+        assert_eq!(doc.tables[0].row_bytes, vec![1024, 0]);
+        assert!(doc.csv().contains("a.txt,1.00 KB,1024"));
+        let Section::Recovery(rec) = &doc.sections[0] else {
+            panic!("a recovery block")
+        };
+        assert!(rec.script.contains(r"robocopy 'C:\Data' 'E:\Data' 'a.txt'"));
+        assert!(rec
+            .script
+            .contains(r"robocopy 'C:\Data\sub' 'E:\Data\sub' 'b.txt'"));
+        assert!(doc.data.as_ref().unwrap()["rec"]["dirs"].is_array());
         assert_eq!(doc.tables[0].footnote, "The first 2 of 3 are listed.");
         assert_eq!(doc.tiles[2].tone, Tone::Bad);
         assert!(doc.meta.contains(&("Ticket".into(), "T-42".into())));
         assert!(doc.meta.contains(&("Windows user".into(), "sam".into())));
+    }
+
+    #[test]
+    fn compare_html_has_the_recovery_block_and_stays_inside_the_csp() {
+        let report = CompareReport {
+            source: r"C:\Data".into(),
+            destination: r"E:\Data".into(),
+            missing: 2,
+            missing_paths: vec![
+                MissingFile {
+                    path: r"app\node_modules\x.js".into(),
+                    size: 5,
+                },
+                MissingFile {
+                    path: r"it's\</script>.txt".into(),
+                    size: 1,
+                },
+            ],
+            ..CompareReport::default()
+        };
+        let html = document(&saved(Body::Compare(report))).html("Acme", "now");
+        for needle in [
+            "Copy the missing files again",
+            "Show the full command",
+            "Download .ps1",
+            "data-bit=\"0\"",
+            "node_modules: 1 file",
+            "Copy pass #2 still didn't work",
+            "id=\"rec-pass2\"",
+        ] {
+            assert!(html.contains(needle), "missing {needle}");
+        }
+        assert!(!html.contains("</script>.txt"), "island must escape <");
+        assert_eq!(
+            html.matches("<script").count(),
+            2,
+            "island and page script only"
+        );
+    }
+
+    #[test]
+    fn reports_saved_before_sizes_existed_still_load() {
+        let old = r#"{"source":"C:\\A","destination":"D:\\B","missing":2,"missingPaths":["x.txt","d\\y.txt"]}"#;
+        let report: CompareReport = serde_json::from_str(old).unwrap();
+        assert_eq!(report.missing_paths.len(), 2);
+        assert_eq!(report.missing_paths[1].path, r"d\y.txt");
+        assert_eq!(report.missing_paths[1].size, 0);
+        let new = r#"{"missingPaths":[{"path":"x.txt","size":7},{"path":"y.txt"}]}"#;
+        let report: CompareReport = serde_json::from_str(new).unwrap();
+        assert_eq!(report.missing_paths[0].size, 7);
+        assert_eq!(report.missing_paths[1].size, 0);
+        let again: CompareReport =
+            serde_json::from_str(&serde_json::to_string(&report).unwrap()).unwrap();
+        assert_eq!(again, report);
     }
 
     #[test]

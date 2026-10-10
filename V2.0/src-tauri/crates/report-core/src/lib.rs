@@ -6,10 +6,12 @@
 
 mod doc;
 mod kinds;
+mod recovery;
 
 pub use doc::{Document, Table, Tile, Tone};
 pub use kinds::{
-    CleanReport, CleanedItem, CompareReport, FileItem, FolderItem, Removed, TypeItem, UsageReport,
+    CleanReport, CleanedItem, CompareReport, FileItem, FolderItem, MissingFile, Removed, TypeItem,
+    UsageReport,
 };
 
 use serde::{Deserialize, Serialize};

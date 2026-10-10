@@ -104,6 +104,14 @@ pub struct DiffSummary {
     pub right_cloud: u64,
 }
 
+/// A source file (or empty folder) the destination lacks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MissingEntry {
+    /// Relative to the source; an empty folder ends with a separator.
+    pub path: String,
+    pub size: u64,
+}
+
 /// The comparison of two trees, as a flat arena (root is 0). Children are sorted largest first.
 #[derive(Clone, Debug)]
 pub struct DiffTree {
@@ -175,12 +183,20 @@ impl DiffTree {
     /// Every source file the destination lacks, as paths relative to the source, in table order.
     /// Empty missing folders are listed too, ending with a separator.
     pub fn missing_paths(&self) -> Vec<String> {
+        self.missing_entries()
+            .into_iter()
+            .map(|entry| entry.path)
+            .collect()
+    }
+
+    /// [`DiffTree::missing_paths`] with the size of each source file (0 for an empty folder).
+    pub fn missing_entries(&self) -> Vec<MissingEntry> {
         let mut out = Vec::new();
         self.collect_missing(0, false, &mut out);
         out
     }
 
-    fn collect_missing(&self, id: NodeId, inherited: bool, out: &mut Vec<String>) {
+    fn collect_missing(&self, id: NodeId, inherited: bool, out: &mut Vec<MissingEntry>) {
         let node = &self.nodes[id as usize];
         let missing =
             inherited || matches!(node.status, DiffStatus::OnlyLeft | DiffStatus::KindMismatch);
@@ -192,7 +208,10 @@ impl DiffTree {
                     if empty_folder {
                         text.push(std::path::MAIN_SEPARATOR);
                     }
-                    out.push(text);
+                    out.push(MissingEntry {
+                        path: text,
+                        size: node.left.map_or(0, |side| side.size),
+                    });
                 }
                 return;
             }
@@ -582,6 +601,15 @@ mod tests {
                 format!("gone{sep}deep{sep}b.txt"),
                 format!("gone{sep}empty{sep}"),
             ]
+        );
+
+        let mut sized = diff.missing_entries();
+        sized.sort_by(|a, b| a.path.cmp(&b.path));
+        let sizes: Vec<u64> = sized.iter().map(|entry| entry.size).collect();
+        assert_eq!(
+            sizes,
+            [3, 2, 0],
+            "files carry their size, an empty folder 0"
         );
     }
 
