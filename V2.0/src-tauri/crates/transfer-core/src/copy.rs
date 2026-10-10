@@ -1,9 +1,14 @@
 //! Copies one file: streamed through a buffer into `<name>.dspart`, renamed when complete,
 //! modified time kept, then checked against the source.
 //!
-//! Long paths need no special handling here: Rust's Windows file APIs add the `\\?\` prefix
-//! themselves once a path is too long for the classic API.
+//! Long paths: Rust's Windows file APIs add the `\\?\` prefix themselves once a path is too long
+//! for the classic API; direct Win32 calls in [`crate::meta`] add it with `extended_path`. A name
+//! so long that `.dspart` would push it over the 255-character limit gets a short temp name.
+//!
+//! After the rename and the check, [`crate::meta::apply`] puts the source's created, accessed and
+//! modified times and its attributes on the copy.
 
+use crate::meta::{self, PreserveOptions};
 use crate::reason::{classify, FailureReason, Side};
 use crate::CancelToken;
 use serde::{Deserialize, Serialize};
@@ -48,6 +53,8 @@ pub struct CopyOptions {
     pub skip_identical: bool,
     /// Waits before each automatic retry of a transient error; the length is the retry count.
     pub retry_delays: Vec<Duration>,
+    /// Dates and attributes carried over once the file is in place.
+    pub preserve: PreserveOptions,
 }
 
 impl Default for CopyOptions {
@@ -56,6 +63,7 @@ impl Default for CopyOptions {
             verify: VerifyLevel::SizeAndTime,
             conflict: ConflictPolicy::Skip,
             skip_identical: true,
+            preserve: PreserveOptions::default(),
             retry_delays: vec![
                 Duration::from_millis(500),
                 Duration::from_secs(1),
@@ -71,6 +79,8 @@ pub enum CopyOutcome {
         bytes: u64,
         /// Hex BLAKE3 of the source (and, verified, of the destination) when hashing is on.
         hash: Option<String>,
+        /// Parts of the metadata that could not be kept (the copy itself is fine).
+        warnings: Vec<String>,
     },
     /// The destination already has this file with the same size and time.
     SkippedIdentical,
@@ -181,6 +191,7 @@ pub fn copy_file(
         .map_err(|error| CopyFailure::io(&error, Side::Source))?;
     let source_size = source_meta.len();
     let source_time = source_meta.modified().ok();
+    let wanted_meta = meta::read(source).ok();
 
     match fs::metadata(destination) {
         Ok(existing) if existing.is_dir() => {
@@ -246,20 +257,55 @@ pub fn copy_file(
             ),
         ));
     }
+    // A read-only file that is being replaced would make the rename fail.
+    meta::clear_read_only(destination);
     if let Err(error) = fs::rename(&part, destination) {
         let _ = fs::remove_file(&part);
         return Err(CopyFailure::io(&error, Side::Destination));
     }
 
     verify(destination, bytes, source_time, hash.as_deref())?;
-    Ok(CopyOutcome::Copied { bytes, hash })
+    let warnings = wanted_meta
+        .map(|wanted| meta::apply(destination, &wanted, &options.preserve))
+        .unwrap_or_default();
+    Ok(CopyOutcome::Copied {
+        bytes,
+        hash,
+        warnings,
+    })
 }
 
-/// `name.ext` → `name.ext.dspart` in the same folder.
+/// Longest file name for which `name.dspart` still fits the 255-character limit of one path part.
+const MAX_PART_BASE: usize = 255 - PART_SUFFIX.len();
+
+/// `name.ext` → `name.ext.dspart` in the same folder. A name too long for that becomes
+/// `~<hash of the name>.dspart`.
 pub fn part_path(destination: &Path) -> PathBuf {
     let mut name = destination.file_name().unwrap_or_default().to_os_string();
+    if name.encode_wide_len() > MAX_PART_BASE {
+        let digest = blake3::hash(name.to_string_lossy().as_bytes()).to_hex();
+        name = format!("~{}", &digest[..16]).into();
+    }
     name.push(PART_SUFFIX);
     destination.with_file_name(name)
+}
+
+/// UTF-16 length on Windows (the unit of the 255 limit), bytes elsewhere.
+trait NameLen {
+    fn encode_wide_len(&self) -> usize;
+}
+
+impl NameLen for std::ffi::OsString {
+    #[cfg(windows)]
+    fn encode_wide_len(&self) -> usize {
+        use std::os::windows::ffi::OsStrExt;
+        self.encode_wide().count()
+    }
+
+    #[cfg(not(windows))]
+    fn encode_wide_len(&self) -> usize {
+        self.len()
+    }
 }
 
 fn write_part(
@@ -448,7 +494,8 @@ mod tests {
             outcome,
             CopyOutcome::Copied {
                 bytes: 3 * BUFFER_SIZE as u64 + 5,
-                hash: None
+                hash: None,
+                warnings: Vec::new()
             }
         );
         assert_eq!(progress, 3 * BUFFER_SIZE as u64 + 5);
@@ -472,9 +519,33 @@ mod tests {
             outcome,
             CopyOutcome::Copied {
                 bytes: 5,
-                hash: Some(blake3::hash(b"hello").to_hex().to_string())
+                hash: Some(blake3::hash(b"hello").to_hex().to_string()),
+                warnings: Vec::new()
             }
         );
+    }
+
+    #[test]
+    fn a_name_too_long_for_the_part_suffix_gets_a_short_temp_name() {
+        let long = "a".repeat(250);
+        let part = part_path(Path::new("out").join(&long).as_path());
+        let name = part.file_name().unwrap().to_string_lossy().into_owned();
+        assert!(name.ends_with(PART_SUFFIX) && name.len() <= 255, "{name}");
+        let normal = part_path(Path::new("out/a.txt"));
+        assert_eq!(normal, Path::new("out/a.txt.dspart"));
+    }
+
+    #[test]
+    fn a_255_character_name_copies() {
+        let dir = TempDir::new("copy-longname");
+        let name = format!("{}.txt", "n".repeat(251));
+        let source = dir.write(&name, b"long");
+        let destination = dir.path("out").join(&name);
+
+        let outcome = copy(&source, &destination, &no_retry()).unwrap();
+
+        assert!(matches!(outcome, CopyOutcome::Copied { bytes: 4, .. }));
+        assert_eq!(fs::read(&destination).unwrap(), b"long");
     }
 
     #[test]

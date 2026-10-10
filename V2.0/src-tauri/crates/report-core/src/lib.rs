@@ -350,6 +350,7 @@ mod tests {
                     conflict: ConflictPolicy::Skip,
                     ignore_junk: false,
                     download_cloud: false,
+                    preserve: Default::default(),
                 },
                 state: RunState::Completed,
                 created_at_ms: 1,

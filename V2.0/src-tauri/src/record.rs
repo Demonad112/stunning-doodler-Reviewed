@@ -15,6 +15,7 @@ use transfer_core::recovery::RecoveryResult;
 use transfer_core::run::Selection;
 use transfer_core::store::{self, RunStore};
 use transfer_core::watch::{WatchControl, WatchOptions};
+use transfer_core::PreserveOptions;
 use transfer_core::{
     ConflictPolicy, FailureReason, ItemResult, ItemStatus, Phase, RunSummary, TransferMode,
     TransferProgress, TransferSettings, TransferSink, VerifyLevel,
@@ -189,6 +190,9 @@ where
 pub struct RecordOptions {
     ignore_junk: bool,
     download_cloud: bool,
+    /// What the copy keeps; both on when missing.
+    #[serde(default)]
+    preserve: PreserveOptions,
     /// Client, ticket and technician for the report.
     #[serde(default)]
     job: report_core::JobInfo,
@@ -217,6 +221,7 @@ pub async fn record_start(
         conflict: ConflictPolicy::Skip,
         ignore_junk: options.ignore_junk,
         download_cloud: options.download_cloud,
+        preserve: options.preserve,
     };
     let job_info = options.job;
     job(&state, move |control| {
@@ -275,6 +280,7 @@ pub async fn record_copy_missing(
     compare: State<'_, CompareState>,
     verify: VerifyLevel,
     job: report_core::JobInfo,
+    preserve: Option<PreserveOptions>,
     on_event: Channel<TransferProgress>,
 ) -> Result<RunDetails, String> {
     let missing = compare.missing_to_copy()?;
@@ -290,6 +296,7 @@ pub async fn record_copy_missing(
         conflict: ConflictPolicy::Skip,
         ignore_junk: missing.ignore_junk,
         download_cloud: false,
+        preserve: preserve.unwrap_or_default(),
     };
     self::job(&state, move |control| {
         let root = transfer_core::records_root();

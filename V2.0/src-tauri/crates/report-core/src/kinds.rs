@@ -1159,6 +1159,7 @@ mod tests {
                 conflict: ConflictPolicy::Skip,
                 ignore_junk: false,
                 download_cloud: false,
+                preserve: Default::default(),
             },
             state,
             created_at_ms: 0,

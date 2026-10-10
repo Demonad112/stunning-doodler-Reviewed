@@ -50,7 +50,11 @@ installers (`build-v2-windows.yml`, reusable). Releases: `release-v2.yml` for `v
   Runs are files under `%LOCALAPPDATA%\DeepServer2\Records` (`DEEPSERVER2_RECORDS_DIR`
   overrides it; portable mode uses `<exe dir>\Data\Records`), never pruned (they are client proof). Copy mode lists OneDrive online-only files
   as `CloudOnly` instead of downloading them unless `download_cloud` is set; "Ignore system and
-  temp files" is `scan_core::is_junk`, shared with Compare. Commands: `src-tauri/src/record.rs`,
+  temp files" is `scan_core::is_junk`, shared with Compare. `meta.rs` keeps created/accessed/modified
+  times and attributes after each copy (`PreserveOptions` on `TransferSettings`, default on;
+  folders DeepServer creates are dated last, deepest first; a failure is a warning in
+  `ItemResult.message`). ACL, owner and streams are not kept yet. The app manifest
+  (`src-tauri/windows/app.manifest`) sets `longPathAware`. Commands: `src-tauri/src/record.rs`,
   one record at a time, keeping the PC awake while it runs; UI `RecordPage.vue` (`/compare/record`) and `RecordReportPage.vue`
   (`/compare/record/:id`); the running job lives in `recordJob` (`src/lib/record.ts`) so leaving
   the page keeps Finish/Cancel.

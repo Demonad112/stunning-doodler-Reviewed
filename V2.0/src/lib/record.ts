@@ -6,6 +6,12 @@ import { currentJob, type JobInfo } from './job'
 /** Copy: DeepServer copies. Watch: another program copies and DeepServer checks what arrives. */
 export type RecordMode = 'copy' | 'watch'
 export type VerifyLevel = 'sizeAndTime' | 'hash'
+/** What a copy keeps besides the bytes. */
+export interface PreserveOptions {
+  timestamps: boolean
+  attributes: boolean
+}
+export const defaultPreserve: PreserveOptions = { timestamps: true, attributes: true }
 export type RunState = 'prepared' | 'running' | 'watching' | 'completed' | 'cancelled' | 'failed'
 export type Phase = 'scanning' | 'copying' | 'watching' | 'finishing' | 'done'
 
@@ -152,7 +158,7 @@ export function startRecord(
   destination: string,
   mode: RecordMode,
   verify: VerifyLevel,
-  options: { ignoreJunk: boolean; downloadCloud: boolean },
+  options: { ignoreJunk: boolean; downloadCloud: boolean; preserve: PreserveOptions },
   onProgress: (progress: RecordProgress) => void,
 ): Promise<RunDetails> {
   return invoke<RunDetails>('record_start', {
@@ -169,10 +175,12 @@ export function startRecord(
 export function copyMissingRecord(
   verify: VerifyLevel,
   onProgress: (progress: RecordProgress) => void,
+  preserve: PreserveOptions = defaultPreserve,
 ): Promise<RunDetails> {
   return invoke<RunDetails>('record_copy_missing', {
     verify,
     job: currentJob(),
+    preserve,
     onEvent: channel(onProgress),
   })
 }

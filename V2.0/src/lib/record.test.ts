@@ -59,7 +59,7 @@ describe('record commands', () => {
       'D:\\dst',
       'watch',
       'hash',
-      { ignoreJunk: true, downloadCloud: false },
+      { ignoreJunk: true, downloadCloud: false, preserve: { timestamps: true, attributes: false } },
       (progress) => seen.push(progress),
     )
     core.channels[0]?.onmessage({ phase: 'watching', filesDone: 3 })
@@ -73,6 +73,7 @@ describe('record commands', () => {
       options: {
         ignoreJunk: true,
         downloadCloud: false,
+        preserve: { timestamps: true, attributes: false },
         job: { client: '', ticket: '', technician: '' },
       },
       onEvent: core.channels[0],

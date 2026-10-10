@@ -705,7 +705,7 @@ function shortPath(path: string): string {
             formatBytes(result.summary.missingBytes)
           }}) from <strong class="break-all">{{ compared.left }}</strong> to
           <strong class="break-all">{{ compared.right }}</strong
-          >? Files already there are never overwritten.
+          >? Files already there are never overwritten. Dates and attributes are kept.
         </p>
         <button
           type="button"

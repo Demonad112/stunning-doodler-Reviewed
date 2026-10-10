@@ -165,6 +165,7 @@ pub(crate) fn copy_options(settings: &TransferSettings) -> CopyOptions {
     CopyOptions {
         verify: settings.verify,
         conflict: settings.conflict,
+        preserve: settings.preserve,
         ..CopyOptions::default()
     }
 }
@@ -222,6 +223,9 @@ pub(crate) struct Copier<'a> {
     cancel: &'a CancelToken,
     sink: &'a mut dyn TransferSink,
     results: JsonlWriter,
+    /// Folders this run created. Their dates and attributes are set last, deepest first, because
+    /// writing files into a folder changes its modified time.
+    made_folders: Vec<String>,
     pub(crate) progress: TransferProgress,
 }
 
@@ -242,6 +246,7 @@ impl<'a> Copier<'a> {
             cancel,
             sink,
             results: store.results_writer()?,
+            made_folders: Vec::new(),
             progress: TransferProgress {
                 run_id: store.id(),
                 phase: Phase::Copying,
@@ -271,7 +276,13 @@ impl<'a> Copier<'a> {
         if self.cancel.is_cancelled() {
             return Ok(());
         }
-        if let Err(error) = fs::create_dir_all(destination_path(&self.destination, relative_path)) {
+        let target = destination_path(&self.destination, relative_path);
+        let existed = target.is_dir();
+        let created = fs::create_dir_all(&target);
+        if created.is_ok() && !existed {
+            self.made_folders.push(relative_path.to_owned());
+        }
+        if let Err(error) = created {
             let mut item = ItemResult::not_copied(
                 relative_path,
                 ItemKind::Folder,
@@ -331,10 +342,15 @@ impl<'a> Copier<'a> {
         self.progress.files_done += 1;
 
         let item = match attempt.result {
-            Ok(CopyOutcome::Copied { bytes, hash }) => ItemResult {
+            Ok(CopyOutcome::Copied {
+                bytes,
+                hash,
+                warnings,
+            }) => ItemResult {
                 source_hash: hash.clone(),
                 dest_hash: hash,
                 attempts: attempt.attempts,
+                message: (!warnings.is_empty()).then(|| warnings.join(" ")),
                 ..ItemResult::done(relative_path, bytes, ItemStatus::Copied)
             },
             Ok(CopyOutcome::SkippedIdentical) => {
@@ -453,7 +469,21 @@ impl<'a> Copier<'a> {
         self.record(done)
     }
 
+    /// Best effort: a folder whose dates can't be set is still a copied folder.
+    fn keep_folder_metadata(&mut self) {
+        let mut folders = std::mem::take(&mut self.made_folders);
+        folders.sort_by_key(|path| std::cmp::Reverse(path.matches('/').count()));
+        for relative in folders {
+            let source = destination_path(&self.source, &relative);
+            if let Ok(wanted) = crate::meta::read(&source) {
+                let target = destination_path(&self.destination, &relative);
+                let _ = crate::meta::apply(&target, &wanted, &self.options.preserve);
+            }
+        }
+    }
+
     pub(crate) fn finish(mut self) -> Result<()> {
+        self.keep_folder_metadata();
         self.progress.phase = Phase::Done;
         self.progress.current = None;
         self.sink.progress(&self.progress);
@@ -477,6 +507,7 @@ mod tests {
             conflict: ConflictPolicy::Skip,
             ignore_junk: false,
             download_cloud: false,
+            preserve: Default::default(),
         }
     }
 
