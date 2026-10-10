@@ -1,6 +1,7 @@
 //! What each kind of report holds, its row on the Reports page, and its export layout.
 
 use crate::doc::{Document, Section, Share, Table, Tile, Tone, Verdict};
+use crate::explorer::{self, Explorer};
 use crate::{
     format_bytes, format_count, plural, record_job, Body, Entry, JobInfo, ReportKind, Saved,
 };
@@ -51,6 +52,9 @@ pub struct UsageReport {
     pub largest_files: Vec<FileItem>,
     pub types: Vec<TypeItem>,
     pub removed: Vec<Removed>,
+    /// The pruned size tree and the biggest files per type, for the report's explorer. Absent in
+    /// reports saved before it existed.
+    pub explorer: Option<Explorer>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -437,6 +441,13 @@ pub(crate) fn document(saved: &Saved) -> Document {
                     },
                 );
             }
+            let explorer_on = report
+                .explorer
+                .as_ref()
+                .is_some_and(|explorer| explorer.nodes.len() > 1);
+            let explorer_data = report.explorer.as_ref().filter(|_| explorer_on).map(
+                |explorer| serde_json::json!({ "x": explorer::page_data(explorer, &report.path) }),
+            );
             let mut tiles = vec![
                 tile(
                     "Used",
@@ -474,6 +485,8 @@ pub(crate) fn document(saved: &Saved) -> Document {
                 tiles,
                 notes,
                 tables,
+                explorer: explorer_on,
+                data: explorer_data,
                 ..Document::default()
             }
         }
@@ -789,6 +802,163 @@ mod tests {
         let doc = document(&saved);
         assert_eq!(doc.tables[0].heading, "Removed");
         assert_eq!(doc.tables[0].rows[0][2], "Recycle Bin");
+    }
+
+    #[test]
+    fn usage_report_with_an_explorer_gets_the_page_and_old_reports_do_not() {
+        use crate::explorer::{ExplorerNode, KIND_FILE};
+        let mut report = UsageReport {
+            path: r"C:\".into(),
+            size: 10,
+            ..UsageReport::default()
+        };
+        // A report saved before the explorer existed: no explorer, no page, same tables.
+        let old: UsageReport = serde_json::from_str(r#"{"path":"C:\\","size":10}"#).unwrap();
+        assert!(old.explorer.is_none());
+        let doc = document(&saved(Body::DiskUsage(old)));
+        assert!(!doc.explorer && doc.data.is_none());
+
+        // An empty scan has nothing to explore.
+        report.explorer = Some(Explorer::default());
+        assert!(!document(&saved(Body::DiskUsage(report.clone()))).explorer);
+
+        report.explorer = Some(Explorer {
+            nodes: vec![
+                ExplorerNode {
+                    name: r"C:\".into(),
+                    disk: 10,
+                    ..ExplorerNode::default()
+                },
+                ExplorerNode {
+                    name: "a.mp4".into(),
+                    disk: 10,
+                    kind: KIND_FILE,
+                    ..ExplorerNode::default()
+                },
+            ],
+            ..Explorer::default()
+        });
+        let doc = document(&saved(Body::DiskUsage(report)));
+        assert!(doc.explorer);
+        let data = doc.data.expect("data island");
+        assert_eq!(data["x"]["root"], r"C:\");
+        assert_eq!(data["x"]["nodes"][1]["n"], "a.mp4");
+        // The flat tables are still there for readers without scripts.
+        assert_eq!(doc.tables[0].heading, "Largest files");
+    }
+
+    /// The explorer page for the script tests in `src/lib/reportExplorer.test.ts`: names that
+    /// would break markup, folders three levels deep, a folded row and four file types.
+    /// `UPDATE_FIXTURES=1 cargo test -p report-core explorer_fixture` rewrites it.
+    #[test]
+    fn explorer_fixture_matches_what_the_page_renders() {
+        use crate::explorer::{ExplorerNode, TypeFiles, KIND_DIR, KIND_FILE, KIND_MORE};
+        let node = |name: &str, disk: u64, files: u64, kind: u8, parent: u32| ExplorerNode {
+            name: name.into(),
+            disk,
+            files,
+            kind,
+            parent,
+        };
+        let hostile = "</script><b>x</b>.txt";
+        let explorer = Explorer {
+            nodes: vec![
+                node(r"C:\", 1000, 10, KIND_DIR, 0),
+                node("Users", 600, 6, KIND_DIR, 0),
+                node("Windows", 300, 3, KIND_DIR, 0),
+                node("pagefile.sys", 90, 1, KIND_FILE, 0),
+                node("(2 smaller items)", 10, 2, KIND_MORE, 0),
+                node("Alice", 500, 5, KIND_DIR, 1),
+                node(hostile, 100, 1, KIND_FILE, 1),
+                node("Movies", 400, 1, KIND_DIR, 5),
+                node("notes.txt", 100, 1, KIND_FILE, 5),
+                node("clip.mp4", 400, 1, KIND_FILE, 7),
+                node("system.dll", 300, 1, KIND_FILE, 2),
+            ],
+            types: vec![
+                TypeItem {
+                    extension: "mp4".into(),
+                    size: 400,
+                    files: 1,
+                },
+                TypeItem {
+                    extension: "dll".into(),
+                    size: 300,
+                    files: 1,
+                },
+                TypeItem {
+                    extension: "txt".into(),
+                    size: 200,
+                    files: 2,
+                },
+                TypeItem {
+                    extension: "sys".into(),
+                    size: 90,
+                    files: 1,
+                },
+            ],
+            type_files: vec![
+                TypeFiles {
+                    extension: "mp4".into(),
+                    files: vec![(r"Users\Alice\Movies\clip.mp4".into(), 400)],
+                },
+                TypeFiles {
+                    extension: "dll".into(),
+                    files: vec![(r"Windows\system.dll".into(), 300)],
+                },
+                TypeFiles {
+                    extension: "txt".into(),
+                    files: vec![
+                        (format!(r"Users\{hostile}"), 100),
+                        (r"Users\Alice\notes.txt".into(), 100),
+                    ],
+                },
+                TypeFiles {
+                    extension: "sys".into(),
+                    files: vec![("pagefile.sys".into(), 90)],
+                },
+            ],
+            types_more: 0,
+            scanned_items: 4000,
+        };
+        let report = UsageReport {
+            path: r"C:\".into(),
+            size: 1000,
+            files: 10,
+            dirs: 4,
+            explorer: Some(explorer),
+            ..UsageReport::default()
+        };
+        let html = document(&saved(Body::DiskUsage(report))).html("Fixture", "fixed date");
+        // The hostile name did not open a script or element: ours, the explorer's and the island.
+        assert_eq!(html.matches("<script").count(), 3);
+        assert!(!html.contains("<b>x"));
+
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/explorer.html");
+        if std::env::var_os("UPDATE_FIXTURES").is_some() {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, &html).unwrap();
+        }
+        let committed = std::fs::read_to_string(&path)
+            .expect("tests/fixtures/explorer.html (run with UPDATE_FIXTURES=1)")
+            .replace("\r\n", "\n");
+        // Only the explorer's own parts: the shared script may change without touching these.
+        let part = |page: &str, from: &str, to: &str| -> String {
+            let start = page.find(from).expect(from);
+            let end = page[start..].find(to).expect(to) + start;
+            page[start..end].to_string()
+        };
+        for (from, to) in [
+            ("<script type=\"application/json\" id=\"d\">", "</script>"),
+            ("<script>\n(function(){\nvar host=", "</script>"),
+        ] {
+            assert_eq!(
+                part(&committed, from, to),
+                part(&html, from, to),
+                "fixture is stale: run UPDATE_FIXTURES=1 cargo test -p report-core explorer_fixture"
+            );
+        }
     }
 
     #[test]

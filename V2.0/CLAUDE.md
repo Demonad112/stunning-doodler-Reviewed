@@ -80,7 +80,7 @@ installers (`build-v2-windows.yml`, reusable). Releases: `release-v2.yml` for `v
   column). HTML carries one shared inline script under a hashed CSP `<meta>` (no network, no
   other scripts), a JSON data island with `< > & U+2028/9` escaped, and works with JS off
   (filter/Copy/Save are `data-js hidden` until it runs). Lists cap at 5,000 HTML rows (CSV is
-  complete); print keeps the first 200 rows. Every new report field needs `#[serde(default)]`. Commands:
+  complete); print keeps the first 200 rows. Disk usage reports also carry an `Explorer` (`report-core/src/explorer.rs`: pruned size tree as a flat parent-index list, capped at 20,000 nodes, plus the biggest 200 files per type) drawn by its own second script and style (`Document.explorer`, CSP lists both hashes); `tests/fixtures/explorer.html` feeds `src/lib/reportExplorer.test.ts` (`UPDATE_FIXTURES=1 cargo test -p report-core explorer_fixture` refreshes it). Every new report field needs `#[serde(default)]`. Commands:
   `src-tauri/src/reports.rs`; UI `ReportsPage.vue`. Client / Ticket / Technician
   (`JobFields.vue`, `src/lib/job.ts`) are typed once and sent with every run.
 - Commands live in one file per area (`src-tauri/src/compare.rs`). Long jobs are `async` +

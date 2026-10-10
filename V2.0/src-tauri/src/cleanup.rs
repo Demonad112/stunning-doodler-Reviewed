@@ -162,6 +162,7 @@ fn usage_report(
             })
             .collect(),
         removed: Vec::new(),
+        explorer: Some(report_core::explorer::build(tree)),
     }
 }
 
