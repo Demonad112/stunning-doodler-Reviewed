@@ -14,7 +14,7 @@ pub(crate) const MAX_SCRIPT_FOLDERS: usize = 5_000;
 /// A robocopy line is cut here (in UTF-16 units, as the page script counts) and continued on a
 /// new line, so no line gets near the 32,767 character limit of a command line.
 const LINE_LIMIT: usize = 6_000;
-const SUFFIX: &str = " /COPY:DAT /R:2 /W:1 /XJ /NP";
+const SUFFIX: &str = " /COPY:DATSO /DCOPY:DAT /R:2 /W:1 /XJ /NP";
 const CHECK: &str = "if ($LASTEXITCODE -ge 8) { $failed++ }";
 /// The folder the second command copies into, as a PowerShell expression.
 pub(crate) const DOWNLOADS_BASE: &str =
@@ -446,12 +446,12 @@ mod tests {
         assert_eq!(lines[1], "$failed = 0");
         assert_eq!(
             lines[2],
-            r"robocopy 'C:\Data' 'E:\Backup' 'root.txt' /COPY:DAT /R:2 /W:1 /XJ /NP"
+            r"robocopy 'C:\Data' 'E:\Backup' 'root.txt' /COPY:DATSO /DCOPY:DAT /R:2 /W:1 /XJ /NP"
         );
         assert_eq!(lines[3], CHECK);
         assert_eq!(
             lines[4],
-            r"robocopy 'C:\Data\Docs' 'E:\Backup\Docs' 'b.txt' 'a b.txt' 'it''s.txt' /COPY:DAT /R:2 /W:1 /XJ /NP"
+            r"robocopy 'C:\Data\Docs' 'E:\Backup\Docs' 'b.txt' 'a b.txt' 'it''s.txt' /COPY:DATSO /DCOPY:DAT /R:2 /W:1 /XJ /NP"
         );
         assert!(lines.last().unwrap().contains("$failed -gt 0"));
         assert_eq!((plan.files, plan.bytes), (4, 36));

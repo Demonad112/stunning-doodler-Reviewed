@@ -18,6 +18,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 import {
   bytesPerSecond,
   countByReason,
+  defaultPreserve,
   formatNotCopiedList,
   formatTimeLeft,
   isCancelled,
@@ -59,7 +60,11 @@ describe('record commands', () => {
       'D:\\dst',
       'watch',
       'hash',
-      { ignoreJunk: true, downloadCloud: false, preserve: { timestamps: true, attributes: false } },
+      {
+        ignoreJunk: true,
+        downloadCloud: false,
+        preserve: { ...defaultPreserve, attributes: false },
+      },
       (progress) => seen.push(progress),
     )
     core.channels[0]?.onmessage({ phase: 'watching', filesDone: 3 })
@@ -73,7 +78,7 @@ describe('record commands', () => {
       options: {
         ignoreJunk: true,
         downloadCloud: false,
-        preserve: { timestamps: true, attributes: false },
+        preserve: { ...defaultPreserve, attributes: false },
         job: { client: '', ticket: '', technician: '' },
       },
       onEvent: core.channels[0],

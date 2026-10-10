@@ -477,7 +477,7 @@ impl<'a> Copier<'a> {
             let source = destination_path(&self.source, &relative);
             if let Ok(wanted) = crate::meta::read(&source) {
                 let target = destination_path(&self.destination, &relative);
-                let _ = crate::meta::apply(&target, &wanted, &self.options.preserve);
+                let _ = crate::meta::apply(&source, &target, &wanted, &self.options.preserve);
             }
         }
     }

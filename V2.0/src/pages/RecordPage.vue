@@ -12,11 +12,13 @@ import {
   cancelRecord,
   finishRecord,
   formatTimeLeft,
+  defaultPreserve,
   isCancelled,
   listRecords,
   recordJob,
   startRecord,
   timeLeftMs,
+  type PreserveOptions,
   type RecordMode,
   type RecordProgress,
   type RunSummary,
@@ -27,8 +29,18 @@ const paths = reactive(loadPaths())
 const mode = ref<RecordMode>('watch')
 const hash = ref(false)
 const downloadCloud = ref(false)
-const keepTimes = ref(true)
-const keepAttributes = ref(true)
+const keep = reactive<PreserveOptions>({ ...defaultPreserve })
+const keepChoices: { key: keyof PreserveOptions; label: string }[] = [
+  { key: 'timestamps', label: 'Keep dates (created, modified, accessed; folders too)' },
+  { key: 'attributes', label: 'Keep attributes (read-only, hidden, system, archive)' },
+  { key: 'acl', label: 'Keep permissions (who can open it)' },
+  { key: 'owner', label: 'Keep owner (needs Administrator to set someone else)' },
+  { key: 'audit', label: 'Keep audit rules (needs Administrator)' },
+  {
+    key: 'streams',
+    label: 'Keep alternate data streams (e.g. the "downloaded from the internet" mark)',
+  },
+]
 const error = ref('')
 const recent = ref<RunSummary[]>([])
 
@@ -99,7 +111,7 @@ async function start(): Promise<void> {
       {
         ignoreJunk: ignoreJunk.value,
         downloadCloud: mode.value === 'copy' && downloadCloud.value,
-        preserve: { timestamps: keepTimes.value, attributes: keepAttributes.value },
+        preserve: { ...keep },
       },
       (progress: RecordProgress) => {
         // "Done" closes each step (listing, then the copy); the next step's progress follows.
@@ -304,28 +316,20 @@ function when(ms: number): string {
         />
         Download OneDrive online-only files (off: they are listed as not copied)
       </label>
-      <label
-        v-if="mode === 'copy'"
-        class="mt-2 flex w-fit items-center gap-2 text-[13px]"
-      >
-        <input
-          v-model="keepTimes"
-          type="checkbox"
-          class="size-4 accent-accent"
-        />
-        Keep dates (created, modified, accessed; folders too)
-      </label>
-      <label
-        v-if="mode === 'copy'"
-        class="mt-2 flex w-fit items-center gap-2 text-[13px]"
-      >
-        <input
-          v-model="keepAttributes"
-          type="checkbox"
-          class="size-4 accent-accent"
-        />
-        Keep attributes (read-only, hidden, system, archive)
-      </label>
+      <template v-if="mode === 'copy'">
+        <label
+          v-for="choice in keepChoices"
+          :key="choice.key"
+          class="mt-2 flex w-fit items-center gap-2 text-[13px]"
+        >
+          <input
+            v-model="keep[choice.key]"
+            type="checkbox"
+            class="size-4 accent-accent"
+          />
+          {{ choice.label }}
+        </label>
+      </template>
       <JobFields class="mt-4" />
       <p
         v-if="mode === 'watch'"

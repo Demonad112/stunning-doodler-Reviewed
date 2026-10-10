@@ -16,6 +16,14 @@ pub struct PreserveOptions {
     pub timestamps: bool,
     /// Read-only, hidden, system, archive, not-indexed and temporary flags.
     pub attributes: bool,
+    /// Permissions (the DACL, with its "inheritance blocked" flag).
+    pub acl: bool,
+    /// Owner and primary group. Setting someone else as owner needs the restore privilege.
+    pub owner: bool,
+    /// Audit rules (the SACL). Needs the security privilege, so off unless asked for.
+    pub audit: bool,
+    /// Alternate data streams such as `Zone.Identifier`.
+    pub streams: bool,
 }
 
 impl Default for PreserveOptions {
@@ -23,6 +31,10 @@ impl Default for PreserveOptions {
         Self {
             timestamps: true,
             attributes: true,
+            acl: true,
+            owner: true,
+            audit: false,
+            streams: true,
         }
     }
 }
@@ -92,20 +104,32 @@ pub fn clear_read_only(path: &Path) {
     }
 }
 
-/// Puts `source` on `destination` as far as `options` ask. Returns one sentence per part that
-/// could not be kept.
-pub fn apply(destination: &Path, source: &SourceMeta, options: &PreserveOptions) -> Vec<String> {
+/// Puts `wanted` (read from `source`) on `destination` as far as `options` ask: streams first
+/// (writing them touches the file), then dates and attributes, permissions and owner last so a
+/// restrictive ACL cannot get in the way. Returns one sentence per part that could not be kept.
+pub fn apply(
+    source: &Path,
+    destination: &Path,
+    wanted: &SourceMeta,
+    options: &PreserveOptions,
+) -> Vec<String> {
     let mut warnings = Vec::new();
+    if options.streams {
+        if let Err(error) = crate::secure::copy_streams(source, destination) {
+            warnings.push(format!("Alternate data streams were not kept: {error}"));
+        }
+    }
     if options.timestamps {
-        if let Err(error) = set_times(destination, source) {
+        if let Err(error) = set_times(destination, wanted) {
             warnings.push(format!("Dates were not kept: {error}"));
         }
     }
     if options.attributes {
-        if let Err(error) = set_attributes(destination, source.attributes) {
+        if let Err(error) = set_attributes(destination, wanted.attributes) {
             warnings.push(format!("Attributes were not kept: {error}"));
         }
     }
+    warnings.extend(crate::secure::copy_security(source, destination, options));
     warnings
 }
 
@@ -231,7 +255,7 @@ mod tests {
         wanted.modified = Some(old + Duration::from_secs(120));
         wanted.attributes = 0x2 | 0x1;
 
-        let warnings = apply(&target, &wanted, &PreserveOptions::default());
+        let warnings = apply(&source, &target, &wanted, &PreserveOptions::default());
 
         assert!(warnings.is_empty(), "{warnings:?}");
         let got = std::fs::metadata(&target).unwrap();
