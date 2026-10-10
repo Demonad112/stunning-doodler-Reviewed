@@ -1,5 +1,10 @@
 * text=auto eol=lf
 
+# Hooks and scripts run in the Linux cloud shell: CRLF breaks them
+*.js eol=lf
+*.cjs eol=lf
+*.sh eol=lf
+
 *.ico binary
 *.png binary
 *.jpg binary
