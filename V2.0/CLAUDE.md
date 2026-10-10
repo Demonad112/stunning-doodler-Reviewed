@@ -74,8 +74,13 @@ installers (`build-v2-windows.yml`, reusable). Releases: `release-v2.yml` for `v
   quick cleanups) are JSON files in `%LOCALAPPDATA%\DeepServer2\Reports`
   (`DEEPSERVER2_REPORTS_DIR` overrides it), saved automatically; records stay in their run
   folders, with the job details in `job.json`. `list` merges both for the Reports page. Every
-  report becomes a `Document` (tiles + tables) that renders as standalone HTML (branded with the
-  company name from Settings) or CSV (first table, BOM, formulas defused). Commands:
+  report becomes a `Document` (explicit `verdict`, tiles, tables, `sections`: folds, copy/save
+  code blocks, notes) that renders as standalone HTML (branded with the company name from
+  Settings) or CSV (first table, BOM, formulas defused, raw "Bytes" column after the size
+  column). HTML carries one shared inline script under a hashed CSP `<meta>` (no network, no
+  other scripts), a JSON data island with `< > & U+2028/9` escaped, and works with JS off
+  (filter/Copy/Save are `data-js hidden` until it runs). Lists cap at 5,000 HTML rows (CSV is
+  complete); print keeps the first 200 rows. Every new report field needs `#[serde(default)]`. Commands:
   `src-tauri/src/reports.rs`; UI `ReportsPage.vue`. Client / Ticket / Technician
   (`JobFields.vue`, `src/lib/job.ts`) are typed once and sent with every run.
 - Commands live in one file per area (`src-tauri/src/compare.rs`). Long jobs are `async` +

@@ -1,6 +1,6 @@
 //! What each kind of report holds, its row on the Reports page, and its export layout.
 
-use crate::doc::{Document, Share, Table, Tile, Tone};
+use crate::doc::{Document, Share, Table, Tile, Tone, Verdict};
 use crate::{
     format_bytes, format_count, plural, record_job, Body, Entry, JobInfo, ReportKind, Saved,
 };
@@ -249,6 +249,11 @@ pub(crate) fn document(saved: &Saved) -> Document {
                 title: "Compare".into(),
                 subtitle: format!("{} → {}", report.source, report.destination),
                 meta,
+                verdict: Some(if report.missing > 0 {
+                    Verdict::Bad
+                } else {
+                    Verdict::Good
+                }),
                 tiles: vec![
                     tile(
                         "Source",
@@ -311,7 +316,6 @@ pub(crate) fn document(saved: &Saved) -> Document {
                         .iter()
                         .map(|path| vec![path.clone()])
                         .collect(),
-                    bad_rows: true,
                     footnote: if listed < report.missing {
                         format!(
                             "The first {} of {} are listed.",
@@ -321,7 +325,10 @@ pub(crate) fn document(saved: &Saved) -> Document {
                     } else {
                         format!("Compared in {}.", seconds(report.elapsed_ms))
                     },
-                }],
+                    ..Table::default()
+                }
+                .toned(Tone::Bad)],
+                ..Document::default()
             }
         }
         Body::DiskUsage(report) => {
@@ -358,6 +365,8 @@ pub(crate) fn document(saved: &Saved) -> Document {
                         .iter()
                         .map(|file| size_row(&file.path, file.size, report.size))
                         .collect(),
+                    size_col: Some(1),
+                    row_bytes: report.largest_files.iter().map(|file| file.size).collect(),
                     ..Table::default()
                 },
                 Table {
@@ -368,6 +377,12 @@ pub(crate) fn document(saved: &Saved) -> Document {
                         .top_folders
                         .iter()
                         .map(|folder| size_row(&folder.name, folder.size, report.size))
+                        .collect(),
+                    size_col: Some(1),
+                    row_bytes: report
+                        .top_folders
+                        .iter()
+                        .map(|folder| folder.size)
                         .collect(),
                     ..Table::default()
                 },
@@ -387,6 +402,8 @@ pub(crate) fn document(saved: &Saved) -> Document {
                             size_row(&name, kind.size, report.size)
                         })
                         .collect(),
+                    size_col: Some(1),
+                    row_bytes: report.types.iter().map(|kind| kind.size).collect(),
                     ..Table::default()
                 },
             ];
@@ -412,6 +429,8 @@ pub(crate) fn document(saved: &Saved) -> Document {
                                 ]
                             })
                             .collect(),
+                        size_col: Some(1),
+                        row_bytes: report.removed.iter().map(|item| item.size).collect(),
                         ..Table::default()
                     },
                 );
@@ -449,16 +468,18 @@ pub(crate) fn document(saved: &Saved) -> Document {
                 title: "Disk usage".into(),
                 subtitle: report.path.clone(),
                 meta,
+                verdict: (removed > 0).then_some(Verdict::Good),
                 tiles,
                 notes,
-                share: None,
                 tables,
+                ..Document::default()
             }
         }
         Body::Cleanup(report) => Document {
             title: "Quick cleanup".into(),
             subtitle: format!("Freed {}", format_bytes(report.freed())),
             meta,
+            verdict: Some(Verdict::Good),
             tiles: vec![tile(
                 "Freed",
                 format_bytes(report.freed()),
@@ -469,7 +490,6 @@ pub(crate) fn document(saved: &Saved) -> Document {
                 Tone::Good,
             )],
             notes: vec!["Files in use or changed in the last day are left in place.".into()],
-            share: None,
             tables: vec![Table {
                 heading: "Cleaned".into(),
                 columns: vec![
@@ -494,8 +514,11 @@ pub(crate) fn document(saved: &Saved) -> Document {
                         ]
                     })
                     .collect(),
+                size_col: Some(1),
+                row_bytes: report.items.iter().map(|item| item.freed).collect(),
                 ..Table::default()
             }],
+            ..Document::default()
         },
     }
 }
@@ -504,9 +527,13 @@ pub(crate) fn record_document(records: &Path, id: &str) -> Result<Document, Stri
     let store = RunStore::open(records, id).map_err(|err| err.to_string())?;
     let run = store.summary().map_err(|err| err.to_string())?;
     let results = store.latest_results().map_err(|err| err.to_string())?;
-    let not_copied: Vec<Vec<String>> = results
+    let failed_items: Vec<_> = results
         .values()
         .filter(|item| item.status == ItemStatus::NotCopied)
+        .collect();
+    let row_bytes: Vec<u64> = failed_items.iter().map(|item| item.size).collect();
+    let not_copied: Vec<Vec<String>> = failed_items
+        .iter()
         .map(|item| {
             let reason = item
                 .reason
@@ -540,6 +567,7 @@ pub(crate) fn record_document(records: &Path, id: &str) -> Result<Document, Stri
         title: record_title(&run).into(),
         subtitle: format!("{} → {}", run.settings.source, run.settings.destination),
         meta: meta(&job, run.created_at_ms, &run.machine, &run.user),
+        verdict: Some(record_verdict(&run)),
         tiles: vec![
             tile(
                 "Source",
@@ -574,7 +602,6 @@ pub(crate) fn record_document(records: &Path, id: &str) -> Result<Document, Stri
             },
         ],
         notes,
-        share: None,
         tables: vec![Table {
             heading: "Not copied".into(),
             columns: vec![
@@ -585,10 +612,24 @@ pub(crate) fn record_document(records: &Path, id: &str) -> Result<Document, Stri
             ],
             numeric: vec![false, true, false, false],
             rows: not_copied,
-            bad_rows: true,
-            footnote: String::new(),
-        }],
+            size_col: Some(1),
+            row_bytes,
+            ..Table::default()
+        }
+        .toned(Tone::Bad)],
+        ..Document::default()
     })
+}
+
+/// "All clear" only when the run finished and every file made it: a run that failed or was
+/// cancelled can have nothing in the not-copied list and still be unfinished.
+fn record_verdict(run: &RunSummary) -> Verdict {
+    let unfinished = matches!(run.state, RunState::Failed | RunState::Cancelled);
+    if unfinished || run.error.is_some() || run.totals.not_copied > 0 {
+        Verdict::Bad
+    } else {
+        Verdict::Good
+    }
 }
 
 #[cfg(test)]
@@ -676,5 +717,61 @@ mod tests {
         assert_eq!(row.headline, "Freed 2.00 KB");
         assert_eq!(row.subject, "Temporary files, Browser caches");
         assert_eq!(document(&saved).tables[0].rows.len(), 2);
+        assert_eq!(document(&saved).verdict, Some(Verdict::Good));
+    }
+
+    #[test]
+    fn record_verdict_matrix() {
+        use transfer_core::{
+            ConflictPolicy, RunTotals, TransferMode, TransferSettings, VerifyLevel,
+        };
+        let run = |state: RunState, not_copied: u64, error: Option<&str>| RunSummary {
+            id: "r".into(),
+            settings: TransferSettings {
+                source: "a".into(),
+                destination: "b".into(),
+                mode: TransferMode::Copy,
+                verify: VerifyLevel::SizeAndTime,
+                conflict: ConflictPolicy::Skip,
+                ignore_junk: false,
+                download_cloud: false,
+            },
+            state,
+            created_at_ms: 0,
+            started_at_ms: None,
+            finished_at_ms: None,
+            machine: String::new(),
+            user: String::new(),
+            totals: RunTotals {
+                not_copied,
+                ..RunTotals::default()
+            },
+            error: error.map(str::to_string),
+        };
+        assert_eq!(
+            record_verdict(&run(RunState::Completed, 0, None)),
+            Verdict::Good
+        );
+        assert_eq!(
+            record_verdict(&run(RunState::Watching, 0, None)),
+            Verdict::Good
+        );
+        assert_eq!(
+            record_verdict(&run(RunState::Completed, 2, None)),
+            Verdict::Bad
+        );
+        // The bug this fixes: a failed or cancelled run with nothing listed used to read "All clear".
+        assert_eq!(
+            record_verdict(&run(RunState::Failed, 0, None)),
+            Verdict::Bad
+        );
+        assert_eq!(
+            record_verdict(&run(RunState::Cancelled, 0, None)),
+            Verdict::Bad
+        );
+        assert_eq!(
+            record_verdict(&run(RunState::Completed, 0, Some("disk full"))),
+            Verdict::Bad
+        );
     }
 }
