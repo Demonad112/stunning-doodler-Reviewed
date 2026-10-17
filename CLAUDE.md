@@ -1,5 +1,7 @@
 # DeepServer: notes for Claude
 
+> **V2 replaces V1.** V1 (this root) is frozen: no new releases. New work is in `V2.0/` (see `V2.0/CLAUDE.md`, plan in `V2.0/docs/plan.md`, state in `docs/HANDOFF.md`). The rest of this file describes V1.
+
 DeepServer 1.0 = OpenDiff (Tauri 2 + Vue 3 + Rust, Apache-2.0, at the repo root) + a WinDirStat fork (C++, GPL-2) bundled as the **Disk Usage engine** (`native/diskusage`, shipped as the sidecar `deepserver-diskusage.exe`). One NSIS installer, Windows 10/11 and Server.
 
 ## How work is organised
@@ -31,20 +33,7 @@ From a worktree, set `CARGO_TARGET_DIR` to the main checkout's `src-tauri/target
 
 ## Adding a session mode
 
-Grep for an existing mode (e.g. `version-compare`) and mirror it in:
-
-- `types/session.ts` and its test
-- `sessionCatalog.ts` and its test
-- `sessionFactory.ts`
-- `router.ts`
-- `commandRegistry.ts`: every Ctrl+Alt letter is taken, so use Ctrl+Shift
-- `AppLayout.vue`: menus, `sessionIcon`, nav group
-- `HomeView.vue`: `homeTileGroups`
-- `shellChrome.ts`: help topic
-- all 8 locales
-- the Rust `session-core` `SessionType` enum, plus the `cli-core` label match
-
-`statusBarPhrases.ts` is needed only for a custom status bar.
+Follow `docs/add-session-mode.md` (the file list, mirrored from an existing mode).
 
 ## Gotchas
 
@@ -62,38 +51,24 @@ Grep for an existing mode (e.g. `version-compare`) and mirror it in:
 - Colours: chrome colours are `--ds-<role>-<hex>` / `--app-*` tokens (top of `src/styles/main.css`, light + `html[data-theme='dark']`). Don't add raw hex in styles; dark mode won't remap it. `src/styles/*Density.test.ts` assert on CSS source, so update them with a style change.
 - Bash tool: heredocs halve backslashes; write files containing backslashes with Write/Edit. Git Bash rewrites `origin/main:path`; prefix `MSYS_NO_PATHCONV=1`.
 - Full `pnpm test:unit` takes >10 min locally; run it in the background or scope to the touched files.
-- CI (`.github/workflows/`):
-  - `ci.yml`: quality + tests on every PR; a `changes` job gates the heavy Windows jobs by path
-  - `build-windows.yml` (reusable, called by `ci.yml` and `release.yml`): engine build, `Test-ForkChanges.ps1`, the real-engine `diskusage-core` test, the standard installer (`tauri build`) and the offline one (`tauri bundle` + `tauri.offline.conf.json`), the portable zip, `SHA256SUMS.txt`, and `scripts/windows/Test-Installer.ps1` against both installers
-  - `ci.yml` job `engine-upstream-tests` (only when `native/` changes): the upstream PS 7.6 suites and the stress test
-  - `release.yml`: `v*` tags only (or a manual run for an existing tag); see `docs/releasing.md`. Optional signing through `scripts/windows/sign.ps1`
-  - `prune-storage.yml`: manual only
-  - `repo-maintenance.yml`: manual only; deletes merged branches and/or one tag + release (`dry_run` defaults to true)
+- CI workflows and the cloud-session limits table: `docs/ci.md`.
 
 ## Session workflow (saves tokens)
 
-- **Start** by reading `docs/HANDOFF.md`. **End** each work block with `/handoff` (local edit; don't open a PR or branch just for it). Reference notes go in the repo (`docs/`), never only in the scratchpad: containers restart.
+- **Start** by reading `docs/HANDOFF.md`. **End** each work block by updating it with `/handoff` (local edit; don't open a PR or branch just for it). This is the one committed handoff file in this repo; it is the project exception to the global `/relay-handoff` rule. Reference notes go in the repo (`docs/`), never only in the scratchpad: containers restart.
 - **GitHub status**: `scripts/gh-status.sh release <tag> | run <id>|latest [wf] | runs [wf] | pr <n> | branches`. Prefer it over connector reads (releases, jobs, logs return 5–15k tokens).
-- **Waiting on CI**: spawn the `ci-watch` agent (Haiku) in the background with `pr <n>` or `run <id>`. Don't poll from the main context.
-- **PR watching**: the owner opts out. Don't call `subscribe_pr_activity` after creating a PR; use `ci-watch` instead.
+- **CI after a PR**: bind the PR with `ccd_pr`, call `set_monitor` once with auto-fix, and let the app wake the session. Never poll CI, and never use a subagent to watch it.
 - **Releases**: `/release-rc <tag>` (dispatches `release.yml` with `create_tag: true`).
 - **Before every push**: `scripts/prepush.sh` (the `.claude/settings.json` hook runs it on `git push`; `PREPUSH_SKIP=1` in the command bypasses). Code under `#[cfg(windows)]` isn't seen by Linux clippy: re-read it by hand, or `PREPUSH_WINDOWS=1` where the msvc target is installed.
 - **Never merge on red.** A flaky test is a bug: find the race and fix it in the PR.
 
-### Cloud session limits (don't retry these)
-
-| Blocked                                          | Use instead                                                      |
-| ------------------------------------------------ | ---------------------------------------------------------------- |
-| `git push` of tags, `git push --delete`          | `release.yml` with `create_tag: true`; Repo maintenance workflow |
-| Delete branch / edit release (no connector tool) | Repo maintenance workflow; owner via GitHub UI                   |
-| `rm` with a relative glob after `cd`             | absolute paths, or `git rm` / `git clean -n` first               |
-| Editing `.github/workflows/*` in auto mode       | allowed in `.claude/settings.json`; if still refused, ask once   |
+Cloud session limits (blocked pushes, deletes and edits, with the replacement for each) are in `docs/ci.md`.
 
 ## Local setup and plan (Windows laptop)
 
-- `main` tracks `origin/main`; run `git fetch` and fast-forward before relying on `.claude/`, `scripts/` or `docs/HANDOFF.md`. Fork-branch tooling (`ci-watch`, `/release-rc`, `/handoff`) is already in the repo.
-- Locally `gh` is authenticated (`Demonad112`), so use `scripts/gh-status.sh` or `gh` through Bash instead of the GitHub connector (it fails here: bad auth header). The `settings.json` allow-list still names cloud-only `mcp__github__*` tools.
+- `main` tracks `origin/main`; run `git fetch` and fast-forward before relying on `.claude/`, `scripts/` or `docs/HANDOFF.md`. Fork-branch tooling (`/release-rc`, `/handoff`) is already in the repo.
+- Locally `gh` is authenticated (`Demonad112`), so use `scripts/gh-status.sh` or `gh` through Bash instead of the GitHub connector (it fails here: bad auth header).
 - Analysis passes: low effort, `git` + `gh` only; don't load the root-level `*-reference.md` handoff files unless needed. Archive them under `~/.claude/handoffs/`.
 - Don't search `src-tauri/target/`, `node_modules/`, `native/diskusage/build/` or `docs/history/opendiff/`.
-- Release testing: `laptop-check` agent (scripted half), then the owner's manual pass; plan in `testing-plan.md`, current step in `docs/HANDOFF.md`.
+- Release testing: `laptop-check` agent (scripted half), then the owner's manual pass; plan in `docs/testing-plan.md`, current step in `docs/HANDOFF.md`.
 - Laptop runs at 175% scaling. Computer-use can't see WebView2 `<select>` popups or type in folder pickers; type paths into the app's path fields.
