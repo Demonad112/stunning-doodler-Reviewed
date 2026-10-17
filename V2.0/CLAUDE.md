@@ -66,7 +66,12 @@ installers (`build-v2-windows.yml`, reusable). Releases: `release-v2.yml` for `v
   deleted: outside the scanned folder, Windows, Program Files, Users and profile roots, known
   folders, pagefile/hiberfil, `$Recycle.Bin`, the Records folder), `drives` and `recycle`
   (`SHFileOperationW` with undo; Windows asks before deleting anything too big for the bin).
-  Sizes are `Node::disk` (space on disk; OneDrive online-only files are 0).
+  Sizes are `Node::disk` (space on disk; OneDrive online-only files are 0). Rows, largest files
+  and file types also carry `logical` (`Node::size`); the "Size on disk / Size" toggle
+  (`sizeMode` in `src/lib/cleanup.ts`, remembered in localStorage) swaps which one the lists,
+  treemap and totals show, while delete/pick always use the disk size. `Node::hard_linked`
+  marks every name of a hard-linked file (the Link icon); only the first keeps its disk size.
+  The largest-files list is the top 100 by disk size, in both modes.
   Deletes call `Tree::remove`, which subtracts from every folder above. Commands:
   `src-tauri/src/cleanup.rs`; UI `CleanupPage.vue` (`/cleanup`, `?scan=C:\` starts a scan) with
   `TreemapView.vue` (squarified, one level, `src/lib/treemap.ts`) and `DriveTiles.vue` (also on

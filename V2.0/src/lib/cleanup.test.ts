@@ -36,6 +36,10 @@ import {
   previewDelete,
   refreshElevated,
   removeMany,
+  rowsFor,
+  setSizeMode,
+  shownBytes,
+  sizeMode,
   summarize,
   type ItemResult,
   type QuickWin,
@@ -50,6 +54,8 @@ function row(id: number, name: string, size: number): CleanupRow {
     name,
     kind: 'dir',
     size,
+    logical: size,
+    hardLinked: false,
     files: 1,
     dirs: 0,
     cloudFiles: 0,
@@ -254,5 +260,33 @@ describe('drive helpers', () => {
     expect(scanPercent(200, drive)).toBe(50)
     expect(scanPercent(5000, drive)).toBe(99)
     expect(scanPercent(200, undefined)).toBeNull()
+  })
+})
+
+describe('size mode', () => {
+  const small = { ...row(1, 'small', 8192), logical: 100 }
+  const big = { ...row(2, 'big', 4096), logical: 4000 }
+
+  it('keeps disk order and sizes in disk mode', () => {
+    expect(rowsFor([small, big], 'disk')).toEqual([small, big])
+    expect(shownBytes(small, 'disk')).toBe(8192)
+  })
+
+  it('swaps in logical sizes and sorts by them in logical mode', () => {
+    const shown = rowsFor([small, big], 'logical')
+    expect(shown.map((r) => [r.name, r.size])).toEqual([
+      ['big', 4000],
+      ['small', 100],
+    ])
+    expect(shownBytes(small, 'logical')).toBe(100)
+    expect(small.size).toBe(8192)
+  })
+
+  it('remembers the choice', () => {
+    setSizeMode('logical')
+    expect(sizeMode.value).toBe('logical')
+    expect(localStorage.getItem('deepserver-cleanup-size-mode')).toBe('logical')
+    setSizeMode('disk')
+    expect(sizeMode.value).toBe('disk')
   })
 })

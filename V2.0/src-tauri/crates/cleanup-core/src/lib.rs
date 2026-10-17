@@ -26,6 +26,10 @@ pub struct Row {
     /// Size on disk (whole clusters, compression and sparse aware, hard links once):
     /// online-only (cloud) files count as 0.
     pub size: u64,
+    /// Logical size (what Explorer shows as "Size"); cloud-only bytes included.
+    pub logical: u64,
+    /// Another name for the same data is in this scan; only one name carries the disk space.
+    pub hard_linked: bool,
     pub files: u64,
     pub dirs: u64,
     pub cloud_files: u64,
@@ -45,6 +49,8 @@ impl Row {
             name: node.name.clone(),
             kind: node.kind,
             size: node.disk,
+            logical: node.size,
+            hard_linked: node.hard_linked,
             files: node.files,
             dirs: node.dirs,
             cloud_files: node.cloud_files,
@@ -80,6 +86,8 @@ pub struct FileRow {
     /// The folder it is in.
     pub folder: String,
     pub size: u64,
+    pub logical: u64,
+    pub hard_linked: bool,
     pub modified_ms: Option<u64>,
 }
 
@@ -90,6 +98,7 @@ pub struct TypeRow {
     /// Lowercase, without the dot; empty for files with no extension.
     pub extension: String,
     pub size: u64,
+    pub logical: u64,
     pub files: u64,
 }
 
@@ -106,7 +115,8 @@ pub const LARGEST_FILES: usize = 100;
 
 pub fn overview(tree: &Tree) -> Overview {
     let mut largest = BinaryHeap::new();
-    let mut types: HashMap<String, (u64, u64)> = HashMap::new();
+    // Per extension: size on disk, logical size, file count.
+    let mut types: HashMap<String, (u64, u64, u64)> = HashMap::new();
     let mut stack = vec![0];
     while let Some(id) = stack.pop() {
         for child in tree.live_children(id) {
@@ -123,7 +133,8 @@ pub fn overview(tree: &Tree) -> Overview {
                     }
                     let entry = types.entry(extension(&node.name)).or_default();
                     entry.0 += node.disk;
-                    entry.1 += 1;
+                    entry.1 += node.size;
+                    entry.2 += 1;
                 }
             }
         }
@@ -142,15 +153,18 @@ pub fn overview(tree: &Tree) -> Overview {
                 .map(|parent| tree.path(parent).display().to_string())
                 .unwrap_or_default(),
             size,
+            logical: tree.node(id).size,
+            hard_linked: tree.node(id).hard_linked,
             modified_ms: tree.node(id).modified_ms,
         })
         .collect();
 
     let mut file_types: Vec<TypeRow> = types
         .into_iter()
-        .map(|(extension, (size, files))| TypeRow {
+        .map(|(extension, (size, logical, files))| TypeRow {
             extension,
             size,
+            logical,
             files,
         })
         .collect();
