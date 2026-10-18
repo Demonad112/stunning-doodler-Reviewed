@@ -4,35 +4,40 @@ Session state for the next Claude session. Update with `/handoff`; keep it short
 
 ## Goal
 
-DeepServer 2.0 (`V2.0/`: Compare, Record, Disk Cleanup) **replaces** V1. V1 gets no more releases. Plan: `V2.0/docs/plan.md`; install details: `V2.0/docs/install.md`.
+DeepServer 2.0 (`V2.0/`: Compare, Record, Disk Cleanup) **replaces** V1. V1 gets no more releases. Plan: `V2.0/docs/plan.md`; install details: `V2.0/docs/install.md`. Finishing plan (approved 2026-10-17): Phases B and C done, then D (Field tools), then E (polish).
 
 ## State (2026-10-17)
 
-- `main` (`5a6157c`): V2 Batches 0-5 merged, plus Batch 6 pieces: scan accuracy (#56), report engine (#60), Record successes (#61), compare recovery (#63), junk finder and bulk delete (#64), Compare copy-missing and re-check (#65), dates and attributes kept (#66), permissions, owner, audit rules, streams (#67).
-- Latest release: **v2.0.0-rc4** (pre-release). rc1 was installed on the owner's laptop; the owner's test of rc4 is not recorded here, so treat it as pending.
-- Open PRs: dependabot #69-#72 (do not merge until the full build and type-check pass).
-- Engine note: the MFT fast path, the size-on-disk toggle and the perf re-check are still open (see Next).
+- `main` (`5be3c43`): V2 Batches 0-5 merged, plus Batch 6 pieces #56, #60, #61, #63-#67, and harness audit #73.
+- Open PRs from this session (CI bound with auto-fix; merge only on green):
+  - [#74](https://github.com/Demonad112/stunning-doodler-Reviewed/pull/74) `v2/batch-6a-size-toggle`: Batch 6a.
+  - [#75](https://github.com/Demonad112/stunning-doodler-Reviewed/pull/75) `v2/batch-6b-reports`: Batch 6b (branched from `main`, independent of #74).
+- Dependabot #69-#72 still open (Phase A, owner's parallel session).
+- Latest release: **v2.0.0-rc4** (pre-release). The owner's test of rc4 is not recorded; treat as pending.
 
-## Next (suggested order)
+## Done this session
 
-1. Owner: test rc4 on a real drive; compare Disk Cleanup totals with Explorer "Size on disk".
-2. Scanner follow-ups:
-   - Optional MFT fast path for admin runs (the fork's `FinderNtfs.cpp` shows the technique; re-implement, don't copy).
-   - UI toggle "Size on disk / Size" in Disk Cleanup, and a hardlink marker on rows.
-   - Perf check: `cargo test -p scan-core --release --test perf -- --ignored --nocapture` (2x100k files < 5 s). Not re-run since the rewrite.
-3. Reports: Disk Cleanup and Record bars; CSV sizes as raw bytes; prune old reports.
-4. Batch 6 "Field tools", remaining items (check `V2.0/docs/plan.md` first): pre-flight review and conflict choice, share sign-in, RMM CLI, Explorer right-click, robocopy log import.
-5. Product polish: new logo (icon is still V1's), code signing (`scripts/windows/sign.ps1`; builds are unsigned), Settings page, in-app update check.
+- Perf check re-run after the scanner rewrite: 2x100k files scan + compare 0.53 s (limit 5 s). MFT fast path therefore deferred.
+- 6a (#74): "Size on disk / Size" toggle in Disk Cleanup (`sizeMode`, `src/lib/cleanup.ts`), `Node::hard_linked` + link icon on rows, `logical` on rows, files and types.
+- 6b (#75): `Share` bars for Record, Disk usage, Quick cleanup; CSV raw-bytes test for every kind; `report_core::prune` + `reports_prune` + Settings "Keep saved reports" (default: for ever).
 
-## Needs the owner
+## Next
 
-- Dependabot PRs #69-#72 (review after the build and type-check pass).
-- Harness branch `origin/Claude/fervent-blackwell-ea2c43` (unmerged; rewrites root `CLAUDE.md`). Decide whether to merge.
-- Repo maintenance workflow (`dry_run: true` first) for merged branches and V1 rc1/rc2 releases. Archive `open-diff` and `altWinDirStat` only after the owner confirms.
-- Harness audit follow-ups (2026-10-17): PR #68 edits `.claude/hooks/session-start.sh` too; the local `cd` fix conflicts with it, so merge carefully. The main checkout (`chore/session-start-hook-parallel`) has uncommitted changes to `.claude/settings.json`, five `.github/workflows/*.yml` files and this file; inspect before touching. The `ci-watch` agent (`.claude/agents/ci-watch.md`) is no longer referenced; delete it if the owner agrees.
+1. Merge #74 and #75 when CI is green (the app crate cannot build locally, so CI is the first check of `reports.rs` / `lib.rs`).
+2. Phase D, 6c: write the Batch 6 table in `V2.0/docs/plan.md`, then pre-flight review + conflict choice before Record, and share sign-in for UNC paths (`WNetAddConnection2`).
+3. Phase D, 6d: RMM CLI (headless, exit codes, JSON), Explorer right-click verbs, robocopy log import.
+4. Phase E (decide after D): new logo, Settings completeness, in-app update check, code signing (`scripts/windows/sign.ps1`), rc5, owner test.
+
+## Blocked / needs the owner
+
+- Phase A housekeeping runs in the owner's own parallel session: dependabot #69-#72 (after build + type-check), harness branch `origin/Claude/fervent-blackwell-ea2c43`, PR #68 vs the local `cd` fix in `.claude/hooks/session-start.sh`, uncommitted files in the main checkout, `.claude/agents/ci-watch.md`, repo-maintenance workflow (`dry_run: true` first), V1 rc1/rc2 releases.
+- Deferred to ship time (accepted until then): rc4 test result, MFT fast path decision, signing certificate, logo source.
 
 ## Notes
 
-- Windows Application Control blocks the `deepserver_lib` test binary locally (os error 4551): use `cargo test --workspace --no-fail-fast`; CI covers the app crate.
-- Local cargo from a worktree: `CARGO_TARGET_DIR=C:/Dev/projects/DeepServerV1.0/V2.0/src-tauri/target`. `windows-sys` `CreateFileW` needs the `Win32_Security` feature.
-- Clippy (1.98) flags `chunks_exact(const)`: use `as_chunks`.
+- Windows Application Control blocks build scripts and the `deepserver_lib` test binary locally (os error 4551): test and clippy per crate (`-p scan-core -p cleanup-core -p report-core`); CI covers the app crate.
+- Local cargo from a worktree: `CARGO_TARGET_DIR=C:/Dev/projects/DeepServerV1.0/V2.0/src-tauri/target`. A fresh worktree needs `corepack pnpm install --frozen-lockfile` in `V2.0/`.
+- The largest-files list is the top 100 by disk size in both size modes (logical mode relabels, does not re-rank).
+- Prune uses file modified time, never touches Record runs.
+- Clippy (1.98) flags `chunks_exact(const)`: use `as_chunks`. `windows-sys` `CreateFileW` needs `Win32_Security`.
+- Pause points requested by the owner: compact after B+C (now), then D+D, then decide.

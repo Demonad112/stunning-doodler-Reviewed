@@ -22,6 +22,7 @@ import {
   exportReport,
   kindLabels,
   listReports,
+  pruneReports,
   openReport,
   type ExportFormat,
   type ReportEntry,
@@ -145,7 +146,10 @@ function showToast(message: string): void {
   }, 4000)
 }
 
-onMounted(refresh)
+onMounted(async () => {
+  await pruneReports()
+  await refresh()
+})
 onBeforeUnmount(() => clearTimeout(toastTimer))
 </script>
 

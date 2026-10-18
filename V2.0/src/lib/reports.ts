@@ -1,5 +1,6 @@
 import { invoke, isTauri } from '@tauri-apps/api/core'
 import { save } from '@tauri-apps/plugin-dialog'
+import { ref, watch } from 'vue'
 import type { JobInfo } from './job'
 import { brand } from './job'
 
@@ -31,6 +32,47 @@ export function listReports(): Promise<ReportEntry[]> {
 
 export function deleteReport(entry: Pick<ReportEntry, 'kind' | 'id'>): Promise<void> {
   return invoke('report_delete', { kind: entry.kind, id: entry.id })
+}
+
+const retentionKey = 'deepserver2-report-retention-days'
+
+/** How long Compare, Disk usage and Cleanup reports are kept; 0 keeps them for ever. */
+export const retentionChoices = [
+  { days: 0, label: 'Keep for ever' },
+  { days: 30, label: '30 days' },
+  { days: 90, label: '90 days' },
+  { days: 365, label: '1 year' },
+] as const
+
+function readRetention(): number {
+  try {
+    const days = Number(localStorage.getItem(retentionKey))
+    return retentionChoices.some((choice) => choice.days === days) ? days : 0
+  } catch {
+    return 0
+  }
+}
+
+export const retentionDays = ref(readRetention())
+
+watch(retentionDays, (days) => {
+  try {
+    localStorage.setItem(retentionKey, String(days))
+  } catch {
+    // Not remembered.
+  }
+})
+
+/** Deletes reports older than the chosen retention; record runs are never pruned. */
+export async function pruneReports(): Promise<number> {
+  if (retentionDays.value === 0 || !isTauri()) {
+    return 0
+  }
+  try {
+    return await invoke<number>('reports_prune', { days: retentionDays.value })
+  } catch {
+    return 0
+  }
 }
 
 /** Opens the report as a web page in the default browser, headed with the company name. */

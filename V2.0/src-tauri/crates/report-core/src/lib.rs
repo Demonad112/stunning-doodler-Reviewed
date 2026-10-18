@@ -236,6 +236,33 @@ pub fn delete(reports: &Path, records: &Path, kind: ReportKind, id: &str) -> Res
     }
 }
 
+/// Deletes saved reports (Compare, Disk usage, Quick cleanup) last written more than `days` days
+/// before `now_ms` and returns how many went. Record runs live in their own folder and are never
+/// touched: they are client proof. `days == 0` keeps everything.
+pub fn prune(reports: &Path, days: u32, now_ms: u64) -> u64 {
+    if days == 0 {
+        return 0;
+    }
+    let cutoff = now_ms.saturating_sub(u64::from(days) * 24 * 60 * 60 * 1000);
+    let mut removed = 0;
+    for entry in fs::read_dir(reports).into_iter().flatten().flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let written = entry
+            .metadata()
+            .and_then(|meta| meta.modified())
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|age| age.as_millis() as u64);
+        if written.is_some_and(|ms| ms < cutoff) && fs::remove_file(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 /// The report as a document, ready for [`Document::html`] or [`Document::csv`].
 pub fn document(
     reports: &Path,
@@ -303,6 +330,22 @@ mod tests {
             size: 2048,
             ..UsageReport::default()
         })
+    }
+
+    #[test]
+    fn prune_removes_only_old_report_files_and_keeps_zero_as_forever() {
+        let temp = tempfile::tempdir().unwrap();
+        let reports = temp.path().join("Reports");
+        let saved = save(&reports, JobInfo::default(), usage()).unwrap();
+        fs::write(reports.join("notes.txt"), "keep").unwrap();
+        let day = 24 * 60 * 60 * 1000;
+
+        assert_eq!(prune(&reports, 0, now_ms() + 400 * day), 0);
+        assert_eq!(prune(&reports, 30, now_ms()), 0, "new files stay");
+        assert_eq!(prune(&reports, 30, now_ms() + 31 * day), 1);
+        assert!(load(&reports, &saved.id).is_err());
+        assert!(reports.join("notes.txt").exists());
+        assert_eq!(prune(&temp.path().join("missing"), 30, now_ms()), 0);
     }
 
     #[test]

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Building2, Monitor, Moon, Palette, Sun } from '@lucide/vue'
+import { Archive, Building2, Monitor, Moon, Palette, Sun } from '@lucide/vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { appInfo } from '@/lib/appInfo'
 import { brand } from '@/lib/job'
+import { retentionChoices, retentionDays } from '@/lib/reports'
 import { setThemeChoice, themeChoice, type ThemeChoice } from '@/lib/theme'
 
 const themes: { value: ThemeChoice; label: string; icon: typeof Sun }[] = [
@@ -69,6 +70,31 @@ const themes: { value: ThemeChoice; label: string; icon: typeof Sun }[] = [
         placeholder="Your company"
         class="h-8 w-60 rounded-md border border-stroke border-b-stroke-strong bg-card px-2.5 text-[13px] outline-none placeholder:text-faint focus:border-b-2 focus:border-b-accent"
       />
+    </label>
+    <label class="mt-3 flex items-center gap-4 rounded-lg border border-stroke bg-card px-5 py-4">
+      <Archive
+        class="size-5 shrink-0"
+        :stroke-width="1.5"
+      />
+      <span class="flex-1">
+        <span class="block">Keep saved reports</span>
+        <span class="block text-xs text-muted">
+          Older Compare, Disk usage and Cleanup reports are deleted when you open Reports. Record
+          runs are client proof and are never deleted automatically.
+        </span>
+      </span>
+      <select
+        v-model.number="retentionDays"
+        class="h-8 w-40 rounded-md border border-stroke border-b-stroke-strong bg-card px-2 text-[13px] outline-none focus:border-b-2 focus:border-b-accent"
+      >
+        <option
+          v-for="choice in retentionChoices"
+          :key="choice.days"
+          :value="choice.days"
+        >
+          {{ choice.label }}
+        </option>
+      </select>
     </label>
     <p class="mt-6 text-xs text-faint">DeepServer {{ appInfo.version }}</p>
   </div>

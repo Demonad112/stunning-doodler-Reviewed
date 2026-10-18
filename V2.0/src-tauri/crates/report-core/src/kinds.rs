@@ -541,6 +541,15 @@ pub(crate) fn document(saved: &Saved) -> Document {
                 verdict: (removed > 0).then_some(Verdict::Good),
                 tiles,
                 notes,
+                share: report
+                    .drive_total
+                    .filter(|total| *total > 0)
+                    .map(|total| Share {
+                        label: "Space this folder takes on the drive".into(),
+                        detail: format!("{} of {}", format_bytes(report.size), format_bytes(total)),
+                        percent: (report.size as f64 * 100.0 / total as f64).min(100.0),
+                        tone: Tone::Plain,
+                    }),
                 tables,
                 explorer: explorer_on,
                 data: explorer_data,
@@ -562,6 +571,24 @@ pub(crate) fn document(saved: &Saved) -> Document {
                 Tone::Good,
             )],
             notes: vec!["Files in use or changed in the last day are left in place.".into()],
+            share: (!report.items.is_empty()).then(|| {
+                let total = report.items.len() as u64;
+                let clean = report
+                    .items
+                    .iter()
+                    .filter(|item| item.error.is_none())
+                    .count() as u64;
+                Share {
+                    label: "Locations cleaned without error".into(),
+                    detail: format!("{} of {}", format_count(clean), format_count(total)),
+                    percent: clean as f64 * 100.0 / total as f64,
+                    tone: if clean == total {
+                        Tone::Good
+                    } else {
+                        Tone::Warn
+                    },
+                }
+            }),
             tables: vec![Table {
                 heading: "Cleaned".into(),
                 columns: vec![
@@ -738,6 +765,23 @@ pub(crate) fn record_document(records: &Path, id: &str) -> Result<Document, Stri
             },
         ],
         notes,
+        share: (totals.planned_files > 0).then(|| {
+            let there = (totals.copied + totals.skipped_identical).min(totals.planned_files);
+            Share {
+                label: format!("Source files {}", arrived.to_lowercase()),
+                detail: format!(
+                    "{} of {}",
+                    format_count(there),
+                    format_count(totals.planned_files)
+                ),
+                percent: there as f64 * 100.0 / totals.planned_files as f64,
+                tone: if totals.not_copied == 0 {
+                    Tone::Good
+                } else {
+                    Tone::Plain
+                },
+            }
+        }),
         tables: vec![Table {
             heading: "Not copied".into(),
             columns: vec![
@@ -1115,6 +1159,82 @@ mod tests {
         assert_eq!(row.subject, "Temporary files, Browser caches");
         assert_eq!(document(&saved).tables[0].rows.len(), 2);
         assert_eq!(document(&saved).verdict, Some(Verdict::Good));
+        let share = document(&saved).share.expect("a bar");
+        assert_eq!(share.detail, "2 of 2");
+        assert_eq!(share.tone, Tone::Good);
+    }
+
+    #[test]
+    fn cleanup_bar_turns_amber_when_a_location_failed() {
+        let report = CleanReport {
+            items: vec![
+                CleanedItem::default(),
+                CleanedItem {
+                    error: Some("Access denied".into()),
+                    ..CleanedItem::default()
+                },
+            ],
+        };
+        let share = document(&saved(Body::Cleanup(report))).share.unwrap();
+        assert_eq!(share.detail, "1 of 2");
+        assert_eq!(share.percent, 50.0);
+        assert_eq!(share.tone, Tone::Warn);
+    }
+
+    #[test]
+    fn disk_usage_bar_shows_the_share_of_the_drive_and_is_absent_without_one() {
+        let mut report = UsageReport {
+            path: r"C:\Users".into(),
+            size: 250,
+            drive_total: Some(1000),
+            ..UsageReport::default()
+        };
+        let share = document(&saved(Body::DiskUsage(report.clone())))
+            .share
+            .expect("a bar");
+        assert_eq!(share.percent, 25.0);
+        report.drive_total = None;
+        assert!(document(&saved(Body::DiskUsage(report))).share.is_none());
+    }
+
+    #[test]
+    fn every_report_kind_exports_raw_bytes_in_the_csv() {
+        let compare = CompareReport {
+            missing: 1,
+            missing_paths: vec![MissingFile {
+                path: "a".into(),
+                size: 7,
+            }],
+            ..CompareReport::default()
+        };
+        let usage = UsageReport {
+            largest_files: vec![FileItem {
+                path: "f".into(),
+                size: 9,
+            }],
+            ..UsageReport::default()
+        };
+        let clean = CleanReport {
+            items: vec![CleanedItem {
+                title: "Temp".into(),
+                freed: 11,
+                ..CleanedItem::default()
+            }],
+        };
+        for (body, bytes) in [
+            (Body::Compare(compare), "7"),
+            (Body::DiskUsage(usage), "9"),
+            (Body::Cleanup(clean), "11"),
+        ] {
+            let csv = document(&saved(body)).csv();
+            let header = csv.lines().next().unwrap();
+            assert!(header.contains("Bytes"), "no Bytes column in {header}");
+            assert!(
+                csv.lines().any(|line| line.ends_with(&format!(",{bytes}"))
+                    || line.contains(&format!(",{bytes},"))),
+                "raw {bytes} missing in {csv}"
+            );
+        }
     }
 
     #[test]

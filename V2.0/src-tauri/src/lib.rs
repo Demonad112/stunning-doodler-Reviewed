@@ -72,6 +72,7 @@ pub fn run() {
             cleanup::app_restart_admin,
             reports::reports_list,
             reports::report_delete,
+            reports::reports_prune,
             reports::report_export,
             reports::report_open,
             compare::compare_start,
