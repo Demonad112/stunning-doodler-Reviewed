@@ -117,6 +117,9 @@ pub struct Node {
     pub error_code: Option<i32>,
     /// Files: last modified time, in ms since 1970.
     pub modified_ms: Option<u64>,
+    /// Files: another name for the same data exists in this scan (hard link). Only the first name
+    /// keeps its [`Node::disk`].
+    pub hard_linked: bool,
     first_child: NodeId,
     child_count: u32,
     parent: NodeId,
@@ -139,6 +142,7 @@ impl Node {
             error: None,
             error_code: None,
             modified_ms: None,
+            hard_linked: false,
             first_child: 0,
             child_count: 0,
             parent: 0,
@@ -356,8 +360,11 @@ fn count_hard_links_once(root: &mut Owned) {
         for child in &mut dir.children {
             if child.node.kind == Kind::File && child.file_id != 0 {
                 let key = (child.file_id, child.node.size);
-                if repeated.contains(&key) && !seen.insert(key) {
-                    child.node.disk = 0;
+                if repeated.contains(&key) {
+                    child.node.hard_linked = true;
+                    if !seen.insert(key) {
+                        child.node.disk = 0;
+                    }
                 }
             }
             zero_repeats(child, repeated, seen);
@@ -705,6 +712,34 @@ mod tests {
         assert!(
             one == 0 || two == 0,
             "one name must be free: {one} and {two}"
+        );
+        // Both names are marked, so the UI can explain the 0.
+        let first = tree
+            .child_by_name(tree.child_by_name(0, "a").unwrap(), "original.bin")
+            .unwrap();
+        assert!(tree.node(first).hard_linked);
+        assert!(
+            tree.node(tree.child_by_name(0, "b-link.bin").unwrap())
+                .hard_linked
+        );
+    }
+
+    #[test]
+    fn plain_files_are_not_marked_as_hard_links() {
+        let temp = tempfile::tempdir().unwrap();
+        write(&temp.path().join("one.bin"), 10_000);
+        write(&temp.path().join("two.bin"), 10_000);
+
+        let tree = scan_ok(temp.path());
+        assert!(
+            !tree
+                .node(tree.child_by_name(0, "one.bin").unwrap())
+                .hard_linked
+        );
+        assert!(
+            !tree
+                .node(tree.child_by_name(0, "two.bin").unwrap())
+                .hard_linked
         );
     }
 

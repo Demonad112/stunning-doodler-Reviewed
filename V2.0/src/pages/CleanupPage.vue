@@ -8,6 +8,7 @@ import {
   Folder,
   FolderOpen,
   Info,
+  Link2,
   LoaderCircle,
   RotateCw,
   ShieldAlert,
@@ -39,8 +40,12 @@ import {
   removeItem,
   restartAsAdmin,
   revealItem,
+  rowsFor,
   runScan,
   scanPercent,
+  setSizeMode,
+  shownBytes,
+  sizeMode,
   type CleanupRow,
 } from '@/lib/cleanup'
 import { copyText } from '@/lib/clipboard'
@@ -68,17 +73,24 @@ watch(
   },
 )
 
+/** Rows as shown: `size` follows the Size on disk / Size toggle. */
+const viewRows = computed(() => rowsFor(job.rows, sizeMode.value))
+const hardLinkTitle =
+  'Another name for this file is in the scan. Only one name carries the size on disk.'
+
 function pick(row: CleanupRow): void {
+  // Deleting frees disk space, so the picked item always carries the size on disk.
+  const raw = job.rows.find((candidate) => candidate.id === row.id) ?? row
   picked.value = {
-    id: row.id,
-    name: row.name,
-    size: row.size,
-    isFolder: row.kind === 'dir',
-    files: row.files,
+    id: raw.id,
+    name: raw.name,
+    size: raw.size,
+    isFolder: raw.kind === 'dir',
+    files: raw.files,
   }
 }
 
-const shownSize = computed(() => job.rows.reduce((sum, row) => sum + row.size, 0))
+const shownSize = computed(() => viewRows.value.reduce((sum, row) => sum + row.size, 0))
 const scannedDrive = computed(() => driveFor(job.path, drives.value))
 const percent = computed(() => scanPercent(job.progress?.bytes ?? 0, scannedDrive.value))
 
@@ -279,13 +291,13 @@ const typeGroups = computed<TypeGroup[]>(() => {
   for (const type of job.overview?.fileTypes ?? []) {
     const category = categoryOfExtension(type.extension)
     const group = groups.get(category) ?? { category, size: 0, files: 0 }
-    group.size += type.size
+    group.size += shownBytes(type, sizeMode.value)
     group.files += type.files
     groups.set(category, group)
   }
   return [...groups.values()].sort((a, b) => b.size - a.size)
 })
-const rootSize = computed(() => job.overview?.root.size ?? 0)
+const rootSize = computed(() => (job.overview ? shownBytes(job.overview.root, sizeMode.value) : 0))
 
 function share(size: number, total: number): string {
   return total > 0 ? `${((size / total) * 100).toFixed(size / total >= 0.1 ? 0 : 1)}%` : '0%'
@@ -461,7 +473,7 @@ onBeforeUnmount(() => {
       <div class="summary grid gap-3">
         <div class="tile">
           <p class="text-xs text-muted">Scanned</p>
-          <p class="value">{{ formatBytes(job.overview.root.size) }}</p>
+          <p class="value">{{ formatBytes(rootSize) }}</p>
           <p
             class="detail"
             :title="job.path"
@@ -604,7 +616,7 @@ onBeforeUnmount(() => {
       <div class="split mt-2 grid gap-3">
         <TreemapView
           class="h-80"
-          :rows="job.rows"
+          :rows="viewRows"
           :selected="picked?.id ?? null"
           @select="pick"
           @open="open"
@@ -615,7 +627,7 @@ onBeforeUnmount(() => {
           aria-label="Contents, largest first"
         >
           <li
-            v-for="row in job.rows"
+            v-for="row in viewRows"
             :key="row.id"
             class="flex items-center"
           >
@@ -643,6 +655,12 @@ onBeforeUnmount(() => {
                 :stroke-width="1.75"
               />
               <span class="min-w-0 flex-1 truncate">{{ row.name }}</span>
+              <Link2
+                v-if="row.hardLinked"
+                class="size-3.5 shrink-0 text-muted"
+                :title="hardLinkTitle"
+                aria-label="Hard link"
+              />
               <TriangleAlert
                 v-if="row.errors > 0"
                 class="size-3.5 shrink-0 text-warning"
@@ -666,25 +684,51 @@ onBeforeUnmount(() => {
         more. Delete recycles the picked item; Backspace goes up.
       </p>
 
-      <div
-        class="mt-5 flex w-fit rounded-md border border-stroke bg-subtle p-0.5"
-        role="tablist"
-      >
-        <button
-          v-for="option in [
-            { value: 'files', label: 'Largest files' },
-            { value: 'types', label: 'File types' },
-          ] as const"
-          :key="option.value"
-          type="button"
-          role="tab"
-          :aria-selected="tab === option.value"
-          class="flex h-7 items-center rounded px-3 text-[13px]"
-          :class="tab === option.value ? 'bg-accent text-on-accent' : 'hover:bg-subtle-strong'"
-          @click="tab = option.value"
+      <div class="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <div
+          class="flex w-fit rounded-md border border-stroke bg-subtle p-0.5"
+          role="tablist"
         >
-          {{ option.label }}
-        </button>
+          <button
+            v-for="option in [
+              { value: 'files', label: 'Largest files' },
+              { value: 'types', label: 'File types' },
+            ] as const"
+            :key="option.value"
+            type="button"
+            role="tab"
+            :aria-selected="tab === option.value"
+            class="flex h-7 items-center rounded px-3 text-[13px]"
+            :class="tab === option.value ? 'bg-accent text-on-accent' : 'hover:bg-subtle-strong'"
+            @click="tab = option.value"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+        <div
+          class="flex w-fit rounded-md border border-stroke bg-subtle p-0.5"
+          role="radiogroup"
+          aria-label="Size shown"
+          title="Size on disk is what deleting frees (whole clusters, compression, hard links once). Size is what Explorer calls Size."
+        >
+          <button
+            v-for="option in [
+              { value: 'disk', label: 'Size on disk' },
+              { value: 'logical', label: 'Size' },
+            ] as const"
+            :key="option.value"
+            type="button"
+            role="radio"
+            :aria-checked="sizeMode === option.value"
+            class="flex h-7 items-center rounded px-3 text-[13px]"
+            :class="
+              sizeMode === option.value ? 'bg-accent text-on-accent' : 'hover:bg-subtle-strong'
+            "
+            @click="setSizeMode(option.value)"
+          >
+            {{ option.label }}
+          </button>
+        </div>
       </div>
 
       <ul
@@ -716,10 +760,18 @@ onBeforeUnmount(() => {
           >
             <span class="w-2/5 min-w-0 truncate">{{ file.name }}</span>
             <span class="min-w-0 flex-1 truncate text-xs text-muted">{{ file.folder }}</span>
+            <Link2
+              v-if="file.hardLinked"
+              class="size-3.5 shrink-0 text-muted"
+              :title="hardLinkTitle"
+              aria-label="Hard link"
+            />
             <span class="w-28 shrink-0 text-right text-xs text-muted tabular-nums">
               {{ modified(file.modifiedMs) }}
             </span>
-            <span class="w-20 shrink-0 text-right tabular-nums">{{ formatBytes(file.size) }}</span>
+            <span class="w-20 shrink-0 text-right tabular-nums">
+              {{ formatBytes(shownBytes(file, sizeMode)) }}
+            </span>
           </button>
         </li>
       </ul>
@@ -775,9 +827,11 @@ onBeforeUnmount(() => {
             </span>
             <span class="text-xs text-muted tabular-nums">{{ plural(type.files, 'file') }}</span>
             <span class="w-11 text-right text-xs text-muted tabular-nums">
-              {{ share(type.size, rootSize) }}
+              {{ share(shownBytes(type, sizeMode), rootSize) }}
             </span>
-            <span class="w-20 text-right tabular-nums">{{ formatBytes(type.size) }}</span>
+            <span class="w-20 text-right tabular-nums">
+              {{ formatBytes(shownBytes(type, sizeMode)) }}
+            </span>
           </li>
         </ul>
       </div>

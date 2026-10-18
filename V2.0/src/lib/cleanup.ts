@@ -16,7 +16,12 @@ export interface CleanupRow {
   id: number
   name: string
   kind: EntryKind
+  /** Size on disk. */
   size: number
+  /** Logical size, what Explorer shows as "Size". */
+  logical: number
+  /** Another name for the same data is in this scan; only one name carries the disk space. */
+  hardLinked: boolean
   files: number
   dirs: number
   cloudFiles: number
@@ -33,6 +38,8 @@ export interface FileRow {
   name: string
   folder: string
   size: number
+  logical: number
+  hardLinked: boolean
   modifiedMs: number | null
 }
 
@@ -40,7 +47,47 @@ export interface TypeRow {
   /** Lowercase, no dot; empty when the files have no extension. */
   extension: string
   size: number
+  logical: number
   files: number
+}
+
+/** Which size the lists, treemap and totals show. */
+export type SizeMode = 'disk' | 'logical'
+
+const SIZE_MODE_KEY = 'deepserver-cleanup-size-mode'
+
+function loadSizeMode(): SizeMode {
+  try {
+    return localStorage.getItem(SIZE_MODE_KEY) === 'logical' ? 'logical' : 'disk'
+  } catch {
+    return 'disk'
+  }
+}
+
+export const sizeMode = ref<SizeMode>(loadSizeMode())
+
+export function setSizeMode(mode: SizeMode): void {
+  sizeMode.value = mode
+  try {
+    localStorage.setItem(SIZE_MODE_KEY, mode)
+  } catch {
+    // The choice just won't be remembered.
+  }
+}
+
+/** The size to show for an item in the chosen mode. */
+export function shownBytes(item: { size: number; logical: number }, mode: SizeMode): number {
+  return mode === 'logical' ? item.logical : item.size
+}
+
+/** Rows with `size` swapped for the chosen mode, largest first. */
+export function rowsFor(rows: CleanupRow[], mode: SizeMode): CleanupRow[] {
+  if (mode === 'disk') {
+    return rows
+  }
+  return rows
+    .map((row) => ({ ...row, size: row.logical }))
+    .sort((a, b) => b.size - a.size || a.name.localeCompare(b.name))
 }
 
 export interface Overview {
