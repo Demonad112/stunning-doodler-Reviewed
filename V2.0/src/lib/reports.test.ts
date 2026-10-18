@@ -6,7 +6,15 @@ vi.mock('@tauri-apps/api/core', () => core)
 vi.mock('@tauri-apps/plugin-dialog', () => dialog)
 
 import { brand } from './job'
-import { deleteReport, exportFileName, exportReport, openReport, type ReportEntry } from './reports'
+import {
+  deleteReport,
+  exportFileName,
+  exportReport,
+  openReport,
+  pruneReports,
+  retentionDays,
+  type ReportEntry,
+} from './reports'
 
 const entry: ReportEntry = {
   id: 'compare-20261003-1',
@@ -59,5 +67,20 @@ describe('reports', () => {
     })
     await deleteReport({ kind: 'record', id: 'r1' })
     expect(core.invoke).toHaveBeenLastCalledWith('report_delete', { kind: 'record', id: 'r1' })
+  })
+
+  it('prunes only when a retention is chosen, and never throws', async () => {
+    retentionDays.value = 0
+    expect(await pruneReports()).toBe(0)
+    expect(core.invoke).not.toHaveBeenCalled()
+
+    retentionDays.value = 90
+    core.invoke.mockResolvedValueOnce(4)
+    expect(await pruneReports()).toBe(4)
+    expect(core.invoke).toHaveBeenLastCalledWith('reports_prune', { days: 90 })
+
+    core.invoke.mockRejectedValueOnce(new Error('locked'))
+    expect(await pruneReports()).toBe(0)
+    retentionDays.value = 0
   })
 })
