@@ -1,6 +1,8 @@
 # DeepServer: notes for Claude
 
-DeepServer 1.0 = OpenDiff (Tauri 2 + Vue 3 + Rust, Apache-2.0, at the repo root) + a WinDirStat fork (C++, GPL-2) bundled as the **Disk Usage engine** (`native/diskusage`, shipped as the sidecar `deepserver-diskusage.exe`). One NSIS installer, Windows 10/11 and Server. `V2.0/` is a separate app with its own `CLAUDE.md`.
+> **V2 replaces V1.** V1 (this root) is frozen: no new releases. New work is in `V2.0/` (see `V2.0/CLAUDE.md`, plan in `V2.0/docs/plan.md`). The rest of this file describes V1.
+
+DeepServer 1.0 = OpenDiff (Tauri 2 + Vue 3 + Rust, Apache-2.0, at the repo root) + a WinDirStat fork (C++, GPL-2) bundled as the **Disk Usage engine** (`native/diskusage`, shipped as the sidecar `deepserver-diskusage.exe`). One NSIS installer, Windows 10/11 and Server.
 
 The roadmap is `docs/history/deepserver-merge-plan.md`. PRs go to `Demonad112/stunning-doodler-Reviewed`; the old `open-diff` and `altWinDirStat` repos are read-only.
 
@@ -26,20 +28,7 @@ The engine's build and tests are in `native/diskusage/CLAUDE.md`.
 
 ## Adding a session mode
 
-Grep for an existing mode (e.g. `version-compare`) and mirror it in:
-
-- `types/session.ts` and its test
-- `sessionCatalog.ts` and its test
-- `sessionFactory.ts`
-- `router.ts`
-- `commandRegistry.ts`: every Ctrl+Alt letter is taken, so use Ctrl+Shift
-- `AppLayout.vue`: menus, `sessionIcon`, nav group
-- `HomeView.vue`: `homeTileGroups`
-- `shellChrome.ts`: help topic
-- all 8 locales
-- the Rust `session-core` `SessionType` enum, plus the `cli-core` label match
-
-`statusBarPhrases.ts` is needed only for a custom status bar.
+Follow `docs/add-session-mode.md` (the file list, mirrored from an existing mode).
 
 ## Gotchas
 
@@ -52,4 +41,4 @@ Grep for an existing mode (e.g. `version-compare`) and mirror it in:
 - Colours: chrome colours are `--ds-<role>-<hex>` / `--app-*` tokens (top of `src/styles/main.css`). Don't add raw hex in styles; dark mode won't remap it. `src/styles/*Density.test.ts` assert on CSS source, so update them with a style change.
 - Bash tool on Windows: heredocs halve backslashes, so write files containing backslashes with Write/Edit.
 - Full `pnpm test:unit` is slow; scope it to the touched files.
-- CI lives in `.github/workflows/` (`ci.yml`, `build-windows.yml`, `release.yml`); releases are described in `docs/releasing.md`.
+- CI workflows and the cloud-session limits table: `docs/ci.md`; releases: `docs/releasing.md`.

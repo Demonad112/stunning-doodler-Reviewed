@@ -40,6 +40,17 @@ pub async fn report_delete(kind: ReportKind, id: String) -> Result<(), String> {
     .map_err(|err| err.to_string())?
 }
 
+/// Deletes saved Compare, Disk usage and Quick cleanup reports older than `days` days (0 keeps
+/// everything). Record runs are never pruned. Returns how many were removed.
+#[tauri::command]
+pub async fn reports_prune(days: u32) -> Result<u64, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        report_core::prune(&report_core::reports_root(), days, transfer_core::now_ms())
+    })
+    .await
+    .map_err(|err| err.to_string())
+}
+
 /// Writes the report to `path` (chosen in a save dialog), headed with the company name.
 #[tauri::command]
 pub async fn report_export(

@@ -12,16 +12,19 @@
 //! Runs are plain files so they survive a restart and can be reopened.
 
 pub mod copy;
+pub mod meta;
 pub mod prepare;
 pub mod reason;
 pub mod recovery;
 pub mod run;
+pub mod secure;
 pub mod store;
 mod volume;
 mod walk;
 pub mod watch;
 
 pub use copy::{ConflictPolicy, CopyOptions, VerifyLevel};
+pub use meta::PreserveOptions;
 pub use reason::{classify, FailureReason, Side};
 pub use scan_core::CancelToken;
 
@@ -72,6 +75,9 @@ pub struct TransferSettings {
     /// Download OneDrive online-only files to copy them. Off: they are listed as not copied.
     #[serde(default)]
     pub download_cloud: bool,
+    /// Dates and attributes to carry over to the copy.
+    #[serde(default)]
+    pub preserve: PreserveOptions,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

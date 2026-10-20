@@ -4,37 +4,40 @@ Session state for the next Claude session. Update with `/handoff`; keep it short
 
 ## Goal
 
-DeepServer 2.0 (`V2.0/`: Compare, Record, Disk Cleanup) **replaces** V1. V1 gets no more releases. Plan: `V2.0/docs/plan.md`; install details: `V2.0/docs/install.md`.
+DeepServer 2.0 (`V2.0/`: Compare, Record, Disk Cleanup) **replaces** V1. V1 gets no more releases. Plan: `V2.0/docs/plan.md`; install details: `V2.0/docs/install.md`. Finishing plan (approved 2026-10-17): Phases B and C done, then D (Field tools), then E (polish).
 
-## State (2026-10-08)
+## State (2026-10-17)
 
-- `main`: V2 Batches 0-5 merged (#54). **v2.0.0-rc1** is released (pre-release) and installed on the owner's laptop over V1 (V1 leftovers gone). The app has not been launched there yet: owner test pending.
-- Open PR **`v2/scan-accuracy`** (this session), not merged until CI is green and the owner says so:
-  - **Scanner**: `scan-core/src/list.rs` lists folders with `NtQueryDirectoryFile` in bulk (std `read_dir` fallback). New `Node.disk` = size on disk (clusters, compressed/sparse/WOF via `GetCompressedFileSizeW`, hard links once, cloud files 0). `Node.size` stays logical for Compare/Record. Disk Cleanup (`cleanup-core`, `src-tauri/src/cleanup.rs`) now shows `disk`. Written fresh from the WinDirStat fork's approach (`native/diskusage/windirstat/FinderBasic.cpp`); no source copied (fork is GPL-2, V2 is Apache-2.0).
-  - **Reports**: shared HTML renderer (`report-core/src/doc.rs`) redesigned: gradient header, verdict pill, tile accents, "found at destination" bar for Compare (`Document.share`), row counts, zebra rows, dark mode, phone width, print styles. CSV unchanged.
-  - Not done: no 1440px / 390px screenshots (no browser tool in that session). Open `Document::html` output in a browser before merging. No real-disk comparison against WinDirStat yet.
+- `main` (`5be3c43`): V2 Batches 0-5 merged, plus Batch 6 pieces #56, #60, #61, #63-#67, and harness audit #73.
+- Open PRs from this session (CI bound with auto-fix; merge only on green):
+  - [#74](https://github.com/Demonad112/stunning-doodler-Reviewed/pull/74) `v2/batch-6a-size-toggle`: Batch 6a.
+  - [#75](https://github.com/Demonad112/stunning-doodler-Reviewed/pull/75) `v2/batch-6b-reports`: Batch 6b (branched from `main`, independent of #74).
+- Dependabot #69-#72 still open (Phase A, owner's parallel session).
+- Latest release: **v2.0.0-rc4** (pre-release). The owner's test of rc4 is not recorded; treat as pending.
 
-## Next (suggested order)
+## Done this session
 
-1. Owner: launch rc1, scan a real drive and compare the total with WinDirStat / Explorer "Size on disk"; merge the PR if good; cut rc2.
-2. Scanner follow-ups:
-   - Optional MFT fast path for admin runs (the fork's `FinderNtfs.cpp` shows the technique; re-implement, don't copy). Cleanup already has an admin relaunch.
-   - UI toggle "Size on disk / Size" in Disk Cleanup, and a hardlink marker on rows (the data exists: repeat links have `disk` 0).
-   - Show "N hard links, M compressed files" in the Cleanup report note.
-   - Perf check: `cargo test -p scan-core --release --test perf -- --ignored --nocapture` (2x100k files < 5 s) was not re-run after the rewrite.
-3. Reports: Disk Cleanup report with a proportional bar per top folder; Record report with a copied/missed bar; CSV sizes as raw bytes; prune old reports and `%TEMP%\DeepServer2 reports`.
-4. Batch 6 "Field tools": Copy missing only from Compare, pre-flight review + conflict choice, admin/backup-rights reads, share sign-in, RMM CLI, Explorer right-click, re-check a record against its manifest, robocopy log import.
-5. Product polish: new logo (icon is still V1's), code signing (`scripts/windows/sign.ps1` hook exists; builds are unsigned), Settings page (default verify level, report folder), in-app "check for update".
+- Perf check re-run after the scanner rewrite: 2x100k files scan + compare 0.53 s (limit 5 s). MFT fast path therefore deferred.
+- 6a (#74): "Size on disk / Size" toggle in Disk Cleanup (`sizeMode`, `src/lib/cleanup.ts`), `Node::hard_linked` + link icon on rows, `logical` on rows, files and types.
+- 6b (#75): `Share` bars for Record, Disk usage, Quick cleanup; CSV raw-bytes test for every kind; `report_core::prune` + `reports_prune` + Settings "Keep saved reports" (default: for ever).
 
-## Needs the owner
+## Next
 
-- Dependabot PRs #50-#53, #55 (review/merge).
-- Stray folder `C:\Dev\projects\DeepServerV1.0\--clobber\` (untracked, delete with approval).
-- Repo maintenance workflow (`dry_run: true` first): merged branches incl. `v2/batch-5-installer`, V1 rc1/rc2 releases. Archive `open-diff` and `altWinDirStat` only after the owner confirms.
-- CI long term: stay public, fix billing, org trial, or self-hosted runner.
+1. Merge #74 and #75 when CI is green (the app crate cannot build locally, so CI is the first check of `reports.rs` / `lib.rs`).
+2. Phase D, 6c: write the Batch 6 table in `V2.0/docs/plan.md`, then pre-flight review + conflict choice before Record, and share sign-in for UNC paths (`WNetAddConnection2`).
+3. Phase D, 6d: RMM CLI (headless, exit codes, JSON), Explorer right-click verbs, robocopy log import.
+4. Phase E (decide after D): new logo, Settings completeness, in-app update check, code signing (`scripts/windows/sign.ps1`), rc5, owner test.
+
+## Blocked / needs the owner
+
+- Phase A housekeeping runs in the owner's own parallel session: dependabot #69-#72 (after build + type-check), harness branch `origin/Claude/fervent-blackwell-ea2c43`, PR #68 vs the local `cd` fix in `.claude/hooks/session-start.sh`, uncommitted files in the main checkout, `.claude/agents/ci-watch.md`, repo-maintenance workflow (`dry_run: true` first), V1 rc1/rc2 releases.
+- Deferred to ship time (accepted until then): rc4 test result, MFT fast path decision, signing certificate, logo source.
 
 ## Notes
 
-- Windows Application Control blocks the `deepserver_lib` test binary locally (os error 4551): use `cargo test --workspace --no-fail-fast`; CI covers the app crate.
-- Local cargo from a worktree: `CARGO_TARGET_DIR=C:/Dev/projects/DeepServerV1.0/V2.0/src-tauri/target`. `windows-sys` `CreateFileW` needs the `Win32_Security` feature.
-- Clippy (1.98) flags `chunks_exact(const)`: use `as_chunks`.
+- Windows Application Control blocks build scripts and the `deepserver_lib` test binary locally (os error 4551): test and clippy per crate (`-p scan-core -p cleanup-core -p report-core`); CI covers the app crate.
+- Local cargo from a worktree: `CARGO_TARGET_DIR=C:/Dev/projects/DeepServerV1.0/V2.0/src-tauri/target`. A fresh worktree needs `corepack pnpm install --frozen-lockfile` in `V2.0/`.
+- The largest-files list is the top 100 by disk size in both size modes (logical mode relabels, does not re-rank).
+- Prune uses file modified time, never touches Record runs.
+- Clippy (1.98) flags `chunks_exact(const)`: use `as_chunks`. `windows-sys` `CreateFileW` needs `Win32_Security`.
+- Pause points requested by the owner: compact after B+C (now), then D+D, then decide.

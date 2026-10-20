@@ -296,6 +296,7 @@ mod tests {
                 conflict: crate::ConflictPolicy::Skip,
                 ignore_junk: false,
                 download_cloud: false,
+                preserve: Default::default(),
             },
             state: crate::RunState::Completed,
             created_at_ms,
