@@ -1,6 +1,6 @@
 # Handoff
 
-Session state for the next Claude session. Update with `/handoff`; keep it short.
+Session state for the next Claude session. Keep it short.
 
 ## Goal
 
@@ -30,7 +30,7 @@ DeepServer 2.0 (`V2.0/`: Compare, Record, Disk Cleanup) **replaces** V1. V1 gets
 
 ## Blocked / needs the owner
 
-- Phase A housekeeping runs in the owner's own parallel session: dependabot #69-#72 (after build + type-check), harness branch `origin/Claude/fervent-blackwell-ea2c43`, PR #68 vs the local `cd` fix in `.claude/hooks/session-start.sh`, uncommitted files in the main checkout, `.claude/agents/ci-watch.md`, repo-maintenance workflow (`dry_run: true` first), V1 rc1/rc2 releases.
+- Phase A housekeeping runs in the owner's own parallel session: dependabot #69-#72 (after build + type-check), harness branch `origin/Claude/fervent-blackwell-ea2c43`, PR #68 vs the local `cd` fix in `.claude/hooks/session-start.sh`, uncommitted files in the main checkout, repo-maintenance workflow (`dry_run: true` first), V1 rc1/rc2 releases.
 - Deferred to ship time (accepted until then): rc4 test result, MFT fast path decision, signing certificate, logo source.
 
 ## Notes

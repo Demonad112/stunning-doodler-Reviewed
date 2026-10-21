@@ -4,18 +4,18 @@ Goal: ship `v1.0.0` and keep every later update cheap to test. Spend tokens and 
 
 ## Layers (cheapest first)
 
-| Layer             | Who                          | Covers                                                                                            | Cost                               |
-| ----------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| 1. CI on every PR | GitHub Actions               | quality, unit, e2e, engine tests, both installers built and installed by `Test-Installer.ps1`     | free; wait with `ci-watch`         |
-| 2. Release check  | `laptop-check` agent (Haiku) | asset names, SHA-256, install contents, uninstall entry, Explorer keys, CLI exit codes, data dirs | one short run per rc               |
-| 3. Manual pass    | owner                        | GUI, elevation, hardware, upgrade/uninstall with the app running                                  | time-boxed, only for changed areas |
+| Layer             | Who               | Covers                                                                                            | Cost                               |
+| ----------------- | ----------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| 1. CI on every PR | GitHub Actions    | quality, unit, e2e, engine tests, both installers built and installed by `Test-Installer.ps1`     | free                               |
+| 2. Release check  | Manual script run | asset names, SHA-256, install contents, uninstall entry, Explorer keys, CLI exit codes, data dirs | one short run per rc               |
+| 3. Manual pass    | owner             | GUI, elevation, hardware, upgrade/uninstall with the app running                                  | time-boxed, only for changed areas |
 
-Rule: if a manual item can be scripted without hardware, move it down a layer (add to `Test-Installer.ps1` or `laptop-check`) after its first run.
+Rule: if a manual item can be scripted without hardware, move it down a layer (add to `Test-Installer.ps1`) after its first run.
 
 ## Per-release loop
 
-1. `/release-rc <tag>` publishes the rc; `ci-watch` confirms the run.
-2. `laptop-check <tag>`: any "Needs fixing" becomes a PR. Nothing else yet.
+1. Publish the rc; confirm the CI run is green.
+2. Release check on the rc: any "Needs fixing" becomes a PR. Nothing else yet.
 3. Owner runs the MANUAL list below, scoped by the diff since the last rc (`git diff --stat <prev-rc>..<tag>`): only areas touched, plus the always-run smoke.
 4. Report as **Needs fixing / Look into further / Improvements**. Fixes: one PR each, green CI, then the next rc. Repeat until a pass finds nothing in the first group.
 5. Final: `v1.0.0` = last green rc re-tagged; delete rc1/rc2, decide Docs/Support links, publish the draft.
@@ -39,7 +39,7 @@ Rule: if a manual item can be scripted without hardware, move it down a layer (a
 
 ## Keeping the automation sharp
 
-- After each manual pass, list items that needed no human judgement and move them to `Test-Installer.ps1` or `.claude/agents/laptop-check.md`.
-- Keep `docs/HANDOFF.md` current with `/handoff`; start each checkpoint in a new chat.
+- After each manual pass, list items that needed no human judgement and move them to `Test-Installer.ps1`.
+- Keep `docs/HANDOFF.md` current; start each checkpoint in a new chat.
 - Token rules: low effort, `git`/`gh` via `scripts/gh-status.sh`, Haiku agents for waiting and checking, no root-level reference files.
-- Once `v1.0.0` ships, the same loop applies to patch releases: CI, `laptop-check`, then only the by-area passes the diff touches.
+- Once `v1.0.0` ships, the same loop applies to patch releases: CI, release check, then only the by-area passes the diff touches.
