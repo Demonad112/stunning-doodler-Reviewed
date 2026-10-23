@@ -26,9 +26,34 @@ defaults:
     working-directory: V2.0
 
 jobs:
-  check:
-    name: V2 quality and tests
+  frontend:
+    name: V2 frontend (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v6.0.10
+        with:
+          run_install: false
+          package_json_file: V2.0/package.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: V2.0/pnpm-lock.yaml
+
+      - run: corepack enable
+      - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm format:check
+      - run: corepack pnpm typecheck
+      - run: corepack pnpm test
+
+  rust:
+    name: V2 Rust (Windows)
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
@@ -52,11 +77,11 @@ jobs:
           cache-workspaces: V2.0/src-tauri
 
       - run: corepack pnpm install --frozen-lockfile
-      - run: corepack pnpm quality
-      - run: corepack pnpm test
+      - run: corepack pnpm rust:fmt:check
+      - run: corepack pnpm rust:clippy
       - run: corepack pnpm rust:test
 
   installer:
     name: V2 installers
-    needs: check
+    needs: [frontend, rust]
     uses: ./.github/workflows/build-v2-windows.yml
